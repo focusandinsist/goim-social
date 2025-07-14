@@ -1,0 +1,38 @@
+# 示例配置文件
+# 复制为 config.yaml 并根据需要修改
+#
+# 端口分配规则：
+# - HTTP端口从21001开始，按服务启动顺序递增
+# - gRPC端口从22001开始，按服务启动顺序递增
+#
+# 服务启动顺序（按依赖关系）：
+# 1. User Service    - HTTP:21001, gRPC:22001 (基础服务)
+# 2. Group Service   - HTTP:21002, gRPC:22002 (基础服务)
+# 3. Friend Service  - HTTP:21003, gRPC:22003 (依赖User)
+# 4. Message Service - HTTP:21004, gRPC:22004 (依赖User、Group)
+# 5. Connect Service - HTTP:21005, gRPC:22005 (依赖Message)
+
+server:
+  http:
+    network: tcp
+    addr: :21001  # 默认为User Service端口，其他服务需要通过环境变量覆盖
+    timeout: 30s
+  grpc:
+    network: tcp
+    addr: :22001  # 默认为User Service端口，其他服务需要通过环境变量覆盖
+    timeout: 30s
+
+database:
+  mongodb:
+    uri: mongodb://localhost:27017
+    db_name: serviceDB
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+
+kafka:
+  brokers:
+    - localhost:9092
+  group_id: service-group

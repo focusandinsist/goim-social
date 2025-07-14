@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+// 连接请求
+message ConnectRequest {
+  int64 user_id = 1;
+  string token = 2;
+}
+
+// 连接响应
+message ConnectResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 心跳包
+message Heartbeat {
+  int64 user_id = 1;
+  int64 conn_id = 2;
+  int64 timestamp = 3;
+}
+
+// 心跳请求
+message HeartbeatRequest {
+  int64 user_id = 1;
+  string conn_id = 2;
+}
+
+// 断开连接请求
+message DisconnectRequest {
+  int64 user_id = 1;
+  int64 conn_id = 2;
+}
+
+// 断开连接响应
+message DisconnectResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 在线状态查询请求
+message OnlineStatusRequest {
+  repeated int64 user_ids = 1;
+}
+
+// 在线状态查询响应
+message OnlineStatusResponse {
+  map<int64, bool> status = 1;
+}

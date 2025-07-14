@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+import "user.proto";
+
+// 获取用户信息请求
+message GetUserRequest {
+  string user_id = 1;
+}
+
+// 获取用户信息响应
+message GetUserResponse {
+  bool success = 1;
+  string message = 2;
+  UserResponse user = 3;
+}
+
+// User服务的gRPC接口
+service UserService {
+  // 用户登录
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // 用户注册
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // 获取用户信息
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
