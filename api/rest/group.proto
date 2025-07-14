@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = "websocket-server/api/rest;rest";
+
+// 创建群组请求
+message CreateGroupRequest {
+  string name = 1;
+  string description = 2;
+  int64 owner_id = 3;
+  repeated int64 member_ids = 4;
+}
+
+// 创建群组响应
+message CreateGroupResponse {
+  GroupInfo group = 1;
+}
+
+// 群组信息
+message GroupInfo {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+  int64 owner_id = 4;
+  repeated int64 member_ids = 5;
+}
+
+// 添加成员请求
+message AddMembersRequest {
+  int64 group_id = 1;
+  repeated int64 user_ids = 2;
+}
+
+// 添加成员响应
+message AddMembersResponse {
+  bool success = 1;
+}
+
+// 获取群组请求
+message GetGroupRequest {
+  int64 group_id = 1;
+}
+
+// 获取群组响应
+message GetGroupResponse {
+  GroupInfo group = 1;
+}
+
+// 删除群组请求
+message DeleteGroupRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+}
+
+// 删除群组响应
+message DeleteGroupResponse {
+  bool success = 1;
+}
+
+// 获取群组列表请求
+message GetGroupListRequest {
+  int64 user_id = 1;
+  int32 page = 2;
+  int32 size = 3;
+}
+
+// 获取群组列表响应
+message GetGroupListResponse {
+  repeated GroupInfo groups = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 size = 4;
+}
+
+// 获取群组详细信息请求
+message GetGroupInfoRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+}
+
+// 获取群组详细信息响应
+message GetGroupInfoResponse {
+  GroupInfo group = 1;
+}

@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+// 添加好友请求
+message AddFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+}
+
+// 添加好友响应
+message AddFriendResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 删除好友请求
+message DeleteFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+}
+
+// 删除好友响应
+message DeleteFriendResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 查询好友列表请求
+message ListFriendsRequest {
+  int64 user_id = 1;
+}
+
+// 查询好友列表响应
+message ListFriendsResponse {
+  repeated FriendInfo friends = 1;
+}
+
+// 好友信息
+message FriendInfo {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+  int64 created_at = 4;
+}

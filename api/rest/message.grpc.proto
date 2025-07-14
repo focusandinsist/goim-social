@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+import "message.proto";
+
+// 发消息请求
+message SendWSMessageRequest {
+  WSMessage msg = 1;
+}
+
+// 发消息响应
+message SendWSMessageResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+service MessageService {
+  rpc SendWSMessage(SendWSMessageRequest) returns (SendWSMessageResponse);
+}

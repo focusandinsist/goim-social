@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+// WebSocket 消息结构
+message WSMessage {
+  int64 message_id = 1;
+  int64 from = 2;
+  int64 to = 3;
+  int64 group_id = 4;
+  string content = 5;
+  int64 timestamp = 6;
+  int32 message_type = 7; // 1:文本 2:图片 3:语音等
+  string ack_id = 8;
+}
+
+// 发送消息请求
+message SendMessageRequest {
+  int64 to = 1;
+  int64 group_id = 2;
+  string content = 3;
+  int32 message_type = 4;
+}
+
+// 发送消息响应
+message SendMessageResponse {
+  int64 message_id = 1;
+  string ack_id = 2;
+}
+
+// 消息ACK
+message MessageAck {
+  string ack_id = 1;
+  int64 message_id = 2;
+  int64 user_id = 3;
+  int64 timestamp = 4;
+}
+
+// 拉取历史消息请求
+message GetHistoryRequest {
+  int64 user_id = 1;
+  int64 group_id = 2;
+  int32 page = 3;
+  int32 size = 4;
+}
+
+// 拉取历史消息响应
+message GetHistoryResponse {
+  repeated WSMessage messages = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 size = 4;
+}

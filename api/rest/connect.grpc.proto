@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package rest;
+
+// "生成的go_import_path;go_package_name"
+option go_package = ".;rest"; 
+
+import "connect.proto";
+
+// Connect服务的gRPC接口
+service ConnectService {
+  // 建立连接
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  
+  // 断开连接
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+  
+  // 心跳检测
+  rpc Heartbeat(HeartbeatRequest) returns (ConnectResponse);
+  
+  // 查询在线状态
+  rpc OnlineStatus(OnlineStatusRequest) returns (OnlineStatusResponse);
+}
