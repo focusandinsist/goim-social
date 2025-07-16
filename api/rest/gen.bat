@@ -9,3 +9,5 @@ protoc -I=. --go_out=. --go-grpc_out=. --go_opt=paths=source_relative message.gr
 protoc -I=. --go_out=. --go-grpc_out=. --go_opt=paths=source_relative connect.grpc.proto
 protoc -I=. --go_out=. --go-grpc_out=. --go_opt=paths=source_relative group.grpc.proto
 protoc -I=. --go_out=. --go-grpc_out=. --go_opt=paths=source_relative user.grpc.proto
+
+pause

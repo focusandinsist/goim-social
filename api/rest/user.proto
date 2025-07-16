@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package rest;
 
-option go_package = "websocket-server/api/rest;rest";
+option go_package = ".;rest";
 
 // 用户注册请求
 message RegisterRequest {

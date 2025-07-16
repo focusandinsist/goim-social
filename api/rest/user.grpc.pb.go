@@ -74,8 +74,8 @@ type GetUserResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Success bool               `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message string             `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Success bool          `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message string        `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	User    *UserResponse `protobuf:"bytes,3,opt,name=user,proto3" json:"user,omitempty"`
 }
 
@@ -176,22 +176,22 @@ func file_user_grpc_proto_rawDescGZIP() []byte {
 
 var file_user_grpc_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_user_grpc_proto_goTypes = []interface{}{
-	(*GetUserRequest)(nil),        // 0: GetUserRequest
-	(*GetUserResponse)(nil),       // 1: GetUserResponse
-	(*UserResponse)(nil),     // 2: UserResponse
-	(*LoginRequest)(nil),     // 3: LoginRequest
-	(*RegisterRequest)(nil),  // 4: RegisterRequest
-	(*LoginResponse)(nil),    // 5: LoginResponse
-	(*RegisterResponse)(nil), // 6: RegisterResponse
+	(*GetUserRequest)(nil),   // 0: rest.GetUserRequest
+	(*GetUserResponse)(nil),  // 1: rest.GetUserResponse
+	(*UserResponse)(nil),     // 2: rest.UserResponse
+	(*LoginRequest)(nil),     // 3: rest.LoginRequest
+	(*RegisterRequest)(nil),  // 4: rest.RegisterRequest
+	(*LoginResponse)(nil),    // 5: rest.LoginResponse
+	(*RegisterResponse)(nil), // 6: rest.RegisterResponse
 }
 var file_user_grpc_proto_depIdxs = []int32{
-	2, // 0: GetUserResponse.user:type_name -> UserResponse
-	3, // 1: UserService.Login:input_type -> LoginRequest
-	4, // 2: UserService.Register:input_type -> RegisterRequest
-	0, // 3: UserService.GetUser:input_type -> GetUserRequest
-	5, // 4: UserService.Login:output_type -> LoginResponse
-	6, // 5: UserService.Register:output_type -> RegisterResponse
-	1, // 6: UserService.GetUser:output_type -> GetUserResponse
+	2, // 0: rest.GetUserResponse.user:type_name -> rest.UserResponse
+	3, // 1: rest.UserService.Login:input_type -> rest.LoginRequest
+	4, // 2: rest.UserService.Register:input_type -> rest.RegisterRequest
+	0, // 3: rest.UserService.GetUser:input_type -> rest.GetUserRequest
+	5, // 4: rest.UserService.Login:output_type -> rest.LoginResponse
+	6, // 5: rest.UserService.Register:output_type -> rest.RegisterResponse
+	1, // 6: rest.UserService.GetUser:output_type -> rest.GetUserResponse
 	4, // [4:7] is the sub-list for method output_type
 	1, // [1:4] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -204,6 +204,7 @@ func file_user_grpc_proto_init() {
 	if File_user_grpc_proto != nil {
 		return
 	}
+	file_user_proto_init()
 	if !protoimpl.UnsafeEnabled {
 		file_user_grpc_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*GetUserRequest); i {

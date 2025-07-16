@@ -85,6 +85,12 @@ func main() {
 		}
 	}()
 
+	// 启动与Message服务的gRPC双向流连接
+	go func() {
+		log.Println("Starting message stream connection...")
+		svc.StartMessageStream()
+	}()
+
 	// 优雅关闭
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)

@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
+	"sync"
 	"time"
 	"websocket-server/api/rest"
 	"websocket-server/apps/connect/model"
@@ -11,22 +13,35 @@ import (
 	"websocket-server/pkg/redis"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
-// 移除内存 map，全部用 redis hash
+// WebSocket连接管理 - 使用Redis存储连接信息，内存存储WebSocket连接对象
+type WSConnectionManager struct {
+	localConnections map[int64]*websocket.Conn // 本地WebSocket连接
+	mutex            sync.RWMutex
+}
+
+var wsConnManager = &WSConnectionManager{
+	localConnections: make(map[int64]*websocket.Conn),
+}
 
 type Service struct {
-	db    *database.MongoDB
-	redis *redis.RedisClient
-	kafka *kafka.Producer
+	db         *database.MongoDB
+	redis      *redis.RedisClient
+	kafka      *kafka.Producer
+	instanceID string                                  // Connect服务实例ID
+	msgStream  rest.MessageService_MessageStreamClient // 消息流连接
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer) *Service {
 	return &Service{
-		db:    db,
-		redis: redis,
-		kafka: kafka,
+		db:         db,
+		redis:      redis,
+		kafka:      kafka,
+		instanceID: fmt.Sprintf("connect-%d", time.Now().UnixNano()), // 生成唯一实例ID
 	}
 }
 
@@ -101,6 +116,10 @@ func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]
 
 // ForwardMessageToMessageService 通过 gRPC 转发消息到 Message 微服务
 func (s *Service) ForwardMessageToMessageService(ctx context.Context, wsMsg *rest.WSMessage) error {
+	log.Printf("📨 Connect服务转发消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
+
+	// 这里可以通过双向流发送消息，但为了简化，我们仍然使用直接调用
+	// 实际生产环境中，应该通过双向流来处理消息转发
 	conn, err := grpc.Dial("localhost:22004", grpc.WithInsecure()) // Message Service gRPC端口
 	if err != nil {
 		return err
@@ -111,36 +130,13 @@ func (s *Service) ForwardMessageToMessageService(ctx context.Context, wsMsg *res
 	// 构造 gRPC 请求
 	req := &rest.SendWSMessageRequest{Msg: wsMsg}
 	_, err = client.SendWSMessage(ctx, req)
+	if err != nil {
+		log.Printf("❌ 转发消息到Message服务失败: %v", err)
+	} else {
+		log.Printf("✅ 成功转发消息到Message服务")
+	}
 	return err
 }
-
-// // HandleWSConnectOrHeartbeat 处理心跳和连接管理
-// func (s *Service) HandleWSConnectOrHeartbeat(ctx context.Context, wsMsg *model.WSMessage, conn interface{}) error {
-// 	// 假设 MessageType == 2 表示心跳，MessageType == 3 表示连接管理
-// 	if wsMsg.MessageType == 2 {
-// 		// 心跳包，假设 Content 里有 ConnID
-// 		connID, ok := wsMsg.Content.(string)
-// 		if !ok {
-// 			return fmt.Errorf("心跳包缺少 ConnID")
-// 		}
-// 		// 这里假设用户ID已在 wsMsg 结构中
-// 		return s.Heartbeat(ctx, int64(wsMsg.MessageType), connID)
-// 	}
-// 	if wsMsg.MessageType == 3 {
-// 		// 连接管理包，假设 Content 里有 token、serverID、clientType
-// 		data, ok := wsMsg.Content.(map[string]interface{})
-// 		if !ok {
-// 			return fmt.Errorf("连接管理包内容格式错误")
-// 		}
-// 		userID, _ := data["user_id"].(int64)
-// 		token, _ := data["token"].(string)
-// 		serverID, _ := data["server_id"].(string)
-// 		clientType, _ := data["client_type"].(string)
-// 		_, err := s.Connect(ctx, userID, token, serverID, clientType)
-// 		return err
-// 	}
-// 	return nil // 其它类型不处理
-// }
 
 // HandleHeartbeat 处理心跳包
 func (s *Service) HandleHeartbeat(ctx context.Context, wsMsg *rest.WSMessage, conn interface{}) error {
@@ -264,4 +260,155 @@ func (g *GRPCService) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRe
 	return &rest.OnlineStatusResponse{
 		Status: status,
 	}, nil
+}
+
+func (s *Service) StartMessageStream() {
+	conn, _ := grpc.Dial("localhost:22004", grpc.WithInsecure())
+	client := rest.NewMessageServiceClient(conn)
+
+	stream, _ := client.MessageStream(context.Background())
+	s.msgStream = stream // 保存stream连接
+
+	// 发送订阅请求
+	stream.Send(&rest.MessageStreamRequest{
+		RequestType: &rest.MessageStreamRequest_Subscribe{
+			Subscribe: &rest.SubscribeRequest{ConnectServiceId: s.instanceID},
+		},
+	})
+
+	go func() {
+		for {
+			resp, err := stream.Recv()
+			if err != nil {
+				return
+			}
+			switch respType := resp.ResponseType.(type) {
+			case *rest.MessageStreamResponse_PushEvent:
+				event := respType.PushEvent
+				// 推送给本地用户
+				s.pushToLocalConnection(event.TargetUserId, event.Message)
+				// 发送推送结果反馈
+				stream.Send(&rest.MessageStreamRequest{
+					RequestType: &rest.MessageStreamRequest_PushResult{
+						PushResult: &rest.PushResultRequest{
+							Success:      true,
+							TargetUserId: event.TargetUserId,
+						},
+					},
+				})
+			case *rest.MessageStreamResponse_Failure:
+				failure := respType.Failure
+				// 通知原发送者消息失败
+				s.notifyMessageFailure(failure.OriginalSender, failure.FailureReason)
+			}
+		}
+	}()
+}
+
+// pushToLocalConnection 推送消息给本地连接的用户
+func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMessage) {
+	log.Printf("🔍 开始推送消息给用户 %d, 消息内容: %s", targetUserID, message.Content)
+
+	// 1. 先检查Redis中用户是否在线
+	ctx := context.Background()
+	isOnline, err := s.redis.SIsMember(ctx, "online_users", targetUserID)
+	if err != nil {
+		log.Printf("❌ Redis查询失败，用户 %d: %v", targetUserID, err)
+		return
+	}
+	if !isOnline {
+		log.Printf("❌ 用户 %d 在Redis中显示不在线", targetUserID)
+		return
+	}
+	log.Printf("✅ 用户 %d 在Redis中显示在线", targetUserID)
+
+	// 2. 查找本地WebSocket连接
+	wsConnManager.mutex.RLock()
+	conn, exists := wsConnManager.localConnections[targetUserID]
+	totalConnections := len(wsConnManager.localConnections)
+	wsConnManager.mutex.RUnlock()
+
+	log.Printf("🔍 本地连接状态: 总连接数=%d, 用户%d连接存在=%v", totalConnections, targetUserID, exists)
+
+	if !exists {
+		log.Printf("❌ 用户 %d 没有本地WebSocket连接，可能在其他Connect服务实例上", targetUserID)
+		// 打印当前所有本地连接
+		wsConnManager.mutex.RLock()
+		log.Printf("🔍 当前本地连接列表:")
+		for uid := range wsConnManager.localConnections {
+			log.Printf("  - 用户ID: %d", uid)
+		}
+		wsConnManager.mutex.RUnlock()
+		return
+	}
+
+	// 3. 将消息序列化为二进制
+	msgBytes, err := proto.Marshal(message)
+	if err != nil {
+		log.Printf("❌ 消息序列化失败: %v", err)
+		return
+	}
+
+	// 4. 推送消息
+	log.Printf("📤 尝试通过WebSocket推送消息给用户 %d", targetUserID)
+	if err := conn.WriteMessage(websocket.BinaryMessage, msgBytes); err != nil {
+		log.Printf("❌ 推送消息给用户 %d 失败: %v", targetUserID, err)
+		// 如果推送失败，可能连接已断开，移除连接
+		s.RemoveWebSocketConnection(targetUserID)
+	} else {
+		log.Printf("✅ 成功推送消息给用户 %d", targetUserID)
+	}
+}
+
+// notifyMessageFailure 通知消息发送失败
+func (s *Service) notifyMessageFailure(originalSender int64, failureReason string) {
+	// TODO: 实现失败通知逻辑
+	// 这里应该通知原发送者消息发送失败
+	log.Printf("通知用户 %d 消息发送失败: %s", originalSender, failureReason)
+}
+
+// SendMessageViaStream 通过双向流发送消息
+func (s *Service) SendMessageViaStream(ctx context.Context, wsMsg *rest.WSMessage) error {
+	if s.msgStream == nil {
+		return fmt.Errorf("消息流连接未建立")
+	}
+
+	// 通过双向流发送消息（这里可以扩展为发送新消息事件）
+	// 目前的proto定义中没有发送消息的请求类型，所以这里只是示例
+	log.Printf("通过双向流发送消息: %+v", wsMsg)
+
+	// 实际实现中，您可能需要在proto中添加新的消息类型来支持消息发送
+	return nil
+}
+
+// AddWebSocketConnection 添加WebSocket连接
+func (s *Service) AddWebSocketConnection(userID int64, conn *websocket.Conn) {
+	// 1. 添加到本地WebSocket连接管理
+	wsConnManager.mutex.Lock()
+	// 检查是否已存在连接
+	if existingConn, exists := wsConnManager.localConnections[userID]; exists {
+		log.Printf("⚠️  用户 %d 已有WebSocket连接，将替换旧连接", userID)
+		// 关闭旧连接
+		existingConn.Close()
+	}
+	wsConnManager.localConnections[userID] = conn
+	totalConnections := len(wsConnManager.localConnections)
+	wsConnManager.mutex.Unlock()
+
+	log.Printf("✅ 用户 %d 的WebSocket连接已添加到本地管理，当前总连接数: %d", userID, totalConnections)
+}
+
+// RemoveWebSocketConnection 移除WebSocket连接
+func (s *Service) RemoveWebSocketConnection(userID int64) {
+	// 1. 从本地WebSocket连接管理中移除
+	wsConnManager.mutex.Lock()
+	if _, exists := wsConnManager.localConnections[userID]; exists {
+		delete(wsConnManager.localConnections, userID)
+		totalConnections := len(wsConnManager.localConnections)
+		wsConnManager.mutex.Unlock()
+		log.Printf("✅ 用户 %d 的WebSocket连接已从本地管理中移除，剩余连接数: %d", userID, totalConnections)
+	} else {
+		wsConnManager.mutex.Unlock()
+		log.Printf("⚠️  用户 %d 的WebSocket连接在本地管理中不存在，无需移除", userID)
+	}
 }

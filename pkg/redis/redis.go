@@ -80,6 +80,11 @@ func (r *RedisClient) SRem(ctx context.Context, key string, members ...interface
 	return r.client.SRem(ctx, key, members...).Err()
 }
 
+// SIsMember 检查成员是否在 set 中
+func (r *RedisClient) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {
+	return r.client.SIsMember(ctx, key, member).Result()
+}
+
 // Close 关闭连接
 func (r *RedisClient) Close() error {
 	return r.client.Close()
