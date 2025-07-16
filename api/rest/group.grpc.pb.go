@@ -7,10 +7,9 @@
 package rest
 
 import (
-	reflect "reflect"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	reflect "reflect"
 )
 
 const (
@@ -56,32 +55,32 @@ var file_group_grpc_proto_rawDesc = []byte{
 }
 
 var file_group_grpc_proto_goTypes = []interface{}{
-	(*CreateGroupRequest)(nil),   // 0: CreateGroupRequest
-	(*AddMembersRequest)(nil),    // 1: AddMembersRequest
-	(*GetGroupRequest)(nil),      // 2: GetGroupRequest
-	(*DeleteGroupRequest)(nil),   // 3: DeleteGroupRequest
-	(*GetGroupListRequest)(nil),  // 4: GetGroupListRequest
-	(*GetGroupInfoRequest)(nil),  // 5: GetGroupInfoRequest
-	(*CreateGroupResponse)(nil),  // 6: CreateGroupResponse
-	(*AddMembersResponse)(nil),   // 7: AddMembersResponse
-	(*GetGroupResponse)(nil),     // 8: GetGroupResponse
-	(*DeleteGroupResponse)(nil),  // 9: DeleteGroupResponse
-	(*GetGroupListResponse)(nil), // 10: GetGroupListResponse
-	(*GetGroupInfoResponse)(nil), // 11: GetGroupInfoResponse
+	(*CreateGroupRequest)(nil),   // 0: rest.CreateGroupRequest
+	(*AddMembersRequest)(nil),    // 1: rest.AddMembersRequest
+	(*GetGroupRequest)(nil),      // 2: rest.GetGroupRequest
+	(*DeleteGroupRequest)(nil),   // 3: rest.DeleteGroupRequest
+	(*GetGroupListRequest)(nil),  // 4: rest.GetGroupListRequest
+	(*GetGroupInfoRequest)(nil),  // 5: rest.GetGroupInfoRequest
+	(*CreateGroupResponse)(nil),  // 6: rest.CreateGroupResponse
+	(*AddMembersResponse)(nil),   // 7: rest.AddMembersResponse
+	(*GetGroupResponse)(nil),     // 8: rest.GetGroupResponse
+	(*DeleteGroupResponse)(nil),  // 9: rest.DeleteGroupResponse
+	(*GetGroupListResponse)(nil), // 10: rest.GetGroupListResponse
+	(*GetGroupInfoResponse)(nil), // 11: rest.GetGroupInfoResponse
 }
 var file_group_grpc_proto_depIdxs = []int32{
-	0,  // 0: GroupService.CreateGroup:input_type -> CreateGroupRequest
-	1,  // 1: GroupService.AddMembers:input_type -> AddMembersRequest
-	2,  // 2: GroupService.GetGroup:input_type -> GetGroupRequest
-	3,  // 3: GroupService.DeleteGroup:input_type -> DeleteGroupRequest
-	4,  // 4: GroupService.GetGroupList:input_type -> GetGroupListRequest
-	5,  // 5: GroupService.GetGroupInfo:input_type -> GetGroupInfoRequest
-	6,  // 6: GroupService.CreateGroup:output_type -> CreateGroupResponse
-	7,  // 7: GroupService.AddMembers:output_type -> AddMembersResponse
-	8,  // 8: GroupService.GetGroup:output_type -> GetGroupResponse
-	9,  // 9: GroupService.DeleteGroup:output_type -> DeleteGroupResponse
-	10, // 10: GroupService.GetGroupList:output_type -> GetGroupListResponse
-	11, // 11: GroupService.GetGroupInfo:output_type -> GetGroupInfoResponse
+	0,  // 0: rest.GroupService.CreateGroup:input_type -> rest.CreateGroupRequest
+	1,  // 1: rest.GroupService.AddMembers:input_type -> rest.AddMembersRequest
+	2,  // 2: rest.GroupService.GetGroup:input_type -> rest.GetGroupRequest
+	3,  // 3: rest.GroupService.DeleteGroup:input_type -> rest.DeleteGroupRequest
+	4,  // 4: rest.GroupService.GetGroupList:input_type -> rest.GetGroupListRequest
+	5,  // 5: rest.GroupService.GetGroupInfo:input_type -> rest.GetGroupInfoRequest
+	6,  // 6: rest.GroupService.CreateGroup:output_type -> rest.CreateGroupResponse
+	7,  // 7: rest.GroupService.AddMembers:output_type -> rest.AddMembersResponse
+	8,  // 8: rest.GroupService.GetGroup:output_type -> rest.GetGroupResponse
+	9,  // 9: rest.GroupService.DeleteGroup:output_type -> rest.DeleteGroupResponse
+	10, // 10: rest.GroupService.GetGroupList:output_type -> rest.GetGroupListResponse
+	11, // 11: rest.GroupService.GetGroupInfo:output_type -> rest.GetGroupInfoResponse
 	6,  // [6:12] is the sub-list for method output_type
 	0,  // [0:6] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
@@ -94,6 +93,7 @@ func file_group_grpc_proto_init() {
 	if File_group_grpc_proto != nil {
 		return
 	}
+	file_group_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

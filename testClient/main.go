@@ -26,6 +26,7 @@ func main() {
 	// 设置连接头
 	headers := make(map[string][]string)
 	headers["Authorization"] = []string{*token}
+	headers["User-ID"] = []string{fmt.Sprintf("%d", *userID)}
 
 	// 连接WebSocket
 	c, _, err := websocket.DefaultDialer.Dial(*wsURL, headers)
@@ -103,10 +104,15 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 			continue
 		}
 
+		// 调试日志：显示收到的所有消息
+		log.Printf("🔍 [用户%d] 收到消息: From=%d, To=%d, Content=%s", userID, wsMsg.From, wsMsg.To, wsMsg.Content)
+
 		// 只显示发给当前用户的消息
 		if wsMsg.To == userID {
 			fmt.Printf("\n[收到消息] 来自用户%d: %s\n", wsMsg.From, wsMsg.Content)
 			fmt.Printf("[用户%d] 请输入消息: ", userID)
+		} else {
+			log.Printf("⚠️  [用户%d] 消息不是发给我的，忽略", userID)
 		}
 	}
 }

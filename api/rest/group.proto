@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package rest;
 
-option go_package = "websocket-server/api/rest;rest";
+option go_package = ".;rest";
 
 // 创建群组请求
 message CreateGroupRequest {

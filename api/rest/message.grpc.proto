@@ -17,6 +17,60 @@ message SendWSMessageResponse {
   string message = 2;
 }
 
+message SubscribeRequest {
+  string connect_service_id = 1; // Connect服务实例ID
+}
+
+message MessagePushEvent {
+  int64 target_user_id = 1;
+  WSMessage message = 2;
+  string event_type = 3; // "new_message", "message_ack" 等
+}
+
+message MessageAckRequest {
+  string ack_id = 1;
+  int64 message_id = 2;
+  int64 user_id = 3;
+  int64 timestamp = 4;
+}
+
+message PushResultRequest {
+  bool success = 1;
+  string error_message = 2;
+  int64 target_user_id = 3;
+}
+
+message AckConfirmEvent {
+  string ack_id = 1;
+  int64 message_id = 2;
+  bool confirmed = 3;
+}
+
+message MessageStreamRequest {
+  oneof request_type {
+    SubscribeRequest subscribe = 1;        // 订阅消息推送
+    MessageAckRequest ack = 2;            // 消息确认
+    PushResultRequest push_result = 3;     // 推送结果反馈
+  }
+}
+
+message MessageStreamResponse {
+  oneof response_type {
+    MessagePushEvent push_event = 1;       // 推送消息事件
+    MessageFailureEvent failure = 2;       // 消息失败事件
+    AckConfirmEvent ack_confirm = 3;       // ACK确认
+  }
+}
+
+message MessageFailureEvent {
+  int64 original_sender = 1;  // 原发送者
+  string failure_reason = 2;  // 失败原因
+  WSMessage original_message = 3;
+}
+
 service MessageService {
   rpc SendWSMessage(SendWSMessageRequest) returns (SendWSMessageResponse);
+  
+  // 双向流：Connect服务与Message服务的消息通道
+  rpc MessageStream(stream MessageStreamRequest) returns (stream MessageStreamResponse);
 }

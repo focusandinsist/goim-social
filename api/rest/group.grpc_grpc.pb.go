@@ -19,12 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	GroupService_CreateGroup_FullMethodName  = "/GroupService/CreateGroup"
-	GroupService_AddMembers_FullMethodName   = "/GroupService/AddMembers"
-	GroupService_GetGroup_FullMethodName     = "/GroupService/GetGroup"
-	GroupService_DeleteGroup_FullMethodName  = "/GroupService/DeleteGroup"
-	GroupService_GetGroupList_FullMethodName = "/GroupService/GetGroupList"
-	GroupService_GetGroupInfo_FullMethodName = "/GroupService/GetGroupInfo"
+	GroupService_CreateGroup_FullMethodName  = "/rest.GroupService/CreateGroup"
+	GroupService_AddMembers_FullMethodName   = "/rest.GroupService/AddMembers"
+	GroupService_GetGroup_FullMethodName     = "/rest.GroupService/GetGroup"
+	GroupService_DeleteGroup_FullMethodName  = "/rest.GroupService/DeleteGroup"
+	GroupService_GetGroupList_FullMethodName = "/rest.GroupService/GetGroupList"
+	GroupService_GetGroupInfo_FullMethodName = "/rest.GroupService/GetGroupInfo"
 )
 
 // GroupServiceClient is the client API for GroupService service.
@@ -273,7 +273,7 @@ func _GroupService_GetGroupInfo_Handler(srv interface{}, ctx context.Context, de
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var GroupService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "GroupService",
+	ServiceName: "rest.GroupService",
 	HandlerType: (*GroupServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

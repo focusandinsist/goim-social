@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 	"websocket-server/api/rest"
 	"websocket-server/apps/connect/model"
 	"websocket-server/apps/connect/service"
@@ -50,13 +53,46 @@ func (h *Handler) WebSocketHandler(c *gin.Context) {
 	}
 	defer conn.Close()
 
+	// 从headers中获取userID
+	userIDStr := c.GetHeader("User-ID")
+	if userIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少User-ID header"})
+		return
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的User-ID格式"})
+		return
+	}
+
+	// 将userID存储到gin.Context中，供后续使用
+	c.Set("user_id", userID)
+
+	// 1. 建立连接记录到Redis
+	timestamp := time.Now().Unix()
+	connID := fmt.Sprintf("conn-%d-%d", userID, timestamp)
+	_, err = h.service.Connect(c.Request.Context(), userID, token, "connect-server-1", "web")
+	if err != nil {
+		h.logger.Error(c.Request.Context(), "Failed to register connection", logger.F("error", err.Error()))
+		return
+	}
+
+	// 2. 注册本地WebSocket连接
+	h.service.AddWebSocketConnection(userID, conn)
+
+	// 3. 确保断开时清理资源
+	defer func(uid int64, cid string) {
+		h.service.RemoveWebSocketConnection(uid)
+		h.service.Disconnect(c.Request.Context(), uid, cid)
+	}(userID, connID)
+
 	// 认证通过，进入主循环
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			h.logger.Error(c.Request.Context(), "WebSocket read message failed", logger.F("error", err.Error()))
-			h.Disconnect(c)
-			h.logger.Info(c.Request.Context(), "WebSocket connection closed,", logger.F("userID", c.GetInt64("user_id")))
+			h.logger.Info(c.Request.Context(), "WebSocket connection closed,", logger.F("userID", userID))
 			break
 		}
 		var wsMsg rest.WSMessage
