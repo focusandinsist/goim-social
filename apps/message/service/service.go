@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"sync"
 	"time"
 	"websocket-server/api/rest"
+	"websocket-server/apps/message/consumer"
 	"websocket-server/apps/message/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
 
 	"github.com/gorilla/websocket"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Service struct {
@@ -21,67 +23,7 @@ type Service struct {
 	kafka *kafka.Producer
 }
 
-// ConnectStream 存储Connect服务的流连接
-type ConnectStream struct {
-	ServiceID string
-	Stream    rest.MessageService_MessageStreamServer
-}
-
-// StreamManager 管理所有Connect服务的流连接
-type StreamManager struct {
-	streams map[string]*ConnectStream
-	mutex   sync.RWMutex
-}
-
-var streamManager = &StreamManager{
-	streams: make(map[string]*ConnectStream),
-}
-
-// AddStream 添加Connect服务流连接
-func (sm *StreamManager) AddStream(serviceID string, stream rest.MessageService_MessageStreamServer) {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-	sm.streams[serviceID] = &ConnectStream{
-		ServiceID: serviceID,
-		Stream:    stream,
-	}
-	log.Printf("添加Connect服务流连接: %s", serviceID)
-}
-
-// RemoveStream 移除Connect服务流连接
-func (sm *StreamManager) RemoveStream(serviceID string) {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-	delete(sm.streams, serviceID)
-	log.Printf("移除Connect服务流连接: %s", serviceID)
-}
-
-// PushToAllStreams 推送消息到所有Connect服务
-func (sm *StreamManager) PushToAllStreams(targetUserID int64, message *rest.WSMessage) {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
-
-	for serviceID, connectStream := range sm.streams {
-		go func(sid string, stream rest.MessageService_MessageStreamServer) {
-			err := stream.Send(&rest.MessageStreamResponse{
-				ResponseType: &rest.MessageStreamResponse_PushEvent{
-					PushEvent: &rest.MessagePushEvent{
-						TargetUserId: targetUserID,
-						Message:      message,
-						EventType:    "new_message",
-					},
-				},
-			})
-			if err != nil {
-				log.Printf("推送消息到Connect服务 %s 失败: %v", sid, err)
-				// 如果推送失败，移除这个连接
-				sm.RemoveStream(sid)
-			} else {
-				log.Printf("成功推送消息到Connect服务 %s, 目标用户: %d", sid, targetUserID)
-			}
-		}(serviceID, connectStream.Stream)
-	}
-}
+// 移除本地StreamManager，使用consumer包中的全局StreamManager
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer) *Service {
 	return &Service{
@@ -99,8 +41,140 @@ func (s *Service) SendMessage(ctx context.Context, msg *model.Message) error {
 
 // GetHistory 获取历史消息
 func (s *Service) GetHistory(ctx context.Context, userID, groupID int64, page, size int) ([]*model.Message, int, error) {
-	// TODO: 查询历史消息
-	return []*model.Message{}, 0, nil
+	collection := s.db.GetCollection("message")
+
+	// 构建查询条件
+	var filter map[string]interface{}
+	if groupID > 0 {
+		// 群聊消息
+		filter = map[string]interface{}{
+			"group_id": groupID,
+		}
+	} else {
+		// 私聊消息：查询与该用户相关的所有消息（发送给他的或他发送的）
+		filter = map[string]interface{}{
+			"$or": []map[string]interface{}{
+				{"from": userID},
+				{"to": userID},
+			},
+			"group_id": 0, // 确保是私聊消息
+		}
+	}
+
+	// 计算跳过的记录数
+	skip := int64((page - 1) * size)
+	limit := int64(size)
+
+	// 查询总数
+	total, err := collection.CountDocuments(ctx, filter)
+	if err != nil {
+		log.Printf("❌ 查询历史消息总数失败: %v", err)
+		return nil, 0, err
+	}
+
+	// 查询消息列表（按时间正序，最早的消息在前）
+	cursor, err := collection.Find(ctx, filter, &options.FindOptions{
+		Sort:  map[string]interface{}{"created_at": 1}, // 按创建时间正序
+		Skip:  &skip,
+		Limit: &limit,
+	})
+	if err != nil {
+		log.Printf("❌ 查询历史消息失败: %v", err)
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var messages []*model.Message
+	for cursor.Next(ctx) {
+		var msg model.Message
+		if err := cursor.Decode(&msg); err != nil {
+			log.Printf("❌ 解析历史消息失败: %v", err)
+			continue
+		}
+		messages = append(messages, &msg)
+	}
+
+	log.Printf("✅ 查询历史消息成功: 用户=%d, 群组=%d, 总数=%d, 返回=%d", userID, groupID, total, len(messages))
+	return messages, int(total), nil
+}
+
+// GetUnreadMessages 获取未读消息
+func (s *Service) GetUnreadMessages(ctx context.Context, userID int64) ([]*model.Message, error) {
+	collection := s.db.GetCollection("message")
+
+	// 查询发给该用户的未读消息
+	filter := map[string]interface{}{
+		"to":     userID,
+		"status": 0, // 0:未读
+	}
+
+	// 按时间正序排列（最早的消息先显示）
+	cursor, err := collection.Find(ctx, filter, &options.FindOptions{
+		Sort: map[string]interface{}{"created_at": 1},
+	})
+	if err != nil {
+		log.Printf("❌ 查询未读消息失败: %v", err)
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var messages []*model.Message
+	for cursor.Next(ctx) {
+		var msg model.Message
+		if err := cursor.Decode(&msg); err != nil {
+			log.Printf("❌ 解析未读消息失败: %v", err)
+			continue
+		}
+		messages = append(messages, &msg)
+	}
+
+	log.Printf("✅ 查询未读消息成功: 用户=%d, 未读消息数=%d", userID, len(messages))
+	return messages, nil
+}
+
+// MarkMessagesAsRead 标记消息为已读
+func (s *Service) MarkMessagesAsRead(ctx context.Context, userID int64, messageIDs []string) error {
+	collection := s.db.GetCollection("message")
+
+	// 将字符串ID转换为ObjectID
+	var objectIDs []interface{}
+	for _, idStr := range messageIDs {
+		if objectID, err := primitive.ObjectIDFromHex(idStr); err == nil {
+			objectIDs = append(objectIDs, objectID)
+		} else {
+			log.Printf("⚠️ 无效的消息ID: %s", idStr)
+		}
+	}
+
+	if len(objectIDs) == 0 {
+		log.Printf("⚠️ 没有有效的消息ID需要标记")
+		return nil
+	}
+
+	// 构建更新条件
+	filter := map[string]interface{}{
+		"_id": map[string]interface{}{
+			"$in": objectIDs,
+		},
+		"to": userID, // 确保只能标记发给自己的消息
+	}
+
+	// 更新状态为已读
+	update := map[string]interface{}{
+		"$set": map[string]interface{}{
+			"status":     1, // 1:已读
+			"updated_at": time.Now(),
+		},
+	}
+
+	result, err := collection.UpdateMany(ctx, filter, update)
+	if err != nil {
+		log.Printf("❌ 标记消息已读失败: %v", err)
+		return err
+	}
+
+	log.Printf("✅ 标记消息已读成功: 用户=%d, 更新数量=%d", userID, result.ModifiedCount)
+	return nil
 }
 
 // HandleWSMessage 处理 WebSocket 消息收发并存储到 MongoDB
@@ -155,37 +229,65 @@ func (s *Service) NewGRPCService(svc *Service) *GRPCService {
 func (g *GRPCService) SendWSMessage(ctx context.Context, req *rest.SendWSMessageRequest) (*rest.SendWSMessageResponse, error) {
 	log.Printf("📥 Message服务接收消息: From=%d, To=%d, Content=%s", req.Msg.From, req.Msg.To, req.Msg.Content)
 
-	// 1. 存储消息到数据库
-	_, err := g.svc.db.GetCollection("message").InsertOne(ctx, req.Msg)
-	if err != nil {
-		return &rest.SendWSMessageResponse{Success: false, Message: err.Error()}, err
+	// 1. 发布消息到Kafka（异步处理）
+	messageEvent := map[string]interface{}{
+		"type":      "new_message",
+		"message":   req.Msg,
+		"timestamp": time.Now().Unix(),
 	}
 
-	// 2. 推送消息给目标用户
-	if req.Msg.To > 0 {
-		// 单聊消息：推送给目标用户
-		log.Printf("推送单聊消息: From=%d, To=%d, Content=%s", req.Msg.From, req.Msg.To, req.Msg.Content)
-		streamManager.PushToAllStreams(req.Msg.To, req.Msg)
-	} else if req.Msg.GroupId > 0 {
-		// 群聊消息：需要查询群成员并推送给所有成员
-		log.Printf("推送群聊消息: From=%d, GroupID=%d, Content=%s", req.Msg.From, req.Msg.GroupId, req.Msg.Content)
-		// TODO: 查询群成员列表，推送给所有成员
-		// 这里简化处理，假设群成员ID为1,2,3
-		groupMembers := []int64{1, 2, 3}
-		for _, memberID := range groupMembers {
-			if memberID != req.Msg.From { // 不推送给发送者自己
-				streamManager.PushToAllStreams(memberID, req.Msg)
-			}
-		}
+	if err := g.svc.kafka.PublishMessage("message-events", messageEvent); err != nil {
+		log.Printf("❌ 发布消息到Kafka失败: %v", err)
+		return &rest.SendWSMessageResponse{Success: false, Message: "消息发送失败"}, err
 	}
 
+	log.Printf("✅ 消息已发布到Kafka: From=%d, To=%d", req.Msg.From, req.Msg.To)
 	return &rest.SendWSMessageResponse{Success: true, Message: "消息发送成功"}, nil
+}
+
+// GetHistoryMessages gRPC接口：获取历史消息
+func (g *GRPCService) GetHistoryMessages(ctx context.Context, req *rest.GetHistoryRequest) (*rest.GetHistoryResponse, error) {
+	log.Printf("📜 获取历史消息请求: UserID=%d, GroupID=%d, Page=%d, Size=%d", req.UserId, req.GroupId, req.Page, req.Size)
+
+	// 调用service层获取历史消息
+	messages, total, err := g.svc.GetHistory(ctx, req.UserId, req.GroupId, int(req.Page), int(req.Size))
+	if err != nil {
+		log.Printf("❌ 获取历史消息失败: %v", err)
+		return nil, err
+	}
+
+	// 将model.Message转换为rest.WSMessage
+	var wsMessages []*rest.WSMessage
+	for _, msg := range messages {
+		wsMsg := &rest.WSMessage{
+			MessageId:   0, // ObjectID无法直接转换为int64，暂时设为0
+			From:        msg.From,
+			To:          msg.To,
+			GroupId:     msg.GroupID,
+			Content:     msg.Content,
+			Timestamp:   msg.CreatedAt.Unix(),
+			MessageType: msg.MsgType,
+			AckId:       msg.AckID,
+		}
+		wsMessages = append(wsMessages, wsMsg)
+	}
+
+	log.Printf("✅ 获取历史消息成功: 总数=%d, 返回=%d", total, len(wsMessages))
+	return &rest.GetHistoryResponse{
+		Messages: wsMessages,
+		Total:    int32(total),
+		Page:     req.Page,
+		Size:     req.Size,
+	}, nil
 }
 
 // MessageStream 实现双向流通信
 func (g *GRPCService) MessageStream(stream rest.MessageService_MessageStreamServer) error {
 	// 存储连接的Connect服务实例
 	var connectServiceID string
+
+	// 获取全局流管理器
+	streamManager := consumer.GetStreamManager()
 
 	// 在函数返回时移除连接
 	defer func() {
@@ -232,6 +334,17 @@ func (g *GRPCService) MessageStream(stream rest.MessageService_MessageStreamServ
 				log.Printf("消息推送成功: UserID=%d", result.TargetUserId)
 			} else {
 				log.Printf("消息推送失败: UserID=%d, Error=%s", result.TargetUserId, result.ErrorMessage)
+			}
+
+		case *rest.MessageStreamRequest_SendMessage:
+			// 处理通过双向流发送的消息
+			sendReq := reqType.SendMessage
+			log.Printf("📥 通过双向流接收消息: From=%d, To=%d, Content=%s", sendReq.Msg.From, sendReq.Msg.To, sendReq.Msg.Content)
+
+			// 调用现有的SendWSMessage方法处理消息
+			_, err := g.SendWSMessage(stream.Context(), sendReq)
+			if err != nil {
+				log.Printf("❌ 处理双向流消息失败: %v", err)
 			}
 		}
 	}

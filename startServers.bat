@@ -16,7 +16,7 @@ set HTTP_PORT=21003&& set GRPC_PORT=22003&& start "3-Friend-Service" cmd /k "set
 timeout /t 3 /nobreak >nul
 
 set HTTP_PORT=21004&& set GRPC_PORT=22004&& start "4-Message-Service" cmd /k "set HTTP_PORT=21004&& set GRPC_PORT=22004&& go run apps\message\cmd\main.go"
-timeout /t 3 /nobreak >nul
+timeout /t 5 /nobreak >nul
 
 REM 第三层：接入服务（依赖所有业务服务）
 echo 启动接入服务层...

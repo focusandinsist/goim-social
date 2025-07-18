@@ -19,10 +19,12 @@ func NewHandler(service *service.Service, logger logger.Logger) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
-	api := r.Group("/api/v1/message")
+	api := r.Group("/api/v1/messages")
 	{
-		api.POST("/send", h.SendMessage)
-		api.POST("/history", h.GetHistory)
+		api.POST("/history", h.GetHistory)         // 获取历史消息
+		api.POST("/unread", h.GetUnreadMessages)   // 获取未读消息
+		api.POST("/mark-read", h.MarkMessagesRead) // 标记消息已读
+		api.POST("/send", h.SendMessage)           // 特殊场景下的短连接消息，如测试，某些网络下的备用通道
 	}
 }
 
@@ -64,4 +66,55 @@ func (h *Handler) GetHistory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"messages": msgs, "total": total, "page": req.Page, "size": req.Size})
+}
+
+// GetUnreadMessages 获取未读消息
+func (h *Handler) GetUnreadMessages(c *gin.Context) {
+	var req struct {
+		UserID int64 `json:"user_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		return
+	}
+
+	// 调用service层获取未读消息
+	messages, err := h.service.GetUnreadMessages(c.Request.Context(), req.UserID)
+	if err != nil {
+		h.logger.Error(c.Request.Context(), "获取未读消息失败", logger.F("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取未读消息失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"messages": messages,
+		"total":    len(messages),
+	})
+}
+
+// MarkMessagesRead 标记消息已读
+func (h *Handler) MarkMessagesRead(c *gin.Context) {
+	var req struct {
+		UserID     int64    `json:"user_id" binding:"required"`
+		MessageIDs []string `json:"message_ids" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		return
+	}
+
+	// 调用service层标记消息已读
+	err := h.service.MarkMessagesAsRead(c.Request.Context(), req.UserID, req.MessageIDs)
+	if err != nil {
+		h.logger.Error(c.Request.Context(), "标记消息已读失败", logger.F("error", err.Error()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "标记消息已读失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "标记已读成功",
+	})
 }

@@ -41,13 +41,19 @@ func (s *Service) Register(ctx context.Context, req *rest.RegisterRequest) (*res
 		return nil, errors.New("username already exists")
 	}
 
+	// 生成唯一用户ID（使用时间戳 + 随机数确保唯一性）
+	userID := time.Now().Unix()*1000 + int64(time.Now().Nanosecond()%1000)
+
 	// 创建用户
 	user := &model.User{
-		Username: req.Username,
-		Password: req.Password, // 实际应该加密
-		Email:    req.Email,
-		Nickname: req.Nickname,
-		Status:   0, // 正常状态
+		ID:        userID,
+		Username:  req.Username,
+		Password:  req.Password, // 实际应该加密
+		Email:     req.Email,
+		Nickname:  req.Nickname,
+		Status:    0, // 正常状态
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	_, err = s.db.GetCollection("users").InsertOne(ctx, user)
