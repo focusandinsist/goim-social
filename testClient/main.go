@@ -478,17 +478,14 @@ func startHeartbeat(c *websocket.Conn, userID int64) {
 	ticker := time.NewTicker(20 * time.Second) // 每20秒发送一次ping
 	defer ticker.Stop()
 
-	log.Printf("💓 用户 %d 开始心跳检测，间隔20秒", userID)
-
 	for {
 		select {
 		case <-ticker.C:
 			// 发送ping消息
 			if err := c.WriteMessage(websocket.PingMessage, []byte("heartbeat")); err != nil {
-				log.Printf("❌ 用户 %d 发送ping失败: %v", err)
+				log.Printf("❌ 用户 %d 发送ping失败: %v", userID, err)
 				return
 			}
-			log.Printf("💓 用户 %d 发送ping心跳", userID)
 		}
 	}
 }
@@ -497,22 +494,22 @@ func startHeartbeat(c *websocket.Conn, userID int64) {
 func receiveMessages(c *websocket.Conn, userID int64) {
 	// 设置ping处理器
 	c.SetPingHandler(func(appData string) error {
-		log.Printf("🏓 用户 %d 收到ping消息，发送pong响应", userID)
 		return c.WriteMessage(websocket.PongMessage, []byte(appData))
 	})
 
-	// 设置pong处理器
+	// 设置pong处理器 - 静默处理，不记录日志
 	c.SetPongHandler(func(appData string) error {
-		log.Printf("🏓 用户 %d 收到pong响应: %s", userID, string(appData))
 		return nil
 	})
 
 	for {
-		c.SetReadDeadline(time.Now().Add(60 * time.Second)) // 增加读超时时间
+		// 移除读取超时，依赖ping/pong机制检测连接状态
 		messageType, message, err := c.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				log.Printf("❌ 用户 %d 连接被关闭: %v", userID, err)
+			} else {
+				log.Printf("❌ 用户 %d 读取消息失败: %v", userID, err)
 			}
 			return
 		}
@@ -520,11 +517,9 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 		// 处理不同类型的消息
 		switch messageType {
 		case websocket.PingMessage:
-			log.Printf("🏓 用户 %d 收到ping消息，发送pong响应", userID)
 			c.WriteMessage(websocket.PongMessage, message)
 			continue
 		case websocket.PongMessage:
-			log.Printf("🏓 用户 %d 收到pong消息: %s", userID, string(message))
 			continue
 		case websocket.BinaryMessage:
 			// 处理业务消息
@@ -539,10 +534,6 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 			log.Printf("❌ 用户 %d 解析消息失败: %v", userID, err)
 			continue
 		}
-
-		// 调试：显示所有收到的消息
-		log.Printf("🔍 用户 %d 收到消息: From=%d, To=%d, Content=%s",
-			userID, wsMsg.From, wsMsg.To, wsMsg.Content)
 
 		// 显示所有相关消息（发给当前用户的或当前用户发送的）
 		if wsMsg.To == userID || wsMsg.From == userID {
@@ -570,8 +561,6 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 
 			fmt.Printf("\n[%s] %s: %s\n", timestamp, direction, wsMsg.Content)
 			fmt.Printf("[用户%d] 💬 ", userID)
-		} else {
-			log.Printf("⚠️ 用户 %d 收到不相关消息，忽略", userID)
 		}
 	}
 }

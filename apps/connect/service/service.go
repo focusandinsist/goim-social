@@ -623,3 +623,17 @@ func (s *Service) CleanupInvalidConnections() {
 	stats := s.connMgr.GetStats()
 	log.Printf("🧹 当前活跃连接数: %d", stats["local_connections"])
 }
+
+// UpdateHeartbeat 更新连接的心跳时间
+func (s *Service) UpdateHeartbeat(ctx context.Context, userID int64, connID string, timestamp int64) error {
+	connKey := fmt.Sprintf("conn:%d:%s", userID, connID)
+
+	// 更新Redis中的lastHeartbeat字段
+	err := s.redis.HSet(ctx, connKey, "lastHeartbeat", timestamp)
+	if err != nil {
+		log.Printf("❌ 更新用户 %d 心跳时间失败: %v", userID, err)
+		return err
+	}
+
+	return nil
+}

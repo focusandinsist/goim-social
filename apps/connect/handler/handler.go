@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -78,10 +79,33 @@ func (h *Handler) WebSocketHandler(c *gin.Context) {
 		return
 	}
 
-	// 2. 注册本地WebSocket连接
+	// 2. 设置ping处理器 - 自动响应客户端的ping消息
+	conn.SetPingHandler(func(appData string) error {
+		// 更新Redis中的心跳时间
+		go func() {
+			timestamp := time.Now().Unix()
+			// 通过service更新心跳时间
+			if err := h.service.UpdateHeartbeat(context.Background(), userID, connID, timestamp); err != nil {
+				h.logger.Error(context.Background(), "更新心跳时间失败",
+					logger.F("userID", userID),
+					logger.F("error", err.Error()))
+			}
+		}()
+
+		// 发送pong响应
+		err = conn.WriteMessage(websocket.PongMessage, []byte(appData))
+		if err != nil {
+			h.logger.Error(c.Request.Context(), "发送pong响应失败",
+				logger.F("userID", userID),
+				logger.F("error", err.Error()))
+		}
+		return err
+	})
+
+	// 3. 注册本地WebSocket连接
 	h.service.AddWebSocketConnection(userID, conn)
 
-	// 3. 确保断开时清理资源
+	// 4. 确保断开时清理资源
 	defer func(uid int64, cid string) {
 		h.service.RemoveWebSocketConnection(uid)
 		h.service.Disconnect(c.Request.Context(), uid, cid)
