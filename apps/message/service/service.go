@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"sync"
 	"time"
 	"websocket-server/api/rest"
+	"websocket-server/apps/message/consumer"
 	"websocket-server/apps/message/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
@@ -21,67 +21,7 @@ type Service struct {
 	kafka *kafka.Producer
 }
 
-// ConnectStream 存储Connect服务的流连接
-type ConnectStream struct {
-	ServiceID string
-	Stream    rest.MessageService_MessageStreamServer
-}
-
-// StreamManager 管理所有Connect服务的流连接
-type StreamManager struct {
-	streams map[string]*ConnectStream
-	mutex   sync.RWMutex
-}
-
-var streamManager = &StreamManager{
-	streams: make(map[string]*ConnectStream),
-}
-
-// AddStream 添加Connect服务流连接
-func (sm *StreamManager) AddStream(serviceID string, stream rest.MessageService_MessageStreamServer) {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-	sm.streams[serviceID] = &ConnectStream{
-		ServiceID: serviceID,
-		Stream:    stream,
-	}
-	log.Printf("添加Connect服务流连接: %s", serviceID)
-}
-
-// RemoveStream 移除Connect服务流连接
-func (sm *StreamManager) RemoveStream(serviceID string) {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-	delete(sm.streams, serviceID)
-	log.Printf("移除Connect服务流连接: %s", serviceID)
-}
-
-// PushToAllStreams 推送消息到所有Connect服务
-func (sm *StreamManager) PushToAllStreams(targetUserID int64, message *rest.WSMessage) {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
-
-	for serviceID, connectStream := range sm.streams {
-		go func(sid string, stream rest.MessageService_MessageStreamServer) {
-			err := stream.Send(&rest.MessageStreamResponse{
-				ResponseType: &rest.MessageStreamResponse_PushEvent{
-					PushEvent: &rest.MessagePushEvent{
-						TargetUserId: targetUserID,
-						Message:      message,
-						EventType:    "new_message",
-					},
-				},
-			})
-			if err != nil {
-				log.Printf("推送消息到Connect服务 %s 失败: %v", sid, err)
-				// 如果推送失败，移除这个连接
-				sm.RemoveStream(sid)
-			} else {
-				log.Printf("成功推送消息到Connect服务 %s, 目标用户: %d", sid, targetUserID)
-			}
-		}(serviceID, connectStream.Stream)
-	}
-}
+// 移除本地StreamManager，使用consumer包中的全局StreamManager
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer) *Service {
 	return &Service{
@@ -155,30 +95,19 @@ func (s *Service) NewGRPCService(svc *Service) *GRPCService {
 func (g *GRPCService) SendWSMessage(ctx context.Context, req *rest.SendWSMessageRequest) (*rest.SendWSMessageResponse, error) {
 	log.Printf("📥 Message服务接收消息: From=%d, To=%d, Content=%s", req.Msg.From, req.Msg.To, req.Msg.Content)
 
-	// 1. 存储消息到数据库
-	_, err := g.svc.db.GetCollection("message").InsertOne(ctx, req.Msg)
-	if err != nil {
-		return &rest.SendWSMessageResponse{Success: false, Message: err.Error()}, err
+	// 1. 发布消息到Kafka（异步处理）
+	messageEvent := map[string]interface{}{
+		"type":      "new_message",
+		"message":   req.Msg,
+		"timestamp": time.Now().Unix(),
 	}
 
-	// 2. 推送消息给目标用户
-	if req.Msg.To > 0 {
-		// 单聊消息：推送给目标用户
-		log.Printf("推送单聊消息: From=%d, To=%d, Content=%s", req.Msg.From, req.Msg.To, req.Msg.Content)
-		streamManager.PushToAllStreams(req.Msg.To, req.Msg)
-	} else if req.Msg.GroupId > 0 {
-		// 群聊消息：需要查询群成员并推送给所有成员
-		log.Printf("推送群聊消息: From=%d, GroupID=%d, Content=%s", req.Msg.From, req.Msg.GroupId, req.Msg.Content)
-		// TODO: 查询群成员列表，推送给所有成员
-		// 这里简化处理，假设群成员ID为1,2,3
-		groupMembers := []int64{1, 2, 3}
-		for _, memberID := range groupMembers {
-			if memberID != req.Msg.From { // 不推送给发送者自己
-				streamManager.PushToAllStreams(memberID, req.Msg)
-			}
-		}
+	if err := g.svc.kafka.PublishMessage("message-events", messageEvent); err != nil {
+		log.Printf("❌ 发布消息到Kafka失败: %v", err)
+		return &rest.SendWSMessageResponse{Success: false, Message: "消息发送失败"}, err
 	}
 
+	log.Printf("✅ 消息已发布到Kafka: From=%d, To=%d", req.Msg.From, req.Msg.To)
 	return &rest.SendWSMessageResponse{Success: true, Message: "消息发送成功"}, nil
 }
 
@@ -186,6 +115,9 @@ func (g *GRPCService) SendWSMessage(ctx context.Context, req *rest.SendWSMessage
 func (g *GRPCService) MessageStream(stream rest.MessageService_MessageStreamServer) error {
 	// 存储连接的Connect服务实例
 	var connectServiceID string
+
+	// 获取全局流管理器
+	streamManager := consumer.GetStreamManager()
 
 	// 在函数返回时移除连接
 	defer func() {

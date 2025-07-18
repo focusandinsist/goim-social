@@ -263,46 +263,74 @@ func (g *GRPCService) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRe
 }
 
 func (s *Service) StartMessageStream() {
-	conn, _ := grpc.Dial("localhost:22004", grpc.WithInsecure())
-	client := rest.NewMessageServiceClient(conn)
+	// 重试连接Message服务
+	for i := 0; i < 10; i++ {
+		log.Printf("🔄 尝试连接Message服务... (第%d次)", i+1)
 
-	stream, _ := client.MessageStream(context.Background())
-	s.msgStream = stream // 保存stream连接
-
-	// 发送订阅请求
-	stream.Send(&rest.MessageStreamRequest{
-		RequestType: &rest.MessageStreamRequest_Subscribe{
-			Subscribe: &rest.SubscribeRequest{ConnectServiceId: s.instanceID},
-		},
-	})
-
-	go func() {
-		for {
-			resp, err := stream.Recv()
-			if err != nil {
-				return
-			}
-			switch respType := resp.ResponseType.(type) {
-			case *rest.MessageStreamResponse_PushEvent:
-				event := respType.PushEvent
-				// 推送给本地用户
-				s.pushToLocalConnection(event.TargetUserId, event.Message)
-				// 发送推送结果反馈
-				stream.Send(&rest.MessageStreamRequest{
-					RequestType: &rest.MessageStreamRequest_PushResult{
-						PushResult: &rest.PushResultRequest{
-							Success:      true,
-							TargetUserId: event.TargetUserId,
-						},
-					},
-				})
-			case *rest.MessageStreamResponse_Failure:
-				failure := respType.Failure
-				// 通知原发送者消息失败
-				s.notifyMessageFailure(failure.OriginalSender, failure.FailureReason)
-			}
+		conn, err := grpc.Dial("localhost:22004", grpc.WithInsecure())
+		if err != nil {
+			log.Printf("❌ 连接Message服务失败: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
 		}
-	}()
+
+		client := rest.NewMessageServiceClient(conn)
+		stream, err := client.MessageStream(context.Background())
+		if err != nil {
+			log.Printf("❌ 创建消息流失败: %v", err)
+			conn.Close()
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		s.msgStream = stream // 保存stream连接
+		log.Printf("✅ 成功连接到Message服务")
+
+		// 发送订阅请求
+		err = stream.Send(&rest.MessageStreamRequest{
+			RequestType: &rest.MessageStreamRequest_Subscribe{
+				Subscribe: &rest.SubscribeRequest{ConnectServiceId: s.instanceID},
+			},
+		})
+		if err != nil {
+			log.Printf("❌ 发送订阅请求失败: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// 连接成功，启动消息接收goroutine
+		go func(stream rest.MessageService_MessageStreamClient) {
+			for {
+				resp, err := stream.Recv()
+				if err != nil {
+					log.Printf("❌ 消息流接收失败: %v", err)
+					return
+				}
+				switch respType := resp.ResponseType.(type) {
+				case *rest.MessageStreamResponse_PushEvent:
+					event := respType.PushEvent
+					// 推送给本地用户
+					s.pushToLocalConnection(event.TargetUserId, event.Message)
+					// 发送推送结果反馈
+					stream.Send(&rest.MessageStreamRequest{
+						RequestType: &rest.MessageStreamRequest_PushResult{
+							PushResult: &rest.PushResultRequest{
+								Success:      true,
+								TargetUserId: event.TargetUserId,
+							},
+						},
+					})
+				case *rest.MessageStreamResponse_Failure:
+					failure := respType.Failure
+					// 通知原发送者消息失败
+					s.notifyMessageFailure(failure.OriginalSender, failure.FailureReason)
+				}
+			}
+		}(stream)
+
+		// 连接成功，跳出重试循环
+		break
+	}
 }
 
 // pushToLocalConnection 推送消息给本地连接的用户

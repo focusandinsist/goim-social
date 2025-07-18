@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"websocket-server/api/rest"
+	"websocket-server/apps/message/consumer"
 	"websocket-server/apps/message/handler"
 	"websocket-server/apps/message/service"
 	"websocket-server/pkg/config"
@@ -54,6 +55,27 @@ func main() {
 
 	// 初始化Service层
 	svc := service.NewService(mongoDB, redisClient, kafkaProducer)
+
+	// 启动Kafka消费者
+	ctx := context.Background()
+
+	// 启动存储消费者
+	storageConsumer := consumer.NewStorageConsumer(mongoDB)
+	go func() {
+		log.Println("🚀 启动存储消费者...")
+		if err := storageConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
+			log.Fatalf("Failed to start storage consumer: %v", err)
+		}
+	}()
+
+	// 启动推送消费者
+	pushConsumer := consumer.NewPushConsumer()
+	go func() {
+		log.Println("🚀 启动推送消费者...")
+		if err := pushConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
+			log.Fatalf("Failed to start push consumer: %v", err)
+		}
+	}()
 
 	// 创建HTTP服务器
 	httpServer := server.NewHTTPServerWrapper(cfg, kratosLogger)
