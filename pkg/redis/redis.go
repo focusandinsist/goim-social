@@ -85,6 +85,11 @@ func (r *RedisClient) SIsMember(ctx context.Context, key string, member interfac
 	return r.client.SIsMember(ctx, key, member).Result()
 }
 
+// SMembers 获取 set 中的所有成员
+func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error) {
+	return r.client.SMembers(ctx, key).Result()
+}
+
 // Close 关闭连接
 func (r *RedisClient) Close() error {
 	return r.client.Close()

@@ -118,8 +118,14 @@ func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]
 func (s *Service) ForwardMessageToMessageService(ctx context.Context, wsMsg *rest.WSMessage) error {
 	log.Printf("📨 Connect服务转发消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
 
-	// 这里可以通过双向流发送消息，但为了简化，我们仍然使用直接调用
-	// 实际生产环境中，应该通过双向流来处理消息转发
+	// 优先使用双向流发送消息
+	if s.msgStream != nil {
+		log.Printf("🔄 通过双向流转发消息")
+		return s.SendMessageViaStream(ctx, wsMsg)
+	}
+
+	// 如果双向流不可用，使用直接gRPC调用作为备用
+	log.Printf("⚠️ 双向流不可用，使用直接gRPC调用")
 	conn, err := grpc.Dial("localhost:22004", grpc.WithInsecure()) // Message Service gRPC端口
 	if err != nil {
 		return err
@@ -263,13 +269,22 @@ func (g *GRPCService) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRe
 }
 
 func (s *Service) StartMessageStream() {
+	log.Printf("🚀 开始连接Message服务...")
+
 	// 重试连接Message服务
 	for i := 0; i < 10; i++ {
-		log.Printf("🔄 尝试连接Message服务... (第%d次)", i+1)
+		if i == 0 {
+			log.Printf("🔄 尝试连接Message服务... (第%d次)", i+1)
+		} else {
+			log.Printf("🔄 重试连接Message服务... (第%d次) - 等待Message服务启动完成", i+1)
+		}
 
 		conn, err := grpc.Dial("localhost:22004", grpc.WithInsecure())
 		if err != nil {
 			log.Printf("❌ 连接Message服务失败: %v", err)
+			if i < 9 {
+				log.Printf("⏳ 等待2秒后重试...")
+			}
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -344,6 +359,11 @@ func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMess
 		log.Printf("❌ Redis查询失败，用户 %d: %v", targetUserID, err)
 		return
 	}
+
+	// 调试：显示所有在线用户
+	allOnlineUsers, _ := s.redis.SMembers(ctx, "online_users")
+	log.Printf("🔍 当前Redis中的在线用户: %v", allOnlineUsers)
+
 	if !isOnline {
 		log.Printf("❌ 用户 %d 在Redis中显示不在线", targetUserID)
 		return
@@ -370,14 +390,16 @@ func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMess
 		return
 	}
 
-	// 3. 将消息序列化为二进制
+	// 3. 直接尝试推送消息，如果失败再清理连接
+
+	// 4. 将消息序列化为二进制
 	msgBytes, err := proto.Marshal(message)
 	if err != nil {
 		log.Printf("❌ 消息序列化失败: %v", err)
 		return
 	}
 
-	// 4. 推送消息
+	// 5. 推送消息
 	log.Printf("📤 尝试通过WebSocket推送消息给用户 %d", targetUserID)
 	if err := conn.WriteMessage(websocket.BinaryMessage, msgBytes); err != nil {
 		log.Printf("❌ 推送消息给用户 %d 失败: %v", targetUserID, err)
@@ -401,11 +423,23 @@ func (s *Service) SendMessageViaStream(ctx context.Context, wsMsg *rest.WSMessag
 		return fmt.Errorf("消息流连接未建立")
 	}
 
-	// 通过双向流发送消息（这里可以扩展为发送新消息事件）
-	// 目前的proto定义中没有发送消息的请求类型，所以这里只是示例
-	log.Printf("通过双向流发送消息: %+v", wsMsg)
+	// 通过双向流发送消息
+	log.Printf("📡 通过双向流发送消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
 
-	// 实际实现中，您可能需要在proto中添加新的消息类型来支持消息发送
+	err := s.msgStream.Send(&rest.MessageStreamRequest{
+		RequestType: &rest.MessageStreamRequest_SendMessage{
+			SendMessage: &rest.SendWSMessageRequest{
+				Msg: wsMsg,
+			},
+		},
+	})
+
+	if err != nil {
+		log.Printf("❌ 双向流发送消息失败: %v", err)
+		return err
+	}
+
+	log.Printf("✅ 双向流发送消息成功")
 	return nil
 }
 
@@ -424,19 +458,44 @@ func (s *Service) AddWebSocketConnection(userID int64, conn *websocket.Conn) {
 	wsConnManager.mutex.Unlock()
 
 	log.Printf("✅ 用户 %d 的WebSocket连接已添加到本地管理，当前总连接数: %d", userID, totalConnections)
+
+	// WebSocket连接建立完成，客户端可以通过HTTP接口自行获取历史消息
 }
 
 // RemoveWebSocketConnection 移除WebSocket连接
 func (s *Service) RemoveWebSocketConnection(userID int64) {
 	// 1. 从本地WebSocket连接管理中移除
 	wsConnManager.mutex.Lock()
-	if _, exists := wsConnManager.localConnections[userID]; exists {
+	if conn, exists := wsConnManager.localConnections[userID]; exists {
+		// 尝试关闭连接
+		conn.Close()
 		delete(wsConnManager.localConnections, userID)
 		totalConnections := len(wsConnManager.localConnections)
 		wsConnManager.mutex.Unlock()
-		log.Printf("✅ 用户 %d 的WebSocket连接已从本地管理中移除，剩余连接数: %d", userID, totalConnections)
+		log.Printf("✅ 用户 %d 的WebSocket连接已关闭并从本地管理中移除，剩余连接数: %d", userID, totalConnections)
+
+		// 2. 检查是否还有该用户的其他连接
+		// 注意：在多设备场景下，一个用户可能有多个连接
+		// 这里简化处理，直接从Redis移除
+		ctx := context.Background()
+		err := s.redis.SRem(ctx, "online_users", userID)
+		if err != nil {
+			log.Printf("❌ 从Redis移除用户 %d 在线状态失败: %v", userID, err)
+		} else {
+			log.Printf("✅ 用户 %d 已从Redis在线用户列表中移除", userID)
+		}
 	} else {
 		wsConnManager.mutex.Unlock()
 		log.Printf("⚠️  用户 %d 的WebSocket连接在本地管理中不存在，无需移除", userID)
 	}
+}
+
+// CleanupInvalidConnections 清理所有失效的连接（被动清理，在推送失败时调用）
+func (s *Service) CleanupInvalidConnections() {
+	// 这个方法现在主要用于日志记录，实际清理在推送失败时进行
+	wsConnManager.mutex.RLock()
+	totalConnections := len(wsConnManager.localConnections)
+	wsConnManager.mutex.RUnlock()
+
+	log.Printf("🧹 当前活跃连接数: %d", totalConnections)
 }

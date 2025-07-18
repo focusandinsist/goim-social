@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"time"
 	"websocket-server/api/rest"
+	"websocket-server/apps/message/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 
@@ -86,14 +88,28 @@ func (s *StorageConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	log.Printf("💾 存储消息: From=%d, To=%d, Content=%s", msg.From, msg.To, msg.Content)
 
+	// 转换为Message模型并设置状态
+	message := &model.Message{
+		// 不设置ID，让MongoDB自动生成_id
+		From:      msg.From,
+		To:        msg.To,
+		GroupID:   msg.GroupId,
+		Content:   msg.Content,
+		MsgType:   msg.MessageType,
+		AckID:     msg.AckId,
+		Status:    0, // 0:未读
+		CreatedAt: time.Unix(msg.Timestamp, 0),
+		UpdatedAt: time.Now(),
+	}
+
 	// 存储到MongoDB
-	_, err := s.db.GetCollection("message").InsertOne(context.Background(), msg)
+	_, err := s.db.GetCollection("message").InsertOne(context.Background(), message)
 	if err != nil {
 		log.Printf("❌ 存储消息失败: %v", err)
 		return err
 	}
 
-	log.Printf("✅ 消息存储成功: From=%d, To=%d", msg.From, msg.To)
+	log.Printf("✅ 消息存储成功: From=%d, To=%d, Status=未读", msg.From, msg.To)
 	return nil
 }
 

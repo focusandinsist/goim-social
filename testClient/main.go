@@ -86,6 +86,9 @@ func main() {
 	fmt.Println("📋 输入 'help' 查看更多命令")
 	fmt.Println(strings.Repeat("-", 50))
 
+	// 获取未读消息
+	go fetchUnreadMessages(userInfo.ID)
+
 	// 启动消息接收协程
 	go receiveMessages(conn, userInfo.ID)
 
@@ -176,6 +179,124 @@ func loginUser(apiURL string, scanner *bufio.Scanner) *UserInfo {
 		Username: loginData.User.Username,
 		Token:    loginData.Token,
 		DeviceID: loginData.DeviceID,
+	}
+}
+
+// 未读消息请求结构
+type UnreadRequest struct {
+	UserID int64 `json:"user_id"`
+}
+
+// 未读消息响应结构
+type UnreadResponse struct {
+	Messages []UnreadMessage `json:"messages"`
+	Total    int             `json:"total"`
+}
+
+type UnreadMessage struct {
+	ID        string `json:"id"`
+	From      int64  `json:"from"`
+	To        int64  `json:"to"`
+	GroupID   int64  `json:"group_id"`
+	Content   string `json:"content"`
+	MsgType   int32  `json:"msg_type"`
+	AckID     string `json:"ack_id"`
+	Status    int32  `json:"status"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// fetchUnreadMessages 通过HTTP POST接口获取未读消息
+func fetchUnreadMessages(userID int64) {
+	fmt.Printf("\n� 正在获取未读消息...\n")
+
+	// 构造POST请求体
+	reqBody := UnreadRequest{
+		UserID: userID,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		fmt.Printf("❌ 构造请求失败: %v\n", err)
+		return
+	}
+
+	// 发送POST请求
+	url := "http://localhost:21004/api/v1/messages/unread"
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Printf("❌ 获取未读消息失败: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("❌ 未读消息请求失败，状态码: %d\n", resp.StatusCode)
+		return
+	}
+
+	var unreadResp UnreadResponse
+	if err := json.NewDecoder(resp.Body).Decode(&unreadResp); err != nil {
+		fmt.Printf("❌ 解析未读消息失败: %v\n", err)
+		return
+	}
+
+	if len(unreadResp.Messages) == 0 {
+		fmt.Printf("📭 没有未读消息\n")
+		return
+	}
+
+	fmt.Printf("� 收到 %d 条未读消息:\n", len(unreadResp.Messages))
+	for _, msg := range unreadResp.Messages {
+		// 解析时间
+		createdAt, _ := time.Parse(time.RFC3339, msg.CreatedAt)
+		timestamp := createdAt.Format("2006-01-02 15:04:05")
+
+		// 显示消息
+		fmt.Printf("[%s] � [未读消息] 来自用户%d: %s\n", timestamp, msg.From, msg.Content)
+	}
+
+	// 标记消息为已读
+	go markMessagesAsRead(userID, unreadResp.Messages)
+
+	fmt.Printf("[用户%d] 💬 ", userID)
+}
+
+// markMessagesAsRead 标记消息为已读
+func markMessagesAsRead(userID int64, messages []UnreadMessage) {
+	if len(messages) == 0 {
+		return
+	}
+
+	// 提取消息ID
+	var messageIDs []string
+	for _, msg := range messages {
+		messageIDs = append(messageIDs, msg.ID)
+	}
+
+	// 构造标记已读请求
+	reqBody := map[string]interface{}{
+		"user_id":     userID,
+		"message_ids": messageIDs,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		fmt.Printf("❌ 构造标记已读请求失败: %v\n", err)
+		return
+	}
+
+	// 发送POST请求标记已读
+	url := "http://localhost:21004/api/v1/messages/mark-read"
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Printf("❌ 标记消息已读失败: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		fmt.Printf("✅ 已标记 %d 条消息为已读\n", len(messageIDs))
 	}
 }
 
@@ -351,9 +472,15 @@ func sendMessage(conn *websocket.Conn, from, to int64, content string) {
 
 // 接收消息的协程
 func receiveMessages(c *websocket.Conn, userID int64) {
+	// 设置ping/pong处理
+	c.SetPingHandler(func(appData string) error {
+		log.Printf("🏓 收到ping消息，发送pong响应")
+		return c.WriteMessage(websocket.PongMessage, []byte(appData))
+	})
+
 	for {
 		c.SetReadDeadline(time.Now().Add(30 * time.Second))
-		_, message, err := c.ReadMessage()
+		messageType, message, err := c.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure) {
 				log.Printf("❌ 连接被关闭: %v", err)
@@ -361,17 +488,54 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 			return
 		}
 
-		// 解析消息
+		// 处理不同类型的消息
+		switch messageType {
+		case websocket.PingMessage:
+			log.Printf("🏓 收到ping消息，发送pong响应")
+			c.WriteMessage(websocket.PongMessage, message)
+			continue
+		case websocket.PongMessage:
+			log.Printf("🏓 收到pong消息")
+			continue
+		case websocket.BinaryMessage:
+			// 处理业务消息
+		default:
+			log.Printf("⚠️ 收到未知类型消息: %d", messageType)
+			continue
+		}
+
+		// 解析业务消息
 		var wsMsg rest.WSMessage
 		if err := proto.Unmarshal(message, &wsMsg); err != nil {
 			log.Printf("❌ 解析消息失败: %v", err)
 			continue
 		}
 
-		// 只显示发给当前用户的消息
-		if wsMsg.To == userID {
-			timestamp := time.Unix(wsMsg.Timestamp, 0).Format("15:04:05")
-			fmt.Printf("\n📥 [%s] 来自用户%d: %s\n", timestamp, wsMsg.From, wsMsg.Content)
+		// 显示所有相关消息（发给当前用户的或当前用户发送的）
+		if wsMsg.To == userID || wsMsg.From == userID {
+			timestamp := time.Unix(wsMsg.Timestamp, 0).Format("2006-01-02 15:04:05")
+
+			// 判断是否是历史消息（根据时间戳判断，如果是5分钟前的消息就认为是历史消息）
+			isHistoryMessage := time.Now().Unix()-wsMsg.Timestamp > 300 // 5分钟前的消息认为是历史消息
+
+			var direction string
+			if wsMsg.To == userID {
+				// 收到的消息
+				if isHistoryMessage {
+					direction = fmt.Sprintf("📜 [历史消息] 来自用户%d", wsMsg.From)
+				} else {
+					direction = fmt.Sprintf("📥 来自用户%d", wsMsg.From)
+				}
+			} else {
+				// 发送的消息
+				if isHistoryMessage {
+					direction = fmt.Sprintf("📜 [历史消息] 发送给用户%d", wsMsg.To)
+				} else {
+					direction = fmt.Sprintf("📤 发送给用户%d", wsMsg.To)
+				}
+			}
+
+			fmt.Printf("\n[%s] %s: %s\n", timestamp, direction, wsMsg.Content)
 			fmt.Printf("[用户%d] 💬 ", userID)
 		}
 	}

@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	MessageService_SendWSMessage_FullMethodName = "/rest.MessageService/SendWSMessage"
-	MessageService_MessageStream_FullMethodName = "/rest.MessageService/MessageStream"
+	MessageService_SendWSMessage_FullMethodName      = "/rest.MessageService/SendWSMessage"
+	MessageService_GetHistoryMessages_FullMethodName = "/rest.MessageService/GetHistoryMessages"
+	MessageService_MessageStream_FullMethodName      = "/rest.MessageService/MessageStream"
 )
 
 // MessageServiceClient is the client API for MessageService service.
@@ -28,6 +29,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MessageServiceClient interface {
 	SendWSMessage(ctx context.Context, in *SendWSMessageRequest, opts ...grpc.CallOption) (*SendWSMessageResponse, error)
+	// 获取历史消息
+	GetHistoryMessages(ctx context.Context, in *GetHistoryRequest, opts ...grpc.CallOption) (*GetHistoryResponse, error)
 	// 双向流：Connect服务与Message服务的消息通道
 	MessageStream(ctx context.Context, opts ...grpc.CallOption) (MessageService_MessageStreamClient, error)
 }
@@ -43,6 +46,15 @@ func NewMessageServiceClient(cc grpc.ClientConnInterface) MessageServiceClient {
 func (c *messageServiceClient) SendWSMessage(ctx context.Context, in *SendWSMessageRequest, opts ...grpc.CallOption) (*SendWSMessageResponse, error) {
 	out := new(SendWSMessageResponse)
 	err := c.cc.Invoke(ctx, MessageService_SendWSMessage_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messageServiceClient) GetHistoryMessages(ctx context.Context, in *GetHistoryRequest, opts ...grpc.CallOption) (*GetHistoryResponse, error) {
+	out := new(GetHistoryResponse)
+	err := c.cc.Invoke(ctx, MessageService_GetHistoryMessages_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +97,8 @@ func (x *messageServiceMessageStreamClient) Recv() (*MessageStreamResponse, erro
 // for forward compatibility
 type MessageServiceServer interface {
 	SendWSMessage(context.Context, *SendWSMessageRequest) (*SendWSMessageResponse, error)
+	// 获取历史消息
+	GetHistoryMessages(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error)
 	// 双向流：Connect服务与Message服务的消息通道
 	MessageStream(MessageService_MessageStreamServer) error
 	mustEmbedUnimplementedMessageServiceServer()
@@ -96,6 +110,9 @@ type UnimplementedMessageServiceServer struct {
 
 func (UnimplementedMessageServiceServer) SendWSMessage(context.Context, *SendWSMessageRequest) (*SendWSMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendWSMessage not implemented")
+}
+func (UnimplementedMessageServiceServer) GetHistoryMessages(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetHistoryMessages not implemented")
 }
 func (UnimplementedMessageServiceServer) MessageStream(MessageService_MessageStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method MessageStream not implemented")
@@ -127,6 +144,24 @@ func _MessageService_SendWSMessage_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessageServiceServer).SendWSMessage(ctx, req.(*SendWSMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessageService_GetHistoryMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServiceServer).GetHistoryMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageService_GetHistoryMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServiceServer).GetHistoryMessages(ctx, req.(*GetHistoryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -167,6 +202,10 @@ var MessageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendWSMessage",
 			Handler:    _MessageService_SendWSMessage_Handler,
+		},
+		{
+			MethodName: "GetHistoryMessages",
+			Handler:    _MessageService_GetHistoryMessages_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
