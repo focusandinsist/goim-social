@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 	"websocket-server/api/rest"
 	"websocket-server/pkg/kafka"
+	"websocket-server/pkg/redis"
 
 	"github.com/IBM/sarama"
 )
@@ -16,6 +18,7 @@ import (
 type PushConsumer struct {
 	consumer      *kafka.Consumer
 	streamManager *StreamManager
+	redis         *redis.RedisClient
 }
 
 // StreamManager 管理所有Connect服务的流连接
@@ -35,9 +38,10 @@ var globalStreamManager = &StreamManager{
 }
 
 // NewPushConsumer 创建推送消费者
-func NewPushConsumer() *PushConsumer {
+func NewPushConsumer(redis *redis.RedisClient) *PushConsumer {
 	return &PushConsumer{
 		streamManager: globalStreamManager,
+		redis:         redis,
 	}
 }
 
@@ -71,6 +75,13 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 		}
 	}()
 
+	// 幂等性检查：检查推送是否已处理
+	ctx := context.Background()
+	if p.isPushProcessed(ctx, msg.Partition, msg.Offset) {
+		log.Printf("✅ 推送已处理，跳过: partition=%d, offset=%d", msg.Partition, msg.Offset)
+		return nil
+	}
+
 	// 解析消息事件
 	var event MessageEvent
 	if err := json.Unmarshal(msg.Value, &event); err != nil {
@@ -85,11 +96,34 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 			log.Printf("❌ 处理新消息失败: %v", err)
 			return nil // 返回nil避免重试
 		}
+
+		// 标记推送已处理
+		if err := p.markPushProcessed(ctx, msg.Partition, msg.Offset); err != nil {
+			log.Printf("❌ 标记推送已处理失败: %v", err)
+		}
+
 		return nil
 	default:
 		log.Printf("⚠️  未知的消息事件类型: %s", event.Type)
 		return nil
 	}
+}
+
+// isPushProcessed 检查推送是否已处理（幂等性检查）
+func (p *PushConsumer) isPushProcessed(ctx context.Context, partition int32, offset int64) bool {
+	key := fmt.Sprintf("kafka:push:%d:%d", partition, offset)
+	exists, err := p.redis.Exists(ctx, key)
+	if err != nil {
+		log.Printf("❌ 检查推送处理状态失败: %v", err)
+		return false // 出错时假设未处理，允许重试
+	}
+	return exists > 0 // Redis Exists返回存在的key数量
+}
+
+// markPushProcessed 标记推送已处理
+func (p *PushConsumer) markPushProcessed(ctx context.Context, partition int32, offset int64) error {
+	key := fmt.Sprintf("kafka:push:%d:%d", partition, offset)
+	return p.redis.Set(ctx, key, "processed", time.Hour) // 1小时过期
 }
 
 // handleNewMessage 处理新消息推送

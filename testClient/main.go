@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"websocket-server/api/rest"
@@ -18,6 +19,23 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 )
+
+// 全局变量：已收到的消息集合（用于去重）
+var receivedMessages = make(map[int64]bool)
+var receivedMessagesMutex sync.Mutex
+
+// isMessageDuplicate 检查消息是否重复
+func isMessageDuplicate(messageID int64) bool {
+	receivedMessagesMutex.Lock()
+	defer receivedMessagesMutex.Unlock()
+
+	if receivedMessages[messageID] {
+		return true
+	}
+
+	receivedMessages[messageID] = true
+	return false
+}
 
 // 用户信息结构
 type UserInfo struct {
@@ -566,6 +584,12 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 
 		// 显示所有相关消息（发给当前用户的或当前用户发送的）
 		if wsMsg.To == userID || wsMsg.From == userID {
+			// 消息去重检查
+			if isMessageDuplicate(wsMsg.MessageId) {
+				log.Printf("🔄 重复消息，忽略: MessageID=%d", wsMsg.MessageId)
+				continue
+			}
+
 			timestamp := time.Unix(wsMsg.Timestamp, 0).Format("2006-01-02 15:04:05")
 
 			// 判断是否是历史消息（根据时间戳判断，如果是5分钟前的消息就认为是历史消息）

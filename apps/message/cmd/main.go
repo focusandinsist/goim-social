@@ -60,7 +60,7 @@ func main() {
 	ctx := context.Background()
 
 	// 启动存储消费者
-	storageConsumer := consumer.NewStorageConsumer(mongoDB)
+	storageConsumer := consumer.NewStorageConsumer(mongoDB, redisClient)
 	go func() {
 		log.Println("🚀 启动存储消费者...")
 		if err := storageConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
@@ -69,7 +69,7 @@ func main() {
 	}()
 
 	// 启动推送消费者
-	pushConsumer := consumer.NewPushConsumer()
+	pushConsumer := consumer.NewPushConsumer(redisClient)
 	go func() {
 		log.Println("🚀 启动推送消费者...")
 		if err := pushConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {

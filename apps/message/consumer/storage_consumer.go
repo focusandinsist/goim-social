@@ -10,14 +10,17 @@ import (
 	"websocket-server/apps/message/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
+	"websocket-server/pkg/redis"
 
 	"github.com/IBM/sarama"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // StorageConsumer 存储消费者
 type StorageConsumer struct {
 	db       *database.MongoDB
 	consumer *kafka.Consumer
+	redis    *redis.RedisClient
 }
 
 // MessageEvent Kafka消息事件结构
@@ -28,9 +31,10 @@ type MessageEvent struct {
 }
 
 // NewStorageConsumer 创建存储消费者
-func NewStorageConsumer(db *database.MongoDB) *StorageConsumer {
+func NewStorageConsumer(db *database.MongoDB, redis *redis.RedisClient) *StorageConsumer {
 	return &StorageConsumer{
-		db: db,
+		db:    db,
+		redis: redis,
 	}
 }
 
@@ -64,6 +68,13 @@ func (s *StorageConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 		}
 	}()
 
+	// 幂等性检查：检查消息是否已处理
+	ctx := context.Background()
+	if s.isMessageProcessed(ctx, msg.Partition, msg.Offset) {
+		log.Printf("✅ 消息已处理，跳过: partition=%d, offset=%d", msg.Partition, msg.Offset)
+		return nil
+	}
+
 	// 解析消息事件
 	var event MessageEvent
 	if err := json.Unmarshal(msg.Value, &event); err != nil {
@@ -78,6 +89,12 @@ func (s *StorageConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 			log.Printf("❌ 处理新消息失败: %v", err)
 			return nil // 返回nil避免重试
 		}
+
+		// 标记消息已处理
+		if err := s.markMessageProcessed(ctx, msg.Partition, msg.Offset); err != nil {
+			log.Printf("❌ 标记消息已处理失败: %v", err)
+		}
+
 		return nil
 	default:
 		log.Printf("⚠️  未知的消息事件类型: %s", event.Type)
@@ -85,7 +102,24 @@ func (s *StorageConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 	}
 }
 
-// handleNewMessage 处理新消息存储
+// isMessageProcessed 检查消息是否已处理（幂等性检查）
+func (s *StorageConsumer) isMessageProcessed(ctx context.Context, partition int32, offset int64) bool {
+	key := fmt.Sprintf("kafka:storage:%d:%d", partition, offset)
+	exists, err := s.redis.Exists(ctx, key)
+	if err != nil {
+		log.Printf("❌ 检查消息处理状态失败: %v", err)
+		return false // 出错时假设未处理，允许重试
+	}
+	return exists > 0 // Redis Exists返回存在的key数量
+}
+
+// markMessageProcessed 标记消息已处理
+func (s *StorageConsumer) markMessageProcessed(ctx context.Context, partition int32, offset int64) error {
+	key := fmt.Sprintf("kafka:storage:%d:%d", partition, offset)
+	return s.redis.Set(ctx, key, "processed", time.Hour) // 1小时过期
+}
+
+// handleNewMessage 处理新消息存储（带幂等性保护）
 func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	log.Printf("💾 存储消息: From=%d, To=%d, Content=%s, MessageID=%d", msg.From, msg.To, msg.Content, msg.MessageId)
 
@@ -109,14 +143,27 @@ func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
 		UpdatedAt: time.Now(),
 	}
 
-	// 存储到MongoDB
-	_, err := s.db.GetCollection("message").InsertOne(context.Background(), message)
+	// 先尝试简单的插入操作，如果重复则忽略
+	collection := s.db.GetCollection("message")
+
+	// 检查消息是否已存在
+	var existingMsg model.Message
+	err := collection.FindOne(context.Background(), bson.M{"message_id": msg.MessageId}).Decode(&existingMsg)
+	if err == nil {
+		// 消息已存在，跳过插入
+		log.Printf("✅ 消息已存在(幂等性保护): From=%d, To=%d, MessageID=%d", msg.From, msg.To, msg.MessageId)
+		return nil
+	}
+
+	// 消息不存在，执行插入
+	result, err := collection.InsertOne(context.Background(), message)
 	if err != nil {
 		log.Printf("❌ 存储消息失败: %v", err)
 		return err
 	}
 
-	log.Printf("✅ 消息存储成功: From=%d, To=%d, Status=未读, MessageID=%d", msg.From, msg.To, msg.MessageId)
+	log.Printf("✅ 消息存储成功: From=%d, To=%d, Status=未读, MessageID=%d, InsertedID=%v",
+		msg.From, msg.To, msg.MessageId, result.InsertedID)
 
 	return nil
 }

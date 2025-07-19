@@ -421,12 +421,35 @@ func (s *Service) StartMessageStream() {
 	}
 }
 
-// pushToLocalConnection 推送消息给本地连接的用户
+// isPushDuplicate 检查消息是否已推送给用户（防重复推送）
+func (s *Service) isPushDuplicate(ctx context.Context, userID int64, messageID int64) bool {
+	key := fmt.Sprintf("push:%d:%d", userID, messageID)
+	exists, err := s.redis.Exists(ctx, key)
+	if err != nil {
+		log.Printf("❌ 检查推送重复状态失败: %v", err)
+		return false // 出错时假设未推送，允许推送
+	}
+	return exists > 0
+}
+
+// markPushSent 标记消息已推送给用户
+func (s *Service) markPushSent(ctx context.Context, userID int64, messageID int64) error {
+	key := fmt.Sprintf("push:%d:%d", userID, messageID)
+	return s.redis.Set(ctx, key, "pushed", 10*time.Minute) // 10分钟过期
+}
+
+// pushToLocalConnection 推送消息给本地连接的用户（带幂等性保护）
 func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMessage) error {
 	log.Printf("🔍 开始推送消息给用户 %d, 消息内容: %s", targetUserID, message.Content)
 
-	// 1. 先检查Redis中用户是否在线
+	// 1. 幂等性检查：检查消息是否已推送
 	ctx := context.Background()
+	if s.isPushDuplicate(ctx, targetUserID, message.MessageId) {
+		log.Printf("✅ 消息已推送，跳过: UserID=%d, MessageID=%d", targetUserID, message.MessageId)
+		return nil
+	}
+
+	// 2. 先检查Redis中用户是否在线
 	isOnline, err := s.connMgr.IsUserOnline(ctx, targetUserID)
 	if err != nil {
 		log.Printf("❌ Redis查询失败，用户 %d: %v", targetUserID, err)
@@ -482,6 +505,10 @@ func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMess
 		s.connMgr.RemoveConnection(context.Background(), targetUserID, "")
 	} else {
 		log.Printf("✅ 成功推送消息给用户 %d，消息内容: %s", targetUserID, message.Content)
+		// 标记消息已推送
+		if err := s.markPushSent(ctx, targetUserID, message.MessageId); err != nil {
+			log.Printf("❌ 标记消息已推送失败: %v", err)
+		}
 		// 注意：这里不自动ACK，等待客户端主动确认已读
 	}
 	return nil
