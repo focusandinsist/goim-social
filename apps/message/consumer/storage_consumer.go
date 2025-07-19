@@ -104,7 +104,6 @@ func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
 		GroupID:   msg.GroupId,
 		Content:   msg.Content,
 		MsgType:   msg.MessageType,
-		AckID:     msg.AckId,
 		Status:    0, // 0:未读
 		CreatedAt: time.Unix(msg.Timestamp, 0),
 		UpdatedAt: time.Now(),

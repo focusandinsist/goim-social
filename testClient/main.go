@@ -421,6 +421,35 @@ func handleUserInput(conn *websocket.Conn, userID, targetID int64) {
 	}
 }
 
+// sendMessageACK 发送消息ACK确认
+func sendMessageACK(conn *websocket.Conn, userID, messageID int64) {
+	// 构造ACK消息
+	ackMsg := &rest.WSMessage{
+		MessageId:   messageID,
+		From:        userID,
+		To:          0, // ACK消息不需要To字段
+		GroupId:     0,
+		Content:     "",
+		Timestamp:   time.Now().Unix(),
+		MessageType: 4,  // 4表示ACK消息
+		AckId:       "", // AckID已简化，不再需要
+	}
+
+	// 序列化消息
+	msgBytes, err := proto.Marshal(ackMsg)
+	if err != nil {
+		log.Printf("❌ 序列化ACK消息失败: %v", err)
+		return
+	}
+
+	// 发送ACK消息
+	if err := conn.WriteMessage(websocket.BinaryMessage, msgBytes); err != nil {
+		log.Printf("❌ 发送ACK消息失败: %v", err)
+	} else {
+		log.Printf("✅ 已发送ACK: MessageID=%d, UserID=%d", messageID, userID)
+	}
+}
+
 // 显示帮助信息
 func showHelp() {
 	fmt.Println("\n📋 可用命令:")
@@ -549,6 +578,8 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 					direction = fmt.Sprintf("📜 [历史消息] 来自用户%d", wsMsg.From)
 				} else {
 					direction = fmt.Sprintf("📥 来自用户%d", wsMsg.From)
+					// 收到新消息时，发送ACK确认已读
+					sendMessageACK(c, userID, wsMsg.MessageId)
 				}
 			} else {
 				// 发送的消息

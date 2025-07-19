@@ -482,30 +482,32 @@ func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMess
 		s.connMgr.RemoveConnection(context.Background(), targetUserID, "")
 	} else {
 		log.Printf("✅ 成功推送消息给用户 %d，消息内容: %s", targetUserID, message.Content)
-
-		// 6. 推送成功后，标记消息为已读
-		go s.markMessageAsRead(targetUserID, message)
+		// 注意：这里不自动ACK，等待客户端主动确认已读
 	}
 	return nil
 }
 
-// markMessageAsRead 标记消息为已读
-func (s *Service) markMessageAsRead(userID int64, message *rest.WSMessage) {
+// HandleMessageACK 处理客户端的消息ACK确认
+func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) error {
+	// 从WebSocket消息中提取用户ID和消息ID
+	userID := wsMsg.From // 客户端发送ACK时，From字段是自己的用户ID
+	messageID := wsMsg.MessageId
+
+	log.Printf("📖 收到客户端ACK: UserID=%d, MessageID=%d", userID, messageID)
+
 	// 检查消息ID是否存在
-	if message.MessageId == 0 {
-		log.Printf("⚠️ 消息ID为空，无法标记为已读: UserID=%d, Content=%s", userID, message.Content)
-		return
+	if messageID == 0 {
+		log.Printf("⚠️ ACK消息ID为空: UserID=%d", userID)
+		return fmt.Errorf("MessageID不能为0")
 	}
 
-	log.Printf("📖 标记消息为已读: UserID=%d, MessageID=%d, From=%d", userID, message.MessageId, message.From)
-
-	// 通过双向流发送ACK请求
+	// 通过双向流发送ACK请求给Message服务
 	if s.msgStream != nil {
 		ackReq := &rest.MessageStreamRequest{
 			RequestType: &rest.MessageStreamRequest_Ack{
 				Ack: &rest.MessageAckRequest{
-					AckId:     message.AckId,
-					MessageId: message.MessageId,
+					AckId:     wsMsg.AckId,
+					MessageId: messageID,
 					UserId:    userID,
 					Timestamp: time.Now().Unix(),
 				},
@@ -515,12 +517,16 @@ func (s *Service) markMessageAsRead(userID int64, message *rest.WSMessage) {
 		err := s.msgStream.Send(ackReq)
 		if err != nil {
 			log.Printf("❌ 发送消息ACK失败: %v", err)
+			return err
 		} else {
-			log.Printf("✅ 已发送消息ACK: MessageID=%d, UserID=%d", message.MessageId, userID)
+			log.Printf("✅ 已发送消息ACK: MessageID=%d, UserID=%d", messageID, userID)
 		}
 	} else {
 		log.Printf("❌ 双向流连接不可用，无法发送ACK")
+		return fmt.Errorf("双向流连接不可用")
 	}
+
+	return nil
 }
 
 // notifyMessageFailure 通知消息发送失败

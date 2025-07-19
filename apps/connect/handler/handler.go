@@ -136,6 +136,10 @@ func (h *Handler) WebSocketHandler(c *gin.Context) {
 			if err := h.service.HandleConnectionManage(c.Request.Context(), &wsMsg, conn); err != nil {
 				h.logger.Error(c.Request.Context(), "HandleConnectionManage failed", logger.F("error", err.Error()))
 			}
+		case 4: // 消息ACK确认
+			if err := h.service.HandleMessageACK(c.Request.Context(), &wsMsg); err != nil {
+				h.logger.Error(c.Request.Context(), "HandleMessageACK failed", logger.F("error", err.Error()))
+			}
 		case 10: // 在线状态事件推送
 			if err := h.service.HandleOnlineStatusEvent(c.Request.Context(), &wsMsg, conn); err != nil {
 				h.logger.Error(c.Request.Context(), "HandleOnlineStatusEvent failed", logger.F("error", err.Error()))
