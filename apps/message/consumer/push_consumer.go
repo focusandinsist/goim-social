@@ -3,12 +3,10 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
-	"time"
 	"websocket-server/api/rest"
-	"websocket-server/apps/message/model"
-	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 
 	"github.com/IBM/sarama"
@@ -18,7 +16,6 @@ import (
 type PushConsumer struct {
 	consumer      *kafka.Consumer
 	streamManager *StreamManager
-	db            *database.MongoDB
 }
 
 // StreamManager 管理所有Connect服务的流连接
@@ -38,10 +35,9 @@ var globalStreamManager = &StreamManager{
 }
 
 // NewPushConsumer 创建推送消费者
-func NewPushConsumer(db *database.MongoDB) *PushConsumer {
+func NewPushConsumer() *PushConsumer {
 	return &PushConsumer{
 		streamManager: globalStreamManager,
-		db:            db,
 	}
 }
 
@@ -98,18 +94,10 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 
 // handleNewMessage 处理新消息推送
 func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
-	// 检查MessageID，如果为0说明还没存储完成，延迟处理
+	// 检查MessageID是否存在
 	if msg.MessageId == 0 {
-		log.Printf("⏳ 消息MessageID为0，延迟100ms后重试推送: From=%d, To=%d, Content=%s", msg.From, msg.To, msg.Content)
-		time.Sleep(100 * time.Millisecond)
-
-		// 从数据库查询MessageID
-		messageID, err := p.getMessageIDFromDB(msg)
-		if err != nil {
-			log.Printf("❌ 查询MessageID失败，跳过推送: %v", err)
-			return nil // 跳过这次推送，避免重试
-		}
-		msg.MessageId = messageID
+		log.Printf("❌ MessageID为0，跳过推送: From=%d, To=%d, Content=%s", msg.From, msg.To, msg.Content)
+		return fmt.Errorf("MessageID不能为0")
 	}
 
 	if msg.To > 0 {
@@ -130,26 +118,6 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	}
 
 	return nil
-}
-
-// getMessageIDFromDB 从数据库查询MessageID
-func (p *PushConsumer) getMessageIDFromDB(msg *rest.WSMessage) (int64, error) {
-	collection := p.db.GetCollection("message")
-
-	filter := map[string]interface{}{
-		"from":       msg.From,
-		"to":         msg.To,
-		"content":    msg.Content,
-		"created_at": time.Unix(msg.Timestamp, 0),
-	}
-
-	var dbMsg model.Message
-	err := collection.FindOne(context.Background(), filter).Decode(&dbMsg)
-	if err != nil {
-		return 0, err
-	}
-
-	return dbMsg.MessageID, nil
 }
 
 // AddStream 添加Connect服务流连接

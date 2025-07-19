@@ -260,10 +260,22 @@ func (s *Service) NewGRPCService(svc *Service) *GRPCService {
 	return &GRPCService{svc: svc}
 }
 
+// generateMessageID 生成唯一的消息ID
+func (g *GRPCService) generateMessageID() int64 {
+	// 使用时间戳(毫秒) + 随机数生成唯一ID
+	return time.Now().UnixNano()/1000000*1000 + int64(time.Now().Nanosecond()%1000)
+}
+
 func (g *GRPCService) SendWSMessage(ctx context.Context, req *rest.SendWSMessageRequest) (*rest.SendWSMessageResponse, error) {
 	log.Printf("📥 Message服务接收消息: From=%d, To=%d, Content=%s", req.Msg.From, req.Msg.To, req.Msg.Content)
 
-	// 1. 发布消息到Kafka（异步处理）
+	// 1. 生成唯一的MessageID
+	messageID := g.generateMessageID()
+	req.Msg.MessageId = messageID
+
+	log.Printf("🆔 生成MessageID: %d", messageID)
+
+	// 2. 发布消息到Kafka（异步处理）
 	messageEvent := map[string]interface{}{
 		"type":      "new_message",
 		"message":   req.Msg,
@@ -275,7 +287,7 @@ func (g *GRPCService) SendWSMessage(ctx context.Context, req *rest.SendWSMessage
 		return &rest.SendWSMessageResponse{Success: false, Message: "消息发送失败"}, err
 	}
 
-	log.Printf("✅ 消息已发布到Kafka: From=%d, To=%d", req.Msg.From, req.Msg.To)
+	log.Printf("✅ 消息已发布到Kafka: From=%d, To=%d, MessageID=%d", req.Msg.From, req.Msg.To, messageID)
 	return &rest.SendWSMessageResponse{Success: true, Message: "消息发送成功"}, nil
 }
 

@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 	"websocket-server/api/rest"
@@ -84,23 +85,20 @@ func (s *StorageConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 	}
 }
 
-// generateMessageID 生成唯一的消息ID
-func (s *StorageConsumer) generateMessageID() int64 {
-	// 使用时间戳(毫秒) + 随机数生成唯一ID
-	return time.Now().UnixNano()/1000000*1000 + int64(time.Now().Nanosecond()%1000)
-}
-
 // handleNewMessage 处理新消息存储
 func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
-	log.Printf("💾 存储消息: From=%d, To=%d, Content=%s", msg.From, msg.To, msg.Content)
+	log.Printf("💾 存储消息: From=%d, To=%d, Content=%s, MessageID=%d", msg.From, msg.To, msg.Content, msg.MessageId)
 
-	// 生成唯一的消息ID
-	messageID := s.generateMessageID()
+	// 检查MessageID是否存在
+	if msg.MessageId == 0 {
+		log.Printf("❌ MessageID为0，跳过存储: From=%d, To=%d", msg.From, msg.To)
+		return fmt.Errorf("MessageID不能为0")
+	}
 
 	// 转换为Message模型并设置状态
 	message := &model.Message{
 		// 不设置ID，让MongoDB自动生成_id
-		MessageID: messageID, // 设置唯一的消息ID
+		MessageID: msg.MessageId, // 直接使用Kafka消息中的MessageID
 		From:      msg.From,
 		To:        msg.To,
 		GroupID:   msg.GroupId,
@@ -119,10 +117,7 @@ func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
 		return err
 	}
 
-	log.Printf("✅ 消息存储成功: From=%d, To=%d, Status=未读, MessageID=%d", msg.From, msg.To, messageID)
-
-	// 更新原始消息的MessageID，用于后续推送
-	msg.MessageId = messageID
+	log.Printf("✅ 消息存储成功: From=%d, To=%d, Status=未读, MessageID=%d", msg.From, msg.To, msg.MessageId)
 
 	return nil
 }
