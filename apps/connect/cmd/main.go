@@ -61,7 +61,7 @@ func main() {
 	httpHandler.RegisterRoutes(httpServer.GetEngine())
 
 	// 创建gRPC服务器
-	grpcService := svc.NewGRPCService(svc)
+	grpcService := httpHandler.NewGRPCService()
 	nativeGrpcServer := grpc.NewServer()
 	rest.RegisterConnectServiceServer(nativeGrpcServer, grpcService)
 
@@ -97,6 +97,10 @@ func main() {
 	<-stop
 
 	log.Println("Shutting down servers...")
+
+	// 清理Redis中的所有连接记录
+	log.Println("Cleaning up Redis connections...")
+	svc.CleanupAllConnections()
 
 	// 停止gRPC服务器
 	nativeGrpcServer.GracefulStop()

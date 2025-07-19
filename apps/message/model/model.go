@@ -8,6 +8,7 @@ import (
 
 type Message struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	MessageID int64              `bson:"message_id" json:"message_id"` // 唯一消息ID
 	From      int64              `bson:"from" json:"from"`
 	To        int64              `bson:"to" json:"to"`
 	GroupID   int64              `bson:"group_id" json:"group_id"`

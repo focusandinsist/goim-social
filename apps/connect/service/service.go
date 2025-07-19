@@ -9,11 +9,11 @@ import (
 	"time"
 	"websocket-server/api/rest"
 	"websocket-server/apps/connect/model"
+	"websocket-server/pkg/auth"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -168,6 +168,27 @@ func (cm *ConnectionManager) getConnectionList() []int64 {
 	return users
 }
 
+// CleanupAll 清理所有本地连接（服务关闭时调用）
+func (cm *ConnectionManager) CleanupAll() {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	log.Printf("🧹 开始清理所有本地WebSocket连接...")
+
+	// 关闭所有连接
+	for userID, conn := range cm.localConnections {
+		if conn != nil {
+			conn.Close()
+			log.Printf("✅ 已关闭用户 %d 的WebSocket连接", userID)
+		}
+	}
+
+	// 清空连接map
+	cm.localConnections = make(map[int64]*websocket.Conn)
+
+	log.Printf("✅ 所有本地连接已清理完成")
+}
+
 type Service struct {
 	db         *database.MongoDB
 	redis      *redis.RedisClient
@@ -260,30 +281,14 @@ func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]
 func (s *Service) ForwardMessageToMessageService(ctx context.Context, wsMsg *rest.WSMessage) error {
 	log.Printf("📨 Connect服务转发消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
 
-	// 优先使用双向流发送消息
-	if s.msgStream != nil {
-		log.Printf("🔄 通过双向流转发消息")
-		return s.SendMessageViaStream(ctx, wsMsg)
+	// 双向流是IM系统的核心，必须可用
+	if s.msgStream == nil {
+		log.Printf("❌ 双向流连接不可用，IM系统无法正常工作")
+		return fmt.Errorf("双向流连接不可用，无法转发消息")
 	}
 
-	// 如果双向流不可用，使用直接gRPC调用作为备用
-	log.Printf("⚠️ 双向流不可用，使用直接gRPC调用")
-	conn, err := grpc.Dial("localhost:22004", grpc.WithInsecure()) // Message Service gRPC端口
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	client := rest.NewMessageServiceClient(conn)
-	// 构造 gRPC 请求
-	req := &rest.SendWSMessageRequest{Msg: wsMsg}
-	_, err = client.SendWSMessage(ctx, req)
-	if err != nil {
-		log.Printf("❌ 转发消息到Message服务失败: %v", err)
-	} else {
-		log.Printf("✅ 成功转发消息到Message服务")
-	}
-	return err
+	log.Printf("🔄 通过双向流转发消息")
+	return s.SendMessageViaStream(ctx, wsMsg)
 }
 
 // HandleHeartbeat 处理心跳包
@@ -325,89 +330,7 @@ func (s *Service) HandleOnlineStatusEvent(ctx context.Context, wsMsg *rest.WSMes
 
 // ValidateToken 校验 JWT token
 func (s *Service) ValidateToken(token string) bool {
-	if token == "" {
-		return false
-	}
-	if token == "auth-debug" {
-		return true
-	}
-	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		// 校验签名算法
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte("your-secret"), nil // 建议配置化
-	})
-	return err == nil && parsedToken != nil && parsedToken.Valid
-}
-
-// gRPC服务端实现
-type GRPCService struct {
-	rest.UnimplementedConnectServiceServer
-	svc *Service
-}
-
-// NewGRPCService 创建gRPC服务
-func (s *Service) NewGRPCService(svc *Service) *GRPCService {
-	return &GRPCService{svc: svc}
-}
-
-// Connect 处理连接请求
-func (g *GRPCService) Connect(ctx context.Context, req *rest.ConnectRequest) (*rest.ConnectResponse, error) {
-	_, err := g.svc.Connect(ctx, req.UserId, req.Token, "grpc-server", "grpc-client")
-	if err != nil {
-		return &rest.ConnectResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
-	}
-	return &rest.ConnectResponse{
-		Success: true,
-		Message: "connected successfully",
-	}, nil
-}
-
-// Disconnect 处理断开连接请求
-func (g *GRPCService) Disconnect(ctx context.Context, req *rest.DisconnectRequest) (*rest.DisconnectResponse, error) {
-	err := g.svc.Disconnect(ctx, req.UserId, fmt.Sprintf("%d", req.ConnId))
-	if err != nil {
-		return &rest.DisconnectResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
-	}
-	return &rest.DisconnectResponse{
-		Success: true,
-		Message: "disconnected successfully",
-	}, nil
-}
-
-// Heartbeat 处理心跳请求
-func (g *GRPCService) Heartbeat(ctx context.Context, req *rest.HeartbeatRequest) (*rest.ConnectResponse, error) {
-	err := g.svc.Heartbeat(ctx, req.UserId, req.ConnId)
-	if err != nil {
-		return &rest.ConnectResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
-	}
-	return &rest.ConnectResponse{
-		Success: true,
-		Message: "heartbeat received",
-	}, nil
-}
-
-// OnlineStatus 查询在线状态
-func (g *GRPCService) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRequest) (*rest.OnlineStatusResponse, error) {
-	status, err := g.svc.OnlineStatus(ctx, req.UserIds)
-	if err != nil {
-		return &rest.OnlineStatusResponse{
-			Status: make(map[int64]bool),
-		}, err
-	}
-	return &rest.OnlineStatusResponse{
-		Status: status,
-	}, nil
+	return auth.ValidateToken(token)
 }
 
 func (s *Service) StartMessageStream() {
@@ -559,8 +482,45 @@ func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMess
 		s.connMgr.RemoveConnection(context.Background(), targetUserID, "")
 	} else {
 		log.Printf("✅ 成功推送消息给用户 %d，消息内容: %s", targetUserID, message.Content)
+
+		// 6. 推送成功后，标记消息为已读
+		go s.markMessageAsRead(targetUserID, message)
 	}
 	return nil
+}
+
+// markMessageAsRead 标记消息为已读
+func (s *Service) markMessageAsRead(userID int64, message *rest.WSMessage) {
+	// 检查消息ID是否存在
+	if message.MessageId == 0 {
+		log.Printf("⚠️ 消息ID为空，无法标记为已读: UserID=%d, Content=%s", userID, message.Content)
+		return
+	}
+
+	log.Printf("📖 标记消息为已读: UserID=%d, MessageID=%d, From=%d", userID, message.MessageId, message.From)
+
+	// 通过双向流发送ACK请求
+	if s.msgStream != nil {
+		ackReq := &rest.MessageStreamRequest{
+			RequestType: &rest.MessageStreamRequest_Ack{
+				Ack: &rest.MessageAckRequest{
+					AckId:     message.AckId,
+					MessageId: message.MessageId,
+					UserId:    userID,
+					Timestamp: time.Now().Unix(),
+				},
+			},
+		}
+
+		err := s.msgStream.Send(ackReq)
+		if err != nil {
+			log.Printf("❌ 发送消息ACK失败: %v", err)
+		} else {
+			log.Printf("✅ 已发送消息ACK: MessageID=%d, UserID=%d", message.MessageId, userID)
+		}
+	} else {
+		log.Printf("❌ 双向流连接不可用，无法发送ACK")
+	}
 }
 
 // notifyMessageFailure 通知消息发送失败
@@ -636,4 +596,36 @@ func (s *Service) UpdateHeartbeat(ctx context.Context, userID int64, connID stri
 	}
 
 	return nil
+}
+
+// CleanupAllConnections 清理所有Redis连接记录（服务关闭时调用）
+func (s *Service) CleanupAllConnections() {
+	ctx := context.Background()
+
+	log.Printf("🧹 开始清理Redis中的所有连接记录...")
+
+	// 1. 清理所有连接记录 (conn:*:* 模式)
+	connKeys, err := s.redis.Keys(ctx, "conn:*")
+	if err != nil {
+		log.Printf("❌ 获取连接记录失败: %v", err)
+	} else if len(connKeys) > 0 {
+		// 批量删除连接记录
+		if err := s.redis.Del(ctx, connKeys...); err != nil {
+			log.Printf("❌ 删除连接记录失败: %v", err)
+		} else {
+			log.Printf("✅ 已删除 %d 个连接记录", len(connKeys))
+		}
+	}
+
+	// 2. 清空在线用户集合
+	if err := s.redis.Del(ctx, "online_users"); err != nil {
+		log.Printf("❌ 清空在线用户集合失败: %v", err)
+	} else {
+		log.Printf("✅ 已清空在线用户集合")
+	}
+
+	// 3. 清理本地连接管理器
+	s.connMgr.CleanupAll()
+
+	log.Printf("✅ Redis连接记录清理完成")
 }
