@@ -19,9 +19,6 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ConnectService_Connect_FullMethodName      = "/rest.ConnectService/Connect"
-	ConnectService_Disconnect_FullMethodName   = "/rest.ConnectService/Disconnect"
-	ConnectService_Heartbeat_FullMethodName    = "/rest.ConnectService/Heartbeat"
 	ConnectService_OnlineStatus_FullMethodName = "/rest.ConnectService/OnlineStatus"
 )
 
@@ -29,12 +26,6 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ConnectServiceClient interface {
-	// 建立连接
-	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectResponse, error)
-	// 断开连接
-	Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error)
-	// 心跳检测
-	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*ConnectResponse, error)
 	// 查询在线状态
 	OnlineStatus(ctx context.Context, in *OnlineStatusRequest, opts ...grpc.CallOption) (*OnlineStatusResponse, error)
 }
@@ -45,33 +36,6 @@ type connectServiceClient struct {
 
 func NewConnectServiceClient(cc grpc.ClientConnInterface) ConnectServiceClient {
 	return &connectServiceClient{cc}
-}
-
-func (c *connectServiceClient) Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectResponse, error) {
-	out := new(ConnectResponse)
-	err := c.cc.Invoke(ctx, ConnectService_Connect_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectServiceClient) Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error) {
-	out := new(DisconnectResponse)
-	err := c.cc.Invoke(ctx, ConnectService_Disconnect_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectServiceClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*ConnectResponse, error) {
-	out := new(ConnectResponse)
-	err := c.cc.Invoke(ctx, ConnectService_Heartbeat_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *connectServiceClient) OnlineStatus(ctx context.Context, in *OnlineStatusRequest, opts ...grpc.CallOption) (*OnlineStatusResponse, error) {
@@ -87,12 +51,6 @@ func (c *connectServiceClient) OnlineStatus(ctx context.Context, in *OnlineStatu
 // All implementations must embed UnimplementedConnectServiceServer
 // for forward compatibility
 type ConnectServiceServer interface {
-	// 建立连接
-	Connect(context.Context, *ConnectRequest) (*ConnectResponse, error)
-	// 断开连接
-	Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error)
-	// 心跳检测
-	Heartbeat(context.Context, *HeartbeatRequest) (*ConnectResponse, error)
 	// 查询在线状态
 	OnlineStatus(context.Context, *OnlineStatusRequest) (*OnlineStatusResponse, error)
 	mustEmbedUnimplementedConnectServiceServer()
@@ -102,15 +60,6 @@ type ConnectServiceServer interface {
 type UnimplementedConnectServiceServer struct {
 }
 
-func (UnimplementedConnectServiceServer) Connect(context.Context, *ConnectRequest) (*ConnectResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
-}
-func (UnimplementedConnectServiceServer) Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Disconnect not implemented")
-}
-func (UnimplementedConnectServiceServer) Heartbeat(context.Context, *HeartbeatRequest) (*ConnectResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Heartbeat not implemented")
-}
 func (UnimplementedConnectServiceServer) OnlineStatus(context.Context, *OnlineStatusRequest) (*OnlineStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnlineStatus not implemented")
 }
@@ -125,60 +74,6 @@ type UnsafeConnectServiceServer interface {
 
 func RegisterConnectServiceServer(s grpc.ServiceRegistrar, srv ConnectServiceServer) {
 	s.RegisterService(&ConnectService_ServiceDesc, srv)
-}
-
-func _ConnectService_Connect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConnectRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectServiceServer).Connect(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ConnectService_Connect_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectServiceServer).Connect(ctx, req.(*ConnectRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ConnectService_Disconnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DisconnectRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectServiceServer).Disconnect(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ConnectService_Disconnect_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectServiceServer).Disconnect(ctx, req.(*DisconnectRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ConnectService_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HeartbeatRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectServiceServer).Heartbeat(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ConnectService_Heartbeat_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectServiceServer).Heartbeat(ctx, req.(*HeartbeatRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _ConnectService_OnlineStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -206,18 +101,6 @@ var ConnectService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "rest.ConnectService",
 	HandlerType: (*ConnectServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Connect",
-			Handler:    _ConnectService_Connect_Handler,
-		},
-		{
-			MethodName: "Disconnect",
-			Handler:    _ConnectService_Disconnect_Handler,
-		},
-		{
-			MethodName: "Heartbeat",
-			Handler:    _ConnectService_Heartbeat_Handler,
-		},
 		{
 			MethodName: "OnlineStatus",
 			Handler:    _ConnectService_OnlineStatus_Handler,

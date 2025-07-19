@@ -69,7 +69,7 @@ func main() {
 	}()
 
 	// 启动推送消费者
-	pushConsumer := consumer.NewPushConsumer()
+	pushConsumer := consumer.NewPushConsumer(mongoDB)
 	go func() {
 		log.Println("🚀 启动推送消费者...")
 		if err := pushConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {

@@ -6,11 +6,11 @@ import (
 	"time"
 	"websocket-server/api/rest"
 	"websocket-server/apps/user-service/model"
+	"websocket-server/pkg/auth"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
 
-	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -92,7 +92,7 @@ func (s *Service) Login(ctx context.Context, req *rest.LoginRequest) (*rest.Logi
 		"device_id": req.DeviceId,
 		"exp":       time.Now().Add(time.Hour).Unix(),
 	}
-	token, err := GenerateJWT(claims) // 需实现 GenerateJWT
+	token, err := auth.GenerateJWT(claims)
 	if err != nil {
 		return nil, err
 	}
@@ -109,17 +109,6 @@ func (s *Service) Login(ctx context.Context, req *rest.LoginRequest) (*rest.Logi
 		ExpireAt: claims["exp"].(int64),
 		DeviceId: req.DeviceId,
 	}, nil
-}
-
-// GenerateJWT 生成带 device_id 的 JWT token
-func GenerateJWT(claims map[string]any) (string, error) {
-	jwtClaims := jwt.MapClaims{}
-	for k, v := range claims {
-		jwtClaims[k] = v
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwtClaims)
-	secret := "your-secret" // 建议放到配置文件
-	return token.SignedString([]byte(secret))
 }
 
 // GetUserByID 根据ID获取用户

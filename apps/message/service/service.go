@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 	"websocket-server/api/rest"
@@ -177,6 +178,39 @@ func (s *Service) MarkMessagesAsRead(ctx context.Context, userID int64, messageI
 	return nil
 }
 
+// MarkMessageAsReadByID 根据消息ID标记单条消息为已读
+func (s *Service) MarkMessageAsReadByID(ctx context.Context, userID int64, messageID int64) error {
+	collection := s.db.GetCollection("message")
+
+	// 构建更新条件
+	filter := map[string]interface{}{
+		"message_id": messageID,
+		"to":         userID, // 确保只能标记发给自己的消息
+	}
+
+	// 更新状态为已读
+	update := map[string]interface{}{
+		"$set": map[string]interface{}{
+			"status":     1, // 1:已读
+			"updated_at": time.Now(),
+		},
+	}
+
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		log.Printf("❌ 标记消息已读失败: MessageID=%d, UserID=%d, Error=%v", messageID, userID, err)
+		return err
+	}
+
+	if result.ModifiedCount == 0 {
+		log.Printf("⚠️ 没有找到需要标记的消息: MessageID=%d, UserID=%d", messageID, userID)
+		return fmt.Errorf("消息不存在或已经是已读状态")
+	}
+
+	log.Printf("✅ 消息已标记为已读: MessageID=%d, UserID=%d", messageID, userID)
+	return nil
+}
+
 // HandleWSMessage 处理 WebSocket 消息收发并存储到 MongoDB
 func (s *Service) HandleWSMessage(ctx context.Context, wsMsg *model.WSMessage, conn *websocket.Conn) error {
 	// 构造消息
@@ -315,6 +349,14 @@ func (g *GRPCService) MessageStream(stream rest.MessageService_MessageStreamServ
 			// 处理消息确认
 			ack := reqType.Ack
 			log.Printf("收到消息确认: MessageID=%d, UserID=%d", ack.MessageId, ack.UserId)
+
+			// 标记消息为已读
+			err := g.svc.MarkMessageAsReadByID(stream.Context(), ack.UserId, ack.MessageId)
+			if err != nil {
+				log.Printf("❌ 标记消息已读失败: MessageID=%d, UserID=%d, Error=%v", ack.MessageId, ack.UserId, err)
+			} else {
+				log.Printf("✅ 消息已标记为已读: MessageID=%d, UserID=%d", ack.MessageId, ack.UserId)
+			}
 
 			// 发送确认回复
 			stream.Send(&rest.MessageStreamResponse{

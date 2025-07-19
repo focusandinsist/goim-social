@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 	"websocket-server/api/rest"
-	"websocket-server/apps/connect/model"
 	"websocket-server/apps/connect/service"
 	"websocket-server/pkg/logger"
 
@@ -32,8 +31,7 @@ func NewHandler(service *service.Service, logger logger.Logger) *Handler {
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	api := r.Group("/api/v1/connect")
 	{
-		api.GET("/ws", h.WebSocketHandler)         // 只保留 connect 的长连接
-		api.POST("/disconnect", h.Disconnect)      // 断开连接
+		api.GET("/ws", h.WebSocketHandler)         // WebSocket长连接
 		api.POST("/online_status", h.OnlineStatus) // 查询在线状态
 	}
 }
@@ -149,25 +147,12 @@ func (h *Handler) WebSocketHandler(c *gin.Context) {
 	}
 }
 
-func (h *Handler) Disconnect(c *gin.Context) {
-	ctx := c.Request.Context()
-	var req model.DisconnectRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error(ctx, "Invalid disconnect request", logger.F("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := h.service.Disconnect(ctx, req.UserID, req.ConnID); err != nil {
-		h.logger.Error(ctx, "Disconnect failed", logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "断开成功"})
-}
-
+// OnlineStatus 查询在线状态
 func (h *Handler) OnlineStatus(c *gin.Context) {
 	ctx := c.Request.Context()
-	var req model.OnlineStatusRequest
+	var req struct {
+		UserIDs []int64 `json:"user_ids" binding:"required"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error(ctx, "Invalid online status request", logger.F("error", err.Error()))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -180,4 +165,28 @@ func (h *Handler) OnlineStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": status})
+}
+
+// gRPC服务端实现
+type GRPCService struct {
+	rest.UnimplementedConnectServiceServer
+	handler *Handler
+}
+
+// NewGRPCService 创建gRPC服务
+func (h *Handler) NewGRPCService() *GRPCService {
+	return &GRPCService{handler: h}
+}
+
+// OnlineStatus 查询在线状态
+func (g *GRPCService) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRequest) (*rest.OnlineStatusResponse, error) {
+	status, err := g.handler.service.OnlineStatus(ctx, req.UserIds)
+	if err != nil {
+		return &rest.OnlineStatusResponse{
+			Status: make(map[int64]bool),
+		}, err
+	}
+	return &rest.OnlineStatusResponse{
+		Status: status,
+	}, nil
 }
