@@ -71,7 +71,7 @@ func (h *Handler) WebSocketHandler(c *gin.Context) {
 	// 1. 建立连接记录到Redis
 	timestamp := time.Now().Unix()
 	connID := fmt.Sprintf("conn-%d-%d", userID, timestamp)
-	_, err = h.service.Connect(c.Request.Context(), userID, token, "connect-server-1", "web")
+	_, err = h.service.Connect(c.Request.Context(), userID, token, h.service.GetInstanceID(), "web")
 	if err != nil {
 		h.logger.Error(c.Request.Context(), "Failed to register connection", logger.F("error", err.Error()))
 		return
