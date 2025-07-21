@@ -98,8 +98,8 @@ func main() {
 
 	log.Println("Shutting down servers...")
 
-	// 清理Redis中的所有连接记录
-	log.Println("Cleaning up Redis connections...")
+	// 清理Redis中的连接记录和实例信息
+	log.Println("Cleaning up Redis connections and instance...")
 	svc.CleanupAllConnections()
 
 	// 停止gRPC服务器

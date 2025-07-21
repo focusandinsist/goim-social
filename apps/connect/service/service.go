@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 	"websocket-server/api/rest"
 	"websocket-server/apps/connect/model"
@@ -213,7 +216,112 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		log.Printf("❌ 服务实例注册失败: %v", err)
 	}
 
+	// 启动时清理旧的连接数据
+	go service.cleanupOnStartup()
+
 	return service
+}
+
+// cleanupOnStartup 启动时清理本实例的旧连接数据
+func (s *Service) cleanupOnStartup() {
+	ctx := context.Background()
+
+	// 清理本实例的连接数据
+	pattern := "conn:*"
+	keys, err := s.redis.Keys(ctx, pattern)
+	if err != nil {
+		log.Printf("❌ 查询连接keys失败: %v", err)
+		return
+	}
+
+	cleanedCount := 0
+	for _, key := range keys {
+		// 获取连接信息
+		connInfo, err := s.redis.HGetAll(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		// 检查是否是本实例的连接
+		if serverID, exists := connInfo["serverID"]; exists && serverID == s.instanceID {
+			// 删除连接信息
+			if err := s.redis.Del(ctx, key); err == nil {
+				cleanedCount++
+			}
+
+			// 从在线用户集合中移除
+			if userIDStr, exists := connInfo["userID"]; exists {
+				s.redis.SRem(ctx, "online_users", userIDStr)
+			}
+		}
+	}
+
+	log.Printf("✅ 启动时清理完成: 清理了 %d 个旧连接", cleanedCount)
+}
+
+// setupGracefulShutdown 设置优雅退出
+func (s *Service) setupGracefulShutdown() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sigChan
+	log.Printf("🛑 收到退出信号，开始优雅关闭...")
+
+	s.cleanup()
+	os.Exit(0)
+}
+
+// cleanup 清理资源
+func (s *Service) cleanup() {
+	ctx := context.Background()
+
+	log.Printf("🧹 开始清理实例资源: %s", s.instanceID)
+
+	// 1. 清理实例注册信息
+	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
+	if err := s.redis.Del(ctx, instanceKey); err != nil {
+		log.Printf("❌ 清理实例信息失败: %v", err)
+	}
+
+	// 2. 清理本实例的所有连接
+	pattern := "conn:*"
+	keys, err := s.redis.Keys(ctx, pattern)
+	if err != nil {
+		log.Printf("❌ 查询连接keys失败: %v", err)
+		return
+	}
+
+	cleanedConnections := 0
+	cleanedUsers := make(map[string]bool)
+
+	for _, key := range keys {
+		// 获取连接信息
+		connInfo, err := s.redis.HGetAll(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		// 检查是否是本实例的连接
+		if serverID, exists := connInfo["serverID"]; exists && serverID == s.instanceID {
+			// 删除连接信息
+			if err := s.redis.Del(ctx, key); err == nil {
+				cleanedConnections++
+			}
+
+			// 记录需要从在线用户集合中移除的用户
+			if userIDStr, exists := connInfo["userID"]; exists {
+				cleanedUsers[userIDStr] = true
+			}
+		}
+	}
+
+	// 3. 从在线用户集合中移除用户
+	for userID := range cleanedUsers {
+		s.redis.SRem(ctx, "online_users", userID)
+	}
+
+	log.Printf("✅ 清理完成: 实例信息已删除, 清理了 %d 个连接, %d 个用户下线",
+		cleanedConnections, len(cleanedUsers))
 }
 
 // GetInstanceID 获取实例ID
@@ -258,6 +366,9 @@ func (s *Service) registerInstance() error {
 
 	// 启动跨节点消息订阅
 	go s.startCrossNodeSubscription()
+
+	// 启动优雅退出监听
+	go s.setupGracefulShutdown()
 
 	return nil
 }
@@ -862,30 +973,55 @@ func (s *Service) UpdateHeartbeat(ctx context.Context, userID int64, connID stri
 func (s *Service) CleanupAllConnections() {
 	ctx := context.Background()
 
-	log.Printf("🧹 开始清理Redis中的所有连接记录...")
+	log.Printf("🧹 开始清理Redis中的连接记录和实例信息...")
 
-	// 1. 清理所有连接记录 (conn:*:* 模式)
+	// 1. 清理实例注册信息
+	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
+	if err := s.redis.Del(ctx, instanceKey); err != nil {
+		log.Printf("❌ 清理实例信息失败: %v", err)
+	} else {
+		log.Printf("✅ 已清理实例信息: %s", s.instanceID)
+	}
+
+	// 2. 清理本实例的连接记录
 	connKeys, err := s.redis.Keys(ctx, "conn:*")
 	if err != nil {
 		log.Printf("❌ 获取连接记录失败: %v", err)
-	} else if len(connKeys) > 0 {
-		// 批量删除连接记录
-		if err := s.redis.Del(ctx, connKeys...); err != nil {
-			log.Printf("❌ 删除连接记录失败: %v", err)
-		} else {
-			log.Printf("✅ 已删除 %d 个连接记录", len(connKeys))
-		}
-	}
-
-	// 2. 清空在线用户集合
-	if err := s.redis.Del(ctx, "online_users"); err != nil {
-		log.Printf("❌ 清空在线用户集合失败: %v", err)
 	} else {
-		log.Printf("✅ 已清空在线用户集合")
+		cleanedConnections := 0
+		cleanedUsers := make(map[string]bool)
+
+		for _, key := range connKeys {
+			// 获取连接信息
+			connInfo, err := s.redis.HGetAll(ctx, key)
+			if err != nil {
+				continue
+			}
+
+			// 检查是否是本实例的连接
+			if serverID, exists := connInfo["serverID"]; exists && serverID == s.instanceID {
+				// 删除连接信息
+				if err := s.redis.Del(ctx, key); err == nil {
+					cleanedConnections++
+				}
+
+				// 记录需要从在线用户集合中移除的用户
+				if userIDStr, exists := connInfo["userID"]; exists {
+					cleanedUsers[userIDStr] = true
+				}
+			}
+		}
+
+		// 从在线用户集合中移除用户
+		for userID := range cleanedUsers {
+			s.redis.SRem(ctx, "online_users", userID)
+		}
+
+		log.Printf("✅ 已清理 %d 个本实例连接记录, %d 个用户下线", cleanedConnections, len(cleanedUsers))
 	}
 
 	// 3. 清理本地连接管理器
 	s.connMgr.CleanupAll()
 
-	log.Printf("✅ Redis连接记录清理完成")
+	log.Printf("✅ Redis连接记录和实例信息清理完成")
 }
