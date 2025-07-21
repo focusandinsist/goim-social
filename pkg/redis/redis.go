@@ -90,6 +90,21 @@ func (r *RedisClient) SMembers(ctx context.Context, key string) ([]string, error
 	return r.client.SMembers(ctx, key).Result()
 }
 
+// HGetAll 获取 hash 中的所有字段和值
+func (r *RedisClient) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	return r.client.HGetAll(ctx, key).Result()
+}
+
+// Publish 发布消息到频道
+func (r *RedisClient) Publish(ctx context.Context, channel string, message interface{}) error {
+	return r.client.Publish(ctx, channel, message).Err()
+}
+
+// Subscribe 订阅频道
+func (r *RedisClient) Subscribe(ctx context.Context, channels ...string) *redis.PubSub {
+	return r.client.Subscribe(ctx, channels...)
+}
+
 // Close 关闭连接
 func (r *RedisClient) Close() error {
 	return r.client.Close()

@@ -14,7 +14,6 @@ type Message struct {
 	GroupID   int64              `bson:"group_id" json:"group_id"`
 	Content   string             `bson:"content" json:"content"`
 	MsgType   int32              `bson:"msg_type" json:"msg_type"`
-	AckID     string             `bson:"ack_id" json:"ack_id"`
 	Status    int32              `bson:"status" json:"status"` // 0:未读 1:已读 2:撤回
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`

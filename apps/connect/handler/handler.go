@@ -71,7 +71,7 @@ func (h *Handler) WebSocketHandler(c *gin.Context) {
 	// 1. 建立连接记录到Redis
 	timestamp := time.Now().Unix()
 	connID := fmt.Sprintf("conn-%d-%d", userID, timestamp)
-	_, err = h.service.Connect(c.Request.Context(), userID, token, "connect-server-1", "web")
+	_, err = h.service.Connect(c.Request.Context(), userID, token, h.service.GetInstanceID(), "web")
 	if err != nil {
 		h.logger.Error(c.Request.Context(), "Failed to register connection", logger.F("error", err.Error()))
 		return
@@ -135,6 +135,10 @@ func (h *Handler) WebSocketHandler(c *gin.Context) {
 		case 3: // 连接管理
 			if err := h.service.HandleConnectionManage(c.Request.Context(), &wsMsg, conn); err != nil {
 				h.logger.Error(c.Request.Context(), "HandleConnectionManage failed", logger.F("error", err.Error()))
+			}
+		case 4: // 消息ACK确认
+			if err := h.service.HandleMessageACK(c.Request.Context(), &wsMsg); err != nil {
+				h.logger.Error(c.Request.Context(), "HandleMessageACK failed", logger.F("error", err.Error()))
 			}
 		case 10: // 在线状态事件推送
 			if err := h.service.HandleOnlineStatusEvent(c.Request.Context(), &wsMsg, conn); err != nil {
