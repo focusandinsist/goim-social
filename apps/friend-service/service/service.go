@@ -70,24 +70,90 @@ func (s *Service) AddFriend(ctx context.Context, userID, friendID int64, remark 
 
 // DeleteFriend 删除好友
 func (s *Service) DeleteFriend(ctx context.Context, userID, friendID int64) error {
-	// 用map也行，用bson也行，bson省略异步map=>bson的转化
-	// _, err := s.db.GetCollection("friends").DeleteOne(ctx, map[string]interface{}{"user_id": userID, "friend_id": friendID})
+	// 1. 先通知Message服务
+	if s.messageClient != nil {
+		event := &friendpb.FriendEvent{
+			Type:      friendpb.FriendEventType_DELETE_FRIEND,
+			UserId:    userID,
+			FriendId:  friendID,
+			Timestamp: time.Now().Unix(),
+		}
+		req := &friendpb.NotifyFriendEventRequest{Event: event}
+		resp, err := s.messageClient.NotifyFriendEvent(ctx, req)
+		if err != nil || !resp.GetSuccess() {
+			return fmt.Errorf("notify message service failed: %v", err)
+		}
+	}
+
+	// 2. 删除好友关系（双向删除）
+	// 用map和bson都可以，bson省略一步map=>bson的转化
+	filter1 := bson.M{"user_id": userID, "friend_id": friendID}
+	filter2 := bson.M{"user_id": friendID, "friend_id": userID}
+
+	collection := s.db.GetCollection("friends")
+	_, err1 := collection.DeleteOne(ctx, filter1)
+	_, err2 := collection.DeleteOne(ctx, filter2)
+
+	if err1 != nil {
+		return fmt.Errorf("failed to delete friend relation 1: %v", err1)
+	}
+	if err2 != nil {
+		return fmt.Errorf("failed to delete friend relation 2: %v", err2)
+	}
+
+	return nil
+}
+
+// UpdateFriendRemark 更新好友备注
+func (s *Service) UpdateFriendRemark(ctx context.Context, userID, friendID int64, newRemark string) error {
 	filter := bson.M{"user_id": userID, "friend_id": friendID}
-	_, err := s.db.GetCollection("friends").DeleteOne(ctx, filter)
-	return err
+	update := bson.M{"$set": bson.M{"remark": newRemark}}
+
+	collection := s.db.GetCollection("friends")
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to update friend remark: %v", err)
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("friend relation not found")
+	}
+
+	return nil
+}
+
+// GetFriend 获取单个好友信息
+func (s *Service) GetFriend(ctx context.Context, userID, friendID int64) (*model.Friend, error) {
+	var friend model.Friend
+	filter := bson.M{"user_id": userID, "friend_id": friendID}
+
+	collection := s.db.GetCollection("friends")
+	err := collection.FindOne(ctx, filter).Decode(&friend)
+	if err != nil {
+		return nil, fmt.Errorf("friend not found: %v", err)
+	}
+
+	return &friend, nil
 }
 
 // ListFriends 查询好友列表
 func (s *Service) ListFriends(ctx context.Context, userID int64) ([]*model.Friend, error) {
 	var friends []*model.Friend
 	filter := bson.M{"user_id": userID}
-	opts := options.FindOptions{}
-	opts.SetLimit(50) // 上限50个好友
-	cursor, err := s.db.GetCollection("friends").Find(ctx, filter)
+	opts := options.Find().SetLimit(100) // 上限100个好友
+
+	collection := s.db.GetCollection("friends")
+	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
-		err = cursor.All(ctx, &friends)
+		return nil, fmt.Errorf("failed to query friends: %v", err)
 	}
-	return friends, err
+	defer cursor.Close(ctx)
+
+	if err = cursor.All(ctx, &friends); err != nil {
+		return nil, fmt.Errorf("failed to decode friends: %v", err)
+	}
+
+	return friends, nil
 }
 
 // gRPC服务端实现

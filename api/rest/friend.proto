@@ -32,11 +32,18 @@ message DeleteFriendResponse {
 // 查询好友列表请求
 message ListFriendsRequest {
   int64 user_id = 1;
+  int32 page = 2;      // 页码，从1开始
+  int32 page_size = 3; // 每页大小，默认20
 }
 
 // 查询好友列表响应
 message ListFriendsResponse {
-  repeated FriendInfo friends = 1;
+  bool success = 1;
+  string message = 2;
+  repeated FriendInfo friends = 3;
+  int32 total = 4;     // 总数
+  int32 page = 5;      // 当前页
+  int32 page_size = 6; // 每页大小
 }
 
 // 好友信息
@@ -45,4 +52,30 @@ message FriendInfo {
   int64 friend_id = 2;
   string remark = 3;
   int64 created_at = 4;
+}
+
+// 获取单个好友请求
+message GetFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+}
+
+// 获取单个好友响应
+message GetFriendResponse {
+  bool success = 1;
+  string message = 2;
+  FriendInfo friend = 3;
+}
+
+// 更新好友备注请求
+message UpdateFriendRemarkRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string new_remark = 3;
+}
+
+// 更新好友备注响应
+message UpdateFriendRemarkResponse {
+  bool success = 1;
+  string message = 2;
 }

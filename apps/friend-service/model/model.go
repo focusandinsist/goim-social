@@ -21,3 +21,14 @@ type DeleteFriendRequest struct {
 type ListFriendsRequest struct {
 	UserID int64 `json:"user_id"`
 }
+
+type UpdateFriendRemarkRequest struct {
+	UserID    int64  `json:"user_id"`
+	FriendID  int64  `json:"friend_id"`
+	NewRemark string `json:"new_remark"`
+}
+
+type GetFriendRequest struct {
+	UserID   int64 `json:"user_id"`
+	FriendID int64 `json:"friend_id"`
+}

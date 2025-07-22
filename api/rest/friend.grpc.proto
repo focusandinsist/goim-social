@@ -30,6 +30,8 @@ message NotifyFriendEventResponse {
   string message = 2;
 }
 
+// 好友事件服务 (用于微服务间通信)
 service FriendEventService {
+  // 通知好友事件
   rpc NotifyFriendEvent(NotifyFriendEventRequest) returns (NotifyFriendEventResponse);
 }
