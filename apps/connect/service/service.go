@@ -11,6 +11,11 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
+
 	"websocket-server/api/rest"
 	"websocket-server/apps/connect/model"
 	"websocket-server/pkg/auth"
@@ -18,13 +23,9 @@ import (
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
-
-	"github.com/gorilla/websocket"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
 )
 
-// 统一连接管理器 - 封装本地WebSocket连接和Redis状态
+// ConnectionManager 连接管理器，封装本地WebSocket连接和Redis状态
 type ConnectionManager struct {
 	localConnections map[int64]*websocket.Conn // 本地WebSocket连接
 	redis            *redis.RedisClient        // Redis客户端
@@ -41,29 +42,27 @@ func NewConnectionManager(redis *redis.RedisClient, cfg *config.Config) *Connect
 	}
 }
 
-// 原子式添加连接 - 同时更新本地连接和Redis状态
+// AddConnection 原子式添加连接，同时更新本地连接和Redis状态
 func (cm *ConnectionManager) AddConnection(ctx context.Context, userID int64, conn *websocket.Conn, connID string, serverID string) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	// 1. 检查是否已存在连接，如果有则关闭旧连接
+	// 检查是否已存在连接，如果有则关闭旧连接
 	if existingConn, exists := cm.localConnections[userID]; exists {
-		log.Printf("⚠️ 用户 %d 已有WebSocket连接，将替换旧连接", userID)
+		log.Printf("用户 %d 已有WebSocket连接，将替换旧连接", userID)
 		existingConn.Close()
 	}
 
-	// 2. 添加到本地连接管理
+	// 添加到本地连接管理
 	cm.localConnections[userID] = conn
 
-	// 3. 更新Redis状态
 	// 添加到在线用户集合
 	if err := cm.redis.SAdd(ctx, "online_users", userID); err != nil {
-		// Redis操作失败，回滚本地操作
 		delete(cm.localConnections, userID)
 		return fmt.Errorf("添加Redis在线状态失败: %v", err)
 	}
 
-	// 4. 添加连接信息到Redis Hash
+	// 添加连接信息到Redis Hash
 	key := fmt.Sprintf("conn:%d:%s", userID, connID)
 	connInfo := map[string]interface{}{
 		"userID":        userID,
@@ -75,20 +74,19 @@ func (cm *ConnectionManager) AddConnection(ctx context.Context, userID int64, co
 	}
 
 	if err := cm.redis.HMSet(ctx, key, connInfo); err != nil {
-		// Redis操作失败，回滚之前的操作
 		delete(cm.localConnections, userID)
 		cm.redis.SRem(ctx, "online_users", userID)
 		return fmt.Errorf("添加Redis连接信息失败: %v", err)
 	}
 
-	// 5. 设置连接过期时间
+	// 设置连接过期时间
 	expireTime := time.Duration(cm.config.Connect.Connection.ExpireTime) * time.Hour
 	if err := cm.redis.Expire(ctx, key, expireTime); err != nil {
-		log.Printf("⚠️ 设置连接过期时间失败: %v", err)
+		log.Printf("设置连接过期时间失败: %v", err)
 	}
 
 	totalConnections := len(cm.localConnections)
-	log.Printf("✅ 用户 %d 连接已添加 (本地+Redis)，当前总连接数: %d", userID, totalConnections)
+	log.Printf("用户 %d 连接已添加，当前总连接数: %d", userID, totalConnections)
 	return nil
 }
 
@@ -97,37 +95,37 @@ func (cm *ConnectionManager) getDefaultClientType() string {
 	return cm.config.Connect.Connection.ClientType
 }
 
-// 原子式移除连接 - 同时清理本地连接和Redis状态
+// RemoveConnection 原子式移除连接，同时清理本地连接和Redis状态
 func (cm *ConnectionManager) RemoveConnection(ctx context.Context, userID int64, connID string) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	// 1. 从本地连接管理中移除并关闭连接
+	// 从本地连接管理中移除并关闭连接
 	if conn, exists := cm.localConnections[userID]; exists {
 		conn.Close()
 		delete(cm.localConnections, userID)
-		log.Printf("✅ 用户 %d 的本地WebSocket连接已关闭并移除", userID)
+		log.Printf("用户 %d 的本地WebSocket连接已关闭并移除", userID)
 	}
 
-	// 2. 从Redis在线用户集合中移除
+	// 从Redis在线用户集合中移除
 	if err := cm.redis.SRem(ctx, "online_users", userID); err != nil {
-		log.Printf("❌ 从Redis移除用户 %d 在线状态失败: %v", userID, err)
+		log.Printf("从Redis移除用户 %d 在线状态失败: %v", userID, err)
 	} else {
-		log.Printf("✅ 用户 %d 已从Redis在线用户列表中移除", userID)
+		log.Printf("用户 %d 已从Redis在线用户列表中移除", userID)
 	}
 
-	// 3. 删除Redis中的连接信息
+	// 删除Redis中的连接信息
 	if connID != "" {
 		key := fmt.Sprintf("conn:%d:%s", userID, connID)
 		if err := cm.redis.Del(ctx, key); err != nil {
-			log.Printf("❌ 删除Redis连接信息失败: %v", err)
+			log.Printf("删除Redis连接信息失败: %v", err)
 		} else {
-			log.Printf("✅ 用户 %d 的Redis连接信息已删除", userID)
+			log.Printf("用户 %d 的Redis连接信息已删除", userID)
 		}
 	}
 
 	totalConnections := len(cm.localConnections)
-	log.Printf("✅ 用户 %d 连接已完全清理，剩余连接数: %d", userID, totalConnections)
+	log.Printf("用户 %d 连接已完全清理，剩余连接数: %d", userID, totalConnections)
 	return nil
 }
 
@@ -199,7 +197,7 @@ func (cm *ConnectionManager) CleanupAll() {
 	// 清空连接map
 	cm.localConnections = make(map[int64]*websocket.Conn)
 
-	log.Printf("✅ 所有本地连接已清理完成")
+	log.Printf("所有本地连接已清理完成")
 }
 
 type Service struct {
@@ -224,7 +222,7 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 
 	// 注册服务实例
 	if err := service.registerInstance(); err != nil {
-		log.Printf("❌ 服务实例注册失败: %v", err)
+		log.Printf("服务实例注册失败: %v", err)
 	}
 
 	// 启动时清理旧的连接数据
@@ -237,7 +235,7 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 func (s *Service) cleanupOnStartup() {
 	ctx := context.Background()
 
-	// 清理本实例的连接数据
+	// 查找并清理本实例的连接数据
 	pattern := "conn:*"
 	keys, err := s.redis.Keys(ctx, pattern)
 	if err != nil {
@@ -267,7 +265,7 @@ func (s *Service) cleanupOnStartup() {
 		}
 	}
 
-	log.Printf("✅ 启动时清理完成: 清理了 %d 个旧连接", cleanedCount)
+	log.Printf("启动时清理完成: 清理了 %d 个旧连接", cleanedCount)
 }
 
 // setupGracefulShutdown 设置优雅退出
@@ -276,7 +274,7 @@ func (s *Service) setupGracefulShutdown() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	<-sigChan
-	log.Printf("🛑 收到退出信号，开始优雅关闭...")
+	log.Printf("收到退出信号，开始优雅关闭...")
 
 	s.cleanup()
 	os.Exit(0)
@@ -286,12 +284,12 @@ func (s *Service) setupGracefulShutdown() {
 func (s *Service) cleanup() {
 	ctx := context.Background()
 
-	log.Printf("🧹 开始清理实例资源: %s", s.instanceID)
+	log.Printf("开始清理实例资源: %s", s.instanceID)
 
-	// 1. 清理实例注册信息
+	// 清理实例注册信息
 	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
 	if err := s.redis.Del(ctx, instanceKey); err != nil {
-		log.Printf("❌ 清理实例信息失败: %v", err)
+		log.Printf("清理实例信息失败: %v", err)
 	}
 
 	// 2. 清理本实例的所有连接
@@ -331,7 +329,7 @@ func (s *Service) cleanup() {
 		s.redis.SRem(ctx, "online_users", userID)
 	}
 
-	log.Printf("✅ 清理完成: 实例信息已删除, 清理了 %d 个连接, %d 个用户下线",
+	log.Printf("清理完成: 实例信息已删除, 清理了 %d 个连接, %d 个用户下线",
 		cleanedConnections, len(cleanedUsers))
 }
 
@@ -363,15 +361,15 @@ func (s *Service) registerInstance() error {
 	// 设置过期时间（心跳机制）
 	expireTime := time.Duration(s.config.Connect.Heartbeat.Timeout) * time.Second
 	if err := s.redis.Expire(ctx, key, expireTime); err != nil {
-		log.Printf("⚠️ 设置实例过期时间失败: %v", err)
+		log.Printf("设置实例过期时间失败: %v", err)
 	}
 
 	// 添加到实例列表
 	if err := s.redis.SAdd(ctx, "connect_instances_list", s.instanceID); err != nil {
-		log.Printf("⚠️ 添加到实例列表失败: %v", err)
+		log.Printf("添加到实例列表失败: %v", err)
 	}
 
-	log.Printf("✅ Connect服务实例已注册: %s", s.instanceID)
+	log.Printf("Connect服务实例已注册: %s", s.instanceID)
 
 	// 启动心跳
 	go s.startHeartbeat()
@@ -401,13 +399,13 @@ func (s *Service) startHeartbeat() {
 
 			// 更新心跳时间
 			if err := s.redis.HSet(ctx, key, "last_ping", time.Now().Unix()); err != nil {
-				log.Printf("❌ 更新心跳失败: %v", err)
+				log.Printf("更新心跳失败: %v", err)
 				continue
 			}
 
 			// 续期
 			if err := s.redis.Expire(ctx, key, timeout); err != nil {
-				log.Printf("❌ 续期失败: %v", err)
+				log.Printf("续期失败: %v", err)
 			}
 		}
 	}
@@ -464,7 +462,7 @@ func (s *Service) forwardToRemoteInstance(ctx context.Context, targetInstance st
 		return fmt.Errorf("发布跨节点消息失败: %v", err)
 	}
 
-	log.Printf("✅ 已转发消息到远程实例: %s, UserID=%d, MessageID=%d", targetInstance, userID, message.MessageId)
+	log.Printf("已转发消息到远程实例: %s, UserID=%d, MessageID=%d", targetInstance, userID, message.MessageId)
 	return nil
 }
 
@@ -477,13 +475,13 @@ func (s *Service) startCrossNodeSubscription() {
 	pubsub := s.redis.Subscribe(ctx, channel)
 	defer pubsub.Close()
 
-	log.Printf("✅ 开始监听跨节点消息频道: %s", channel)
+	log.Printf("开始监听跨节点消息频道: %s", channel)
 
 	// 接收消息
 	ch := pubsub.Channel()
 	for msg := range ch {
 		if err := s.handleCrossNodeMessage(ctx, msg.Payload); err != nil {
-			log.Printf("❌ 处理跨节点消息失败: %v", err)
+			log.Printf("处理跨节点消息失败: %v", err)
 		}
 	}
 }
@@ -505,7 +503,7 @@ func (s *Service) handleCrossNodeMessage(ctx context.Context, payload string) er
 	case "forward_message":
 		return s.handleForwardMessage(ctx, crossNodeMsg)
 	default:
-		log.Printf("⚠️ 未知的跨节点消息类型: %s", msgType)
+		log.Printf("未知的跨节点消息类型: %s", msgType)
 	}
 
 	return nil
@@ -683,9 +681,9 @@ func (s *Service) StartMessageStream() {
 		addr := fmt.Sprintf("%s:%d", s.config.Connect.MessageService.Host, s.config.Connect.MessageService.Port)
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
 		if err != nil {
-			log.Printf("❌ 连接Message服务失败: %v", err)
+			log.Printf("连接Message服务失败: %v", err)
 			if i < 9 {
-				log.Printf("⏳ 等待2秒后重试...")
+				log.Printf("等待2秒后重试...")
 			}
 			time.Sleep(2 * time.Second)
 			continue
@@ -694,14 +692,14 @@ func (s *Service) StartMessageStream() {
 		client := rest.NewMessageServiceClient(conn)
 		stream, err := client.MessageStream(context.Background())
 		if err != nil {
-			log.Printf("❌ 创建消息流失败: %v", err)
+			log.Printf("创建消息流失败: %v", err)
 			conn.Close()
 			time.Sleep(2 * time.Second)
 			continue
 		}
 
 		s.msgStream = stream // 保存stream连接
-		log.Printf("✅ 成功连接到Message服务")
+		log.Printf("成功连接到Message服务")
 
 		// 发送订阅请求
 		err = stream.Send(&rest.MessageStreamRequest{
@@ -710,7 +708,7 @@ func (s *Service) StartMessageStream() {
 			},
 		})
 		if err != nil {
-			log.Printf("❌ 发送订阅请求失败: %v", err)
+			log.Printf("发送订阅请求失败: %v", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -720,7 +718,7 @@ func (s *Service) StartMessageStream() {
 			for {
 				resp, err := stream.Recv()
 				if err != nil {
-					log.Printf("❌ 消息流接收失败: %v", err)
+					log.Printf("消息流接收失败: %v", err)
 					return
 				}
 				switch respType := resp.ResponseType.(type) {
@@ -775,25 +773,25 @@ func (s *Service) markPushSent(ctx context.Context, userID int64, messageID int6
 	return s.redis.Set(ctx, key, "pushed", 10*time.Minute) // 10分钟过期
 }
 
-// pushToLocalConnection 推送消息给用户（支持跨节点路由）
+// pushToLocalConnection 推送消息给用户，支持跨节点路由
 func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMessage) error {
 	log.Printf("🔍 开始推送消息给用户 %d, 消息内容: %s", targetUserID, message.Content)
 
-	// 1. 幂等性检查：检查消息是否已推送
+	// 幂等性检查：检查消息是否已推送
 	ctx := context.Background()
 	if s.isPushDuplicate(ctx, targetUserID, message.MessageId) {
-		log.Printf("✅ 消息已推送，跳过: UserID=%d, MessageID=%d", targetUserID, message.MessageId)
+		log.Printf("消息已推送，跳过: UserID=%d, MessageID=%d", targetUserID, message.MessageId)
 		return nil
 	}
 
-	// 2. 查找用户所在的Connect实例
+	// 查找用户所在的Connect实例
 	targetInstance, err := s.findUserInstance(ctx, targetUserID)
 	if err != nil {
-		log.Printf("⚠️ 用户 %d 不在线或查找实例失败: %v", targetUserID, err)
+		log.Printf("用户 %d 不在线或查找实例失败: %v", targetUserID, err)
 		return err
 	}
 
-	// 3. 判断是本地连接还是跨节点连接
+	// 判断是本地连接还是跨节点连接
 	if targetInstance == s.instanceID {
 		// 本地连接，直接推送
 		return s.pushToLocalUser(ctx, targetUserID, message)
@@ -987,18 +985,18 @@ func (s *Service) UpdateHeartbeat(ctx context.Context, userID int64, connID stri
 	return nil
 }
 
-// CleanupAllConnections 清理所有Redis连接记录（服务关闭时调用）
+// CleanupAllConnections 清理Redis连接记录，服务关闭时调用
 func (s *Service) CleanupAllConnections() {
 	ctx := context.Background()
 
-	log.Printf("🧹 开始清理Redis中的连接记录和实例信息...")
+	log.Printf("开始清理Redis中的连接记录和实例信息...")
 
-	// 1. 清理实例注册信息
+	// 清理实例注册信息
 	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
 	if err := s.redis.Del(ctx, instanceKey); err != nil {
-		log.Printf("❌ 清理实例信息失败: %v", err)
+		log.Printf("清理实例信息失败: %v", err)
 	} else {
-		log.Printf("✅ 已清理实例信息: %s", s.instanceID)
+		log.Printf("已清理实例信息: %s", s.instanceID)
 	}
 
 	// 2. 清理本实例的连接记录
@@ -1035,11 +1033,11 @@ func (s *Service) CleanupAllConnections() {
 			s.redis.SRem(ctx, "online_users", userID)
 		}
 
-		log.Printf("✅ 已清理 %d 个本实例连接记录, %d 个用户下线", cleanedConnections, len(cleanedUsers))
+		log.Printf("已清理 %d 个本实例连接记录, %d 个用户下线", cleanedConnections, len(cleanedUsers))
 	}
 
 	// 3. 清理本地连接管理器
 	s.connMgr.CleanupAll()
 
-	log.Printf("✅ Redis连接记录和实例信息清理完成")
+	log.Printf("Redis连接记录和实例信息清理完成")
 }

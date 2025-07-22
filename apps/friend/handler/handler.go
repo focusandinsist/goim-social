@@ -2,11 +2,12 @@ package handler
 
 import (
 	"net/http"
+
+	"github.com/gin-gonic/gin"
+
 	"websocket-server/apps/friend/model"
 	"websocket-server/apps/friend/service"
 	"websocket-server/pkg/logger"
-
-	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {

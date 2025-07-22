@@ -6,13 +6,14 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-	"websocket-server/api/rest"
-	"websocket-server/apps/connect/service"
-	"websocket-server/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
+
+	"websocket-server/api/rest"
+	"websocket-server/apps/connect/service"
+	"websocket-server/pkg/logger"
 )
 
 var upgrader = websocket.Upgrader{

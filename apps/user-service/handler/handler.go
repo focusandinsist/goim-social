@@ -2,11 +2,12 @@ package handler
 
 import (
 	"net/http"
-	"websocket-server/apps/user-service/service"
-	"websocket-server/pkg/logger"
-	rest "websocket-server/api/rest"
 
 	"github.com/gin-gonic/gin"
+
+	rest "websocket-server/api/rest"
+	"websocket-server/apps/user-service/service"
+	"websocket-server/pkg/logger"
 )
 
 // Handler 用户处理器

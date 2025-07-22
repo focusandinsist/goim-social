@@ -6,16 +6,17 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
+
 	"websocket-server/api/rest"
 	"websocket-server/apps/message/consumer"
 	"websocket-server/apps/message/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
-
-	"github.com/gorilla/websocket"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Service struct {
@@ -69,7 +70,7 @@ func (s *Service) GetHistory(ctx context.Context, userID, groupID int64, page, s
 	// 查询总数
 	total, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
-		log.Printf("❌ 查询历史消息总数失败: %v", err)
+		log.Printf("查询历史消息总数失败: %v", err)
 		return nil, 0, err
 	}
 
@@ -80,7 +81,7 @@ func (s *Service) GetHistory(ctx context.Context, userID, groupID int64, page, s
 		Limit: &limit,
 	})
 	if err != nil {
-		log.Printf("❌ 查询历史消息失败: %v", err)
+		log.Printf("查询历史消息失败: %v", err)
 		return nil, 0, err
 	}
 	defer cursor.Close(ctx)
@@ -89,13 +90,13 @@ func (s *Service) GetHistory(ctx context.Context, userID, groupID int64, page, s
 	for cursor.Next(ctx) {
 		var msg model.Message
 		if err := cursor.Decode(&msg); err != nil {
-			log.Printf("❌ 解析历史消息失败: %v", err)
+			log.Printf("解析历史消息失败: %v", err)
 			continue
 		}
 		messages = append(messages, &msg)
 	}
 
-	log.Printf("✅ 查询历史消息成功: 用户=%d, 群组=%d, 总数=%d, 返回=%d", userID, groupID, total, len(messages))
+	log.Printf("查询历史消息成功: 用户=%d, 群组=%d, 总数=%d, 返回=%d", userID, groupID, total, len(messages))
 	return messages, int(total), nil
 }
 
@@ -114,7 +115,7 @@ func (s *Service) GetUnreadMessages(ctx context.Context, userID int64) ([]*model
 		Sort: map[string]interface{}{"created_at": 1},
 	})
 	if err != nil {
-		log.Printf("❌ 查询未读消息失败: %v", err)
+		log.Printf("查询未读消息失败: %v", err)
 		return nil, err
 	}
 	defer cursor.Close(ctx)
@@ -123,13 +124,13 @@ func (s *Service) GetUnreadMessages(ctx context.Context, userID int64) ([]*model
 	for cursor.Next(ctx) {
 		var msg model.Message
 		if err := cursor.Decode(&msg); err != nil {
-			log.Printf("❌ 解析未读消息失败: %v", err)
+			log.Printf("解析未读消息失败: %v", err)
 			continue
 		}
 		messages = append(messages, &msg)
 	}
 
-	log.Printf("✅ 查询未读消息成功: 用户=%d, 未读消息数=%d", userID, len(messages))
+	log.Printf("查询未读消息成功: 用户=%d, 未读消息数=%d", userID, len(messages))
 	return messages, nil
 }
 
@@ -143,12 +144,12 @@ func (s *Service) MarkMessagesAsRead(ctx context.Context, userID int64, messageI
 		if objectID, err := primitive.ObjectIDFromHex(idStr); err == nil {
 			objectIDs = append(objectIDs, objectID)
 		} else {
-			log.Printf("⚠️ 无效的消息ID: %s", idStr)
+			log.Printf("无效的消息ID: %s", idStr)
 		}
 	}
 
 	if len(objectIDs) == 0 {
-		log.Printf("⚠️ 没有有效的消息ID需要标记")
+		log.Printf("没有有效的消息ID需要标记")
 		return nil
 	}
 
@@ -170,11 +171,11 @@ func (s *Service) MarkMessagesAsRead(ctx context.Context, userID int64, messageI
 
 	result, err := collection.UpdateMany(ctx, filter, update)
 	if err != nil {
-		log.Printf("❌ 标记消息已读失败: %v", err)
+		log.Printf("标记消息已读失败: %v", err)
 		return err
 	}
 
-	log.Printf("✅ 标记消息已读成功: 用户=%d, 更新数量=%d", userID, result.ModifiedCount)
+	log.Printf("标记消息已读成功: 用户=%d, 更新数量=%d", userID, result.ModifiedCount)
 	return nil
 }
 
@@ -198,16 +199,16 @@ func (s *Service) MarkMessageAsReadByID(ctx context.Context, userID int64, messa
 
 	result, err := collection.UpdateOne(ctx, filter, update)
 	if err != nil {
-		log.Printf("❌ 标记消息已读失败: MessageID=%d, UserID=%d, Error=%v", messageID, userID, err)
+		log.Printf("标记消息已读失败: MessageID=%d, UserID=%d, Error=%v", messageID, userID, err)
 		return err
 	}
 
 	if result.ModifiedCount == 0 {
-		log.Printf("⚠️ 没有找到需要标记的消息: MessageID=%d, UserID=%d", messageID, userID)
+		log.Printf("没有找到需要标记的消息: MessageID=%d, UserID=%d", messageID, userID)
 		return fmt.Errorf("消息不存在或已经是已读状态")
 	}
 
-	log.Printf("✅ 消息已标记为已读: MessageID=%d, UserID=%d", messageID, userID)
+	log.Printf("消息已标记为已读: MessageID=%d, UserID=%d", messageID, userID)
 	return nil
 }
 
@@ -267,7 +268,7 @@ func (g *GRPCService) generateMessageID() int64 {
 }
 
 func (g *GRPCService) SendWSMessage(ctx context.Context, req *rest.SendWSMessageRequest) (*rest.SendWSMessageResponse, error) {
-	log.Printf("📥 Message服务接收消息: From=%d, To=%d, Content=%s", req.Msg.From, req.Msg.To, req.Msg.Content)
+	log.Printf("Message服务接收消息: From=%d, To=%d, Content=%s", req.Msg.From, req.Msg.To, req.Msg.Content)
 
 	// 1. 生成唯一的MessageID
 	messageID := g.generateMessageID()
@@ -283,22 +284,22 @@ func (g *GRPCService) SendWSMessage(ctx context.Context, req *rest.SendWSMessage
 	}
 
 	if err := g.svc.kafka.PublishMessage("message-events", messageEvent); err != nil {
-		log.Printf("❌ 发布消息到Kafka失败: %v", err)
+		log.Printf("发布消息到Kafka失败: %v", err)
 		return &rest.SendWSMessageResponse{Success: false, Message: "消息发送失败"}, err
 	}
 
-	log.Printf("✅ 消息已发布到Kafka: From=%d, To=%d, MessageID=%d", req.Msg.From, req.Msg.To, messageID)
+	log.Printf("消息已发布到Kafka: From=%d, To=%d, MessageID=%d", req.Msg.From, req.Msg.To, messageID)
 	return &rest.SendWSMessageResponse{Success: true, Message: "消息发送成功"}, nil
 }
 
 // GetHistoryMessages gRPC接口：获取历史消息
 func (g *GRPCService) GetHistoryMessages(ctx context.Context, req *rest.GetHistoryRequest) (*rest.GetHistoryResponse, error) {
-	log.Printf("📜 获取历史消息请求: UserID=%d, GroupID=%d, Page=%d, Size=%d", req.UserId, req.GroupId, req.Page, req.Size)
+	log.Printf("获取历史消息请求: UserID=%d, GroupID=%d, Page=%d, Size=%d", req.UserId, req.GroupId, req.Page, req.Size)
 
 	// 调用service层获取历史消息
 	messages, total, err := g.svc.GetHistory(ctx, req.UserId, req.GroupId, int(req.Page), int(req.Size))
 	if err != nil {
-		log.Printf("❌ 获取历史消息失败: %v", err)
+		log.Printf("获取历史消息失败: %v", err)
 		return nil, err
 	}
 
@@ -318,7 +319,7 @@ func (g *GRPCService) GetHistoryMessages(ctx context.Context, req *rest.GetHisto
 		wsMessages = append(wsMessages, wsMsg)
 	}
 
-	log.Printf("✅ 获取历史消息成功: 总数=%d, 返回=%d", total, len(wsMessages))
+	log.Printf("获取历史消息成功: 总数=%d, 返回=%d", total, len(wsMessages))
 	return &rest.GetHistoryResponse{
 		Messages: wsMessages,
 		Total:    int32(total),
@@ -365,9 +366,9 @@ func (g *GRPCService) MessageStream(stream rest.MessageService_MessageStreamServ
 			// 标记消息为已读（简化版，只验证权限和状态）
 			err := g.svc.MarkMessageAsReadByID(stream.Context(), ack.UserId, ack.MessageId)
 			if err != nil {
-				log.Printf("❌ 标记消息已读失败: MessageID=%d, UserID=%d, Error=%v", ack.MessageId, ack.UserId, err)
+				log.Printf("标记消息已读失败: MessageID=%d, UserID=%d, Error=%v", ack.MessageId, ack.UserId, err)
 			} else {
-				log.Printf("✅ 消息已标记为已读: MessageID=%d, UserID=%d", ack.MessageId, ack.UserId)
+				log.Printf("消息已标记为已读: MessageID=%d, UserID=%d", ack.MessageId, ack.UserId)
 			}
 
 			// 发送确认回复
@@ -393,12 +394,12 @@ func (g *GRPCService) MessageStream(stream rest.MessageService_MessageStreamServ
 		case *rest.MessageStreamRequest_SendMessage:
 			// 处理通过双向流发送的消息
 			sendReq := reqType.SendMessage
-			log.Printf("📥 通过双向流接收消息: From=%d, To=%d, Content=%s", sendReq.Msg.From, sendReq.Msg.To, sendReq.Msg.Content)
+			log.Printf("通过双向流接收消息: From=%d, To=%d, Content=%s", sendReq.Msg.From, sendReq.Msg.To, sendReq.Msg.Content)
 
 			// 调用现有的SendWSMessage方法处理消息
 			_, err := g.SendWSMessage(stream.Context(), sendReq)
 			if err != nil {
-				log.Printf("❌ 处理双向流消息失败: %v", err)
+				log.Printf("处理双向流消息失败: %v", err)
 			}
 		}
 	}

@@ -5,10 +5,11 @@ import (
 	"log"
 	"net/http"
 	"time"
-	"websocket-server/pkg/config"
 
 	"github.com/gin-gonic/gin"
 	kratoslog "github.com/go-kratos/kratos/v2/log"
+
+	"websocket-server/pkg/config"
 )
 
 // NewGinEngine 创建Gin引擎

@@ -7,6 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	kratoslog "github.com/go-kratos/kratos/v2/log"
+	"google.golang.org/grpc"
+
 	"websocket-server/api/rest"
 	"websocket-server/apps/connect/handler"
 	"websocket-server/apps/connect/service"
@@ -16,9 +20,6 @@ import (
 	"websocket-server/pkg/logger"
 	"websocket-server/pkg/redis"
 	"websocket-server/pkg/server"
-
-	kratoslog "github.com/go-kratos/kratos/v2/log"
-	"google.golang.org/grpc"
 )
 
 func main() {
