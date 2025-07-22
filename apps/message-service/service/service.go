@@ -12,8 +12,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/message/consumer"
-	"websocket-server/apps/message/model"
+	"websocket-server/apps/message-service/consumer"
+	"websocket-server/apps/message-service/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
@@ -24,8 +24,6 @@ type Service struct {
 	redis *redis.RedisClient
 	kafka *kafka.Producer
 }
-
-// 移除本地StreamManager，使用consumer包中的全局StreamManager
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer) *Service {
 	return &Service{

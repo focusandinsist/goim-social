@@ -11,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/message/model"
+	"websocket-server/apps/message-service/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"

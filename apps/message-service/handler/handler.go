@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"websocket-server/apps/message/model"
-	"websocket-server/apps/message/service"
+	"websocket-server/apps/message-service/model"
+	"websocket-server/apps/message-service/service"
 	"websocket-server/pkg/logger"
 )
 
@@ -25,7 +25,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		api.POST("/history", h.GetHistory)         // 获取历史消息
 		api.POST("/unread", h.GetUnreadMessages)   // 获取未读消息
 		api.POST("/mark-read", h.MarkMessagesRead) // 标记消息已读
-		api.POST("/send", h.SendMessage)           // 特殊场景下的短连接消息，如测试，某些网络下的备用通道
+		api.POST("/send", h.SendMessage)           // 特殊场景下的短连接消息，如测试、某些网络环境下的备用通道
 	}
 }
 

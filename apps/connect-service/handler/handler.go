@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/connect/service"
+	"websocket-server/apps/connect-service/service"
 	"websocket-server/pkg/logger"
 )
 

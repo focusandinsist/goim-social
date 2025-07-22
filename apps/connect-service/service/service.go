@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/connect/model"
+	"websocket-server/apps/connect-service/model"
 	"websocket-server/pkg/auth"
 	"websocket-server/pkg/config"
 	"websocket-server/pkg/database"
@@ -190,7 +190,7 @@ func (cm *ConnectionManager) CleanupAll() {
 	for userID, conn := range cm.localConnections {
 		if conn != nil {
 			conn.Close()
-			log.Printf("✅ 已关闭用户 %d 的WebSocket连接", userID)
+			log.Printf("已关闭用户 %d 的WebSocket连接", userID)
 		}
 	}
 
@@ -239,7 +239,7 @@ func (s *Service) cleanupOnStartup() {
 	pattern := "conn:*"
 	keys, err := s.redis.Keys(ctx, pattern)
 	if err != nil {
-		log.Printf("❌ 查询连接keys失败: %v", err)
+		log.Printf("查询连接keys失败: %v", err)
 		return
 	}
 
@@ -296,7 +296,7 @@ func (s *Service) cleanup() {
 	pattern := "conn:*"
 	keys, err := s.redis.Keys(ctx, pattern)
 	if err != nil {
-		log.Printf("❌ 查询连接keys失败: %v", err)
+		log.Printf("查询连接keys失败: %v", err)
 		return
 	}
 
@@ -613,15 +613,15 @@ func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]
 
 // ForwardMessageToMessageService 通过 gRPC 转发消息到 Message 微服务
 func (s *Service) ForwardMessageToMessageService(ctx context.Context, wsMsg *rest.WSMessage) error {
-	log.Printf("📨 Connect服务转发消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
+	log.Printf("Connect服务转发消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
 
 	// 双向流是IM系统的核心，必须可用
 	if s.msgStream == nil {
-		log.Printf("❌ 双向流连接不可用，IM系统无法正常工作")
+		log.Printf("双向流连接不可用，IM系统无法正常工作")
 		return fmt.Errorf("双向流连接不可用，无法转发消息")
 	}
 
-	log.Printf("🔄 通过双向流转发消息")
+	log.Printf("通过双向流转发消息")
 	return s.SendMessageViaStream(ctx, wsMsg)
 }
 
@@ -668,14 +668,14 @@ func (s *Service) ValidateToken(token string) bool {
 }
 
 func (s *Service) StartMessageStream() {
-	log.Printf("🚀 开始连接Message服务...")
+	log.Printf("开始连接Message服务...")
 
 	// 重试连接Message服务
 	for i := 0; i < 10; i++ {
 		if i == 0 {
-			log.Printf("🔄 尝试连接Message服务... (第%d次)", i+1)
+			log.Printf("尝试连接Message服务... (第%d次)", i+1)
 		} else {
-			log.Printf("🔄 重试连接Message服务... (第%d次) - 等待Message服务启动完成", i+1)
+			log.Printf("重试连接Message服务... (第%d次) - 等待Message服务启动完成", i+1)
 		}
 
 		addr := fmt.Sprintf("%s:%d", s.config.Connect.MessageService.Host, s.config.Connect.MessageService.Port)
@@ -727,7 +727,7 @@ func (s *Service) StartMessageStream() {
 					// 推送给本地用户
 					err := s.pushToLocalConnection(event.TargetUserId, event.Message)
 					if err != nil {
-						log.Printf("[X]pushToLocalConnection fail: %v", err)
+						log.Printf("pushToLocalConnection fail: %v", err)
 						continue
 					}
 					// 发送推送结果反馈
@@ -740,7 +740,7 @@ func (s *Service) StartMessageStream() {
 						},
 					})
 					if err != nil {
-						log.Printf("[X]stream.Send fail: %v", err)
+						log.Printf("stream.Send fail: %v", err)
 						continue
 					}
 				case *rest.MessageStreamResponse_Failure:
@@ -761,7 +761,7 @@ func (s *Service) isPushDuplicate(ctx context.Context, userID int64, messageID i
 	key := fmt.Sprintf("push:%d:%d", userID, messageID)
 	exists, err := s.redis.Exists(ctx, key)
 	if err != nil {
-		log.Printf("❌ 检查推送重复状态失败: %v", err)
+		log.Printf("检查推送重复状态失败: %v", err)
 		return false // 出错时假设未推送，允许推送
 	}
 	return exists > 0
@@ -775,7 +775,7 @@ func (s *Service) markPushSent(ctx context.Context, userID int64, messageID int6
 
 // pushToLocalConnection 推送消息给用户，支持跨节点路由
 func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMessage) error {
-	log.Printf("🔍 开始推送消息给用户 %d, 消息内容: %s", targetUserID, message.Content)
+	log.Printf("开始推送消息给用户 %d, 消息内容: %s", targetUserID, message.Content)
 
 	// 幂等性检查：检查消息是否已推送
 	ctx := context.Background()
@@ -806,24 +806,24 @@ func (s *Service) pushToLocalUser(ctx context.Context, targetUserID int64, messa
 	// 先检查Redis中用户是否在线
 	isOnline, err := s.connMgr.IsUserOnline(ctx, targetUserID)
 	if err != nil {
-		log.Printf("❌ Redis查询失败，用户 %d: %v", targetUserID, err)
+		log.Printf("Redis查询失败，用户 %d: %v", targetUserID, err)
 		return err
 	}
 
 	// 调试：显示所有在线用户
 	allOnlineUsers, _ := s.connMgr.GetOnlineUsers(ctx)
-	log.Printf("🔍 当前Redis中的在线用户: %v", allOnlineUsers)
+	log.Printf("当前Redis中的在线用户: %v", allOnlineUsers)
 
 	if !isOnline {
-		log.Printf("❌ 用户 %d 在Redis中显示不在线", targetUserID)
+		log.Printf("用户 %d 在Redis中显示不在线", targetUserID)
 		return fmt.Errorf("用户 %d 不在线", targetUserID)
 	}
-	log.Printf("✅ 用户 %d 在Redis中显示在线", targetUserID)
+	log.Printf("用户 %d 在Redis中显示在线", targetUserID)
 
 	// 2. 将消息序列化为二进制（在获取连接前先序列化）
 	msgBytes, err := proto.Marshal(message)
 	if err != nil {
-		log.Printf("❌ 消息序列化失败: %v", err)
+		log.Printf("消息序列化失败: %v", err)
 		return err
 	}
 
@@ -831,20 +831,20 @@ func (s *Service) pushToLocalUser(ctx context.Context, targetUserID int64, messa
 	conn, exists := s.connMgr.GetConnection(targetUserID)
 	stats := s.connMgr.GetStats()
 
-	log.Printf("🔍 本地连接状态: 总连接数=%d, 用户%d连接存在=%v", stats["local_connections"], targetUserID, exists)
+	log.Printf("本地连接状态: 总连接数=%d, 用户%d连接存在=%v", stats["local_connections"], targetUserID, exists)
 
 	if !exists {
-		log.Printf("❌ 用户 %d 没有本地WebSocket连接，可能在其他Connect服务实例上", targetUserID)
-		log.Printf("🔍 当前本地连接列表: %v", stats["connection_list"])
+		log.Printf("用户 %d 没有本地WebSocket连接，可能在其他Connect服务实例上", targetUserID)
+		log.Printf("当前本地连接列表: %v", stats["connection_list"])
 		return fmt.Errorf("用户 %d 没有本地WebSocket连接", targetUserID)
 	}
 
 	// 4. 推送消息
-	log.Printf("📤 尝试通过WebSocket推送消息给用户 %d，消息长度: %d bytes", targetUserID, len(msgBytes))
+	log.Printf("尝试通过WebSocket推送消息给用户 %d，消息长度: %d bytes", targetUserID, len(msgBytes))
 
 	// 添加连接状态检查
 	if conn == nil {
-		log.Printf("❌ 用户 %d 的WebSocket连接为nil", targetUserID)
+		log.Printf("用户 %d 的WebSocket连接为nil", targetUserID)
 		s.connMgr.RemoveConnection(context.Background(), targetUserID, "")
 		return fmt.Errorf("用户 %d 的WebSocket连接为nil", targetUserID)
 	}
@@ -853,15 +853,15 @@ func (s *Service) pushToLocalUser(ctx context.Context, targetUserID int64, messa
 
 	// 5. 处理推送结果
 	if err != nil {
-		log.Printf("❌ 推送消息给用户 %d 失败: %v", targetUserID, err)
-		log.Printf("🔍 错误类型: %T", err)
+		log.Printf("推送消息给用户 %d 失败: %v", targetUserID, err)
+		log.Printf("错误类型: %T", err)
 		// 如果推送失败，可能连接已断开，移除连接
 		s.connMgr.RemoveConnection(context.Background(), targetUserID, "")
 	} else {
-		log.Printf("✅ 成功推送消息给用户 %d，消息内容: %s", targetUserID, message.Content)
+		log.Printf("成功推送消息给用户 %d，消息内容: %s", targetUserID, message.Content)
 		// 标记消息已推送
 		if err := s.markPushSent(ctx, targetUserID, message.MessageId); err != nil {
-			log.Printf("❌ 标记消息已推送失败: %v", err)
+			log.Printf("标记消息已推送失败: %v", err)
 		}
 		// 注意：这里不自动ACK，等待客户端主动确认已读
 	}
@@ -874,11 +874,11 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 	userID := wsMsg.From // 客户端发送ACK时，From字段是自己的用户ID
 	messageID := wsMsg.MessageId
 
-	log.Printf("📖 收到客户端ACK: UserID=%d, MessageID=%d", userID, messageID)
+	log.Printf("收到客户端ACK: UserID=%d, MessageID=%d", userID, messageID)
 
 	// 检查消息ID是否存在
 	if messageID == 0 {
-		log.Printf("⚠️ ACK消息ID为空: UserID=%d", userID)
+		log.Printf("ACK消息ID为空: UserID=%d", userID)
 		return fmt.Errorf("MessageID不能为0")
 	}
 
@@ -897,13 +897,13 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 
 		err := s.msgStream.Send(ackReq)
 		if err != nil {
-			log.Printf("❌ 发送消息ACK失败: %v", err)
+			log.Printf("发送消息ACK失败: %v", err)
 			return err
 		} else {
-			log.Printf("✅ 已发送消息ACK: MessageID=%d, UserID=%d", messageID, userID)
+			log.Printf("已发送消息ACK: MessageID=%d, UserID=%d", messageID, userID)
 		}
 	} else {
-		log.Printf("❌ 双向流连接不可用，无法发送ACK")
+		log.Printf("双向流连接不可用，无法发送ACK")
 		return fmt.Errorf("双向流连接不可用")
 	}
 
@@ -924,7 +924,7 @@ func (s *Service) SendMessageViaStream(ctx context.Context, wsMsg *rest.WSMessag
 	}
 
 	// 通过双向流发送消息
-	log.Printf("📡 通过双向流发送消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
+	log.Printf("通过双向流发送消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
 
 	err := s.msgStream.Send(&rest.MessageStreamRequest{
 		RequestType: &rest.MessageStreamRequest_SendMessage{
@@ -935,11 +935,11 @@ func (s *Service) SendMessageViaStream(ctx context.Context, wsMsg *rest.WSMessag
 	})
 
 	if err != nil {
-		log.Printf("❌ 双向流发送消息失败: %v", err)
+		log.Printf("双向流发送消息失败: %v", err)
 		return err
 	}
 
-	log.Printf("✅ 双向流发送消息成功")
+	log.Printf("双向流发送消息成功")
 	return nil
 }
 
@@ -952,7 +952,7 @@ func (s *Service) AddWebSocketConnection(userID int64, conn *websocket.Conn) {
 	// 使用新的连接管理器
 	ctx := context.Background()
 	if err := s.connMgr.AddConnection(ctx, userID, conn, connID, s.instanceID); err != nil {
-		log.Printf("❌ 添加WebSocket连接失败: %v", err)
+		log.Printf("添加WebSocket连接失败: %v", err)
 	}
 }
 
@@ -960,7 +960,7 @@ func (s *Service) AddWebSocketConnection(userID int64, conn *websocket.Conn) {
 func (s *Service) RemoveWebSocketConnection(userID int64) {
 	ctx := context.Background()
 	if err := s.connMgr.RemoveConnection(ctx, userID, ""); err != nil {
-		log.Printf("❌ 移除WebSocket连接失败: %v", err)
+		log.Printf("移除WebSocket连接失败: %v", err)
 	}
 }
 
@@ -978,7 +978,7 @@ func (s *Service) UpdateHeartbeat(ctx context.Context, userID int64, connID stri
 	// 更新Redis中的lastHeartbeat字段
 	err := s.redis.HSet(ctx, connKey, "lastHeartbeat", timestamp)
 	if err != nil {
-		log.Printf("❌ 更新用户 %d 心跳时间失败: %v", userID, err)
+		log.Printf("更新用户 %d 心跳时间失败: %v", userID, err)
 		return err
 	}
 
@@ -1002,7 +1002,7 @@ func (s *Service) CleanupAllConnections() {
 	// 2. 清理本实例的连接记录
 	connKeys, err := s.redis.Keys(ctx, "conn:*")
 	if err != nil {
-		log.Printf("❌ 获取连接记录失败: %v", err)
+		log.Printf("获取连接记录失败: %v", err)
 	} else {
 		cleanedConnections := 0
 		cleanedUsers := make(map[string]bool)

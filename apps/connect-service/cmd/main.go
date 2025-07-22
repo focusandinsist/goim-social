@@ -12,9 +12,8 @@ import (
 	"google.golang.org/grpc"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/message/consumer"
-	"websocket-server/apps/message/handler"
-	"websocket-server/apps/message/service"
+	"websocket-server/apps/connect-service/handler"
+	"websocket-server/apps/connect-service/service"
 	"websocket-server/pkg/config"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
@@ -25,11 +24,11 @@ import (
 
 func main() {
 	// 加载配置
-	cfg := config.LoadConfig("message-service")
+	cfg := config.LoadConfig("connect-service")
 
 	// 初始化Kratos日志
 	kratosLogger := kratoslog.With(kratoslog.NewStdLogger(os.Stdout),
-		"service.name", "message-service",
+		"service.name", "connect-service",
 		"service.version", "v1.0.0",
 	)
 
@@ -55,28 +54,7 @@ func main() {
 	}
 
 	// 初始化Service层
-	svc := service.NewService(mongoDB, redisClient, kafkaProducer)
-
-	// 启动Kafka消费者
-	ctx := context.Background()
-
-	// 启动存储消费者
-	storageConsumer := consumer.NewStorageConsumer(mongoDB, redisClient)
-	go func() {
-		log.Println("🚀 启动存储消费者...")
-		if err := storageConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
-			log.Fatalf("Failed to start storage consumer: %v", err)
-		}
-	}()
-
-	// 启动推送消费者
-	pushConsumer := consumer.NewPushConsumer(redisClient)
-	go func() {
-		log.Println("🚀 启动推送消费者...")
-		if err := pushConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
-			log.Fatalf("Failed to start push consumer: %v", err)
-		}
-	}()
+	svc := service.NewService(mongoDB, redisClient, kafkaProducer, cfg)
 
 	// 创建HTTP服务器
 	httpServer := server.NewHTTPServerWrapper(cfg, kratosLogger)
@@ -84,9 +62,9 @@ func main() {
 	httpHandler.RegisterRoutes(httpServer.GetEngine())
 
 	// 创建gRPC服务器
-	grpcService := svc.NewGRPCService(svc)
+	grpcService := httpHandler.NewGRPCService()
 	nativeGrpcServer := grpc.NewServer()
-	rest.RegisterMessageServiceServer(nativeGrpcServer, grpcService)
+	rest.RegisterConnectServiceServer(nativeGrpcServer, grpcService)
 
 	// 启动gRPC服务器
 	go func() {
@@ -108,12 +86,22 @@ func main() {
 		}
 	}()
 
+	// 启动与Message服务的gRPC双向流连接
+	go func() {
+		log.Println("Starting message stream connection...")
+		svc.StartMessageStream()
+	}()
+
 	// 优雅关闭
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 	<-stop
 
 	log.Println("Shutting down servers...")
+
+	// 清理Redis中的连接记录和实例信息
+	log.Println("Cleaning up Redis connections and instance...")
+	svc.CleanupAllConnections()
 
 	// 停止gRPC服务器
 	nativeGrpcServer.GracefulStop()

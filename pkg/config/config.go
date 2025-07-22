@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 )
@@ -92,10 +93,10 @@ type ConnectionConfig struct {
 
 // LoadConfig 从环境变量加载配置
 func LoadConfig(serviceName string) *Config {
-	// 根据服务名称设置默认端口（按依赖关系排序）
-	defaultHTTPPort := "21001"
-	defaultGRPCPort := "22001"
 
+	var defaultHTTPPort, defaultGRPCPort string
+
+	// 根据服务名称设置默认端口
 	switch serviceName {
 	case "user-service":
 		defaultHTTPPort = "21001"
@@ -112,6 +113,8 @@ func LoadConfig(serviceName string) *Config {
 	case "connect-service":
 		defaultHTTPPort = "21005"
 		defaultGRPCPort = "22005"
+	default:
+		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, connect-service", serviceName))
 	}
 
 	httpPort := getEnvOrDefault("HTTP_PORT", defaultHTTPPort)
