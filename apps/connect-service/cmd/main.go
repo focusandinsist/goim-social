@@ -22,18 +22,20 @@ func main() {
 	// 初始化Service层
 	svc := service.NewService(app.GetMongoDB(), app.GetRedisClient(), app.GetKafkaProducer(), app.GetConfig())
 
-	// 创建handler
-	httpHandler := handler.NewHandler(svc, app.GetLogger())
+	// 创建各handler
+	httpHandler := handler.NewHTTPHandler(svc, app.GetLogger())
+	wsHandler := handler.NewWSHandler(svc, app.GetLogger())
+	grpcHandler := handler.NewGRPCHandler(svc, app.GetLogger())
 
 	// 注册HTTP路由
 	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
 		httpHandler.RegisterRoutes(engine)
+		wsHandler.RegisterRoutes(engine)
 	})
 
 	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
-		grpcService := httpHandler.NewGRPCService()
-		rest.RegisterConnectServiceServer(grpcSrv, grpcService)
+		rest.RegisterConnectServiceServer(grpcSrv, grpcHandler)
 	})
 
 	// 启动与Message服务的gRPC双向流连接
