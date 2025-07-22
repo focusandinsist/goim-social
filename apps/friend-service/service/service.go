@@ -156,6 +156,83 @@ func (s *Service) ListFriends(ctx context.Context, userID int64) ([]*model.Frien
 	return friends, nil
 }
 
+// ApplyFriend 申请加好友
+func (s *Service) ApplyFriend(ctx context.Context, userID, friendID int64, remark string) error {
+	if userID == friendID {
+		return fmt.Errorf("不能添加自己为好友")
+	}
+	// 检查是否已是好友
+	filter := bson.M{"user_id": userID, "friend_id": friendID}
+	count, err := s.db.GetCollection("friends").CountDocuments(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return fmt.Errorf("已是好友")
+	}
+	// 检查是否已存在未处理的申请
+	applyFilter := bson.M{"user_id": friendID, "applicant_id": userID, "status": "pending"}
+	applyCount, err := s.db.GetCollection("friend_applies").CountDocuments(ctx, applyFilter)
+	if err != nil {
+		return err
+	}
+	if applyCount > 0 {
+		return fmt.Errorf("已申请，等待对方处理")
+	}
+	// 插入申请
+	apply := &model.FriendApply{
+		UserID:      friendID, // 被申请人
+		ApplicantID: userID,   // 申请人
+		Remark:      remark,
+		Status:      "pending",
+		Timestamp:   time.Now().Unix(),
+	}
+	_, err = s.db.GetCollection("friend_applies").InsertOne(ctx, apply)
+	return err
+}
+
+// RespondFriendApply 同意/拒绝好友申请
+func (s *Service) RespondFriendApply(ctx context.Context, userID, applicantID int64, agree bool) error {
+	filter := bson.M{"user_id": userID, "applicant_id": applicantID, "status": "pending"}
+	update := bson.M{}
+	if agree {
+		update = bson.M{"$set": bson.M{"status": "accepted", "agree_time": time.Now().Unix()}}
+	} else {
+		update = bson.M{"$set": bson.M{"status": "rejected", "reject_time": time.Now().Unix()}}
+	}
+	result, err := s.db.GetCollection("friend_applies").UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("未找到待处理的好友申请")
+	}
+	if agree {
+		// 双向加好友
+		err1 := s.AddFriend(ctx, applicantID, userID, "")
+		err2 := s.AddFriend(ctx, userID, applicantID, "")
+		if err1 != nil || err2 != nil {
+			return fmt.Errorf("添加好友失败: %v %v", err1, err2)
+		}
+	}
+	return nil
+}
+
+// ListFriendApply 查询好友申请列表
+func (s *Service) ListFriendApply(ctx context.Context, userID int64) ([]*model.FriendApply, error) {
+	filter := bson.M{"user_id": userID}
+	var applies []*model.FriendApply
+	cursor, err := s.db.GetCollection("friend_applies").Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	if err = cursor.All(ctx, &applies); err != nil {
+		return nil, err
+	}
+	return applies, nil
+}
+
 // gRPC服务端实现
 type GRPCService struct {
 	friendpb.UnimplementedFriendEventServiceServer

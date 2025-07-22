@@ -79,3 +79,47 @@ message UpdateFriendRemarkResponse {
   bool success = 1;
   string message = 2;
 }
+
+// 好友申请请求
+message ApplyFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+}
+
+// 好友申请响应
+message ApplyFriendResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 同意/拒绝好友申请请求
+message RespondFriendApplyRequest {
+  int64 user_id = 1;      // 被申请人
+  int64 applicant_id = 2; // 申请人
+  bool agree = 3;         // true=同意，false=拒绝
+}
+
+// 同意/拒绝好友申请响应
+message RespondFriendApplyResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 查询好友申请列表请求
+message ListFriendApplyRequest {
+  int64 user_id = 1;
+}
+
+// 好友申请信息
+message FriendApplyInfo {
+  int64 applicant_id = 1;
+  string remark = 2;
+  int64 timestamp = 3;
+  string status = 4; // pending/accepted/rejected
+}
+
+// 查询好友申请列表响应
+message ListFriendApplyResponse {
+  repeated FriendApplyInfo applies = 1;
+}
