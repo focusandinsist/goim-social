@@ -13,9 +13,16 @@ type JWTConfig struct {
 	ExpireTime time.Duration
 }
 
+// Claims JWT声明
+type Claims struct {
+	UserID   int64  `json:"user_id"`
+	Username string `json:"username"`
+	jwt.RegisteredClaims
+}
+
 // DefaultJWTConfig 默认JWT配置
 var DefaultJWTConfig = &JWTConfig{
-	Secret:     "your-secret", // 建议从配置文件或环境变量读取
+	Secret:     "focusandinsist",
 	ExpireTime: time.Hour,
 }
 
@@ -29,12 +36,12 @@ func ValidateTokenWithConfig(token string, config *JWTConfig) bool {
 	if token == "" {
 		return false
 	}
-	
+
 	// 支持调试模式
 	if token == "auth-debug" {
 		return true
 	}
-	
+
 	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		// 校验签名算法
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -42,27 +49,27 @@ func ValidateTokenWithConfig(token string, config *JWTConfig) bool {
 		}
 		return []byte(config.Secret), nil
 	})
-	
+
 	return err == nil && parsedToken != nil && parsedToken.Valid
 }
 
 // GenerateJWT 生成 JWT token
-func GenerateJWT(claims map[string]any) (string, error) {
+func GenerateJWT(claims map[string]interface{}) (string, error) {
 	return GenerateJWTWithConfig(claims, DefaultJWTConfig)
 }
 
 // GenerateJWTWithConfig 使用指定配置生成 JWT token
-func GenerateJWTWithConfig(claims map[string]any, config *JWTConfig) (string, error) {
+func GenerateJWTWithConfig(claims map[string]interface{}, config *JWTConfig) (string, error) {
 	jwtClaims := jwt.MapClaims{}
 	for k, v := range claims {
 		jwtClaims[k] = v
 	}
-	
+
 	// 如果没有设置过期时间，使用默认过期时间
 	if _, exists := claims["exp"]; !exists {
 		jwtClaims["exp"] = time.Now().Add(config.ExpireTime).Unix()
 	}
-	
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwtClaims)
 	return token.SignedString([]byte(config.Secret))
 }
@@ -80,14 +87,34 @@ func ParseTokenWithConfig(tokenString string, config *JWTConfig) (jwt.MapClaims,
 		}
 		return []byte(config.Secret), nil
 	})
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		return claims, nil
 	}
-	
+
+	return nil, fmt.Errorf("invalid token")
+}
+
+// ValidateJWT 验证JWT token并返回Claims
+func ValidateJWT(tokenString, secret string) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(secret), nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		return claims, nil
+	}
+
 	return nil, fmt.Errorf("invalid token")
 }

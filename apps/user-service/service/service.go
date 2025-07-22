@@ -49,7 +49,7 @@ func (s *Service) Register(ctx context.Context, req *rest.RegisterRequest) (*res
 	user := &model.User{
 		ID:        userID,
 		Username:  req.Username,
-		Password:  req.Password, // 实际应该加密
+		Password:  req.Password, // TODO: 加密
 		Email:     req.Email,
 		Nickname:  req.Nickname,
 		Status:    0, // 正常状态
@@ -87,7 +87,7 @@ func (s *Service) Login(ctx context.Context, req *rest.LoginRequest) (*rest.Logi
 	}
 
 	// 生成 JWT token，带 device_id
-	claims := map[string]any{
+	claims := map[string]interface{}{
 		"user_id":   user.ID,
 		"username":  user.Username,
 		"device_id": req.DeviceId,

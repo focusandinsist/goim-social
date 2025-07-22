@@ -391,22 +391,19 @@ func (s *Service) startHeartbeat() {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			ctx := context.Background()
-			key := fmt.Sprintf("connect_instances:%s", s.instanceID)
+	for range ticker.C {
+		ctx := context.Background()
+		key := fmt.Sprintf("connect_instances:%s", s.instanceID)
 
-			// 更新心跳时间
-			if err := s.redis.HSet(ctx, key, "last_ping", time.Now().Unix()); err != nil {
-				log.Printf("更新心跳失败: %v", err)
-				continue
-			}
+		// 更新心跳时间
+		if err := s.redis.HSet(ctx, key, "last_ping", time.Now().Unix()); err != nil {
+			log.Printf("更新心跳失败: %v", err)
+			continue
+		}
 
-			// 续期
-			if err := s.redis.Expire(ctx, key, timeout); err != nil {
-				log.Printf("续期失败: %v", err)
-			}
+		// 续期
+		if err := s.redis.Expire(ctx, key, timeout); err != nil {
+			log.Printf("续期失败: %v", err)
 		}
 	}
 }
@@ -570,7 +567,6 @@ func (s *Service) Connect(ctx context.Context, userID int64, token string, serve
 	}
 	expireTime := time.Duration(s.config.Connect.Connection.ExpireTime) * time.Hour
 	_ = s.redis.Expire(ctx, key, expireTime)
-	// 新增：将用户ID加入在线用户集合
 	_ = s.redis.SAdd(ctx, "online_users", userID)
 	return conn, nil
 }
@@ -579,7 +575,6 @@ func (s *Service) Connect(ctx context.Context, userID int64, token string, serve
 func (s *Service) Disconnect(ctx context.Context, userID int64, connID string) error {
 	key := fmt.Sprintf("conn:%d:%s", userID, connID)
 	err := s.redis.Del(ctx, key)
-	// 新增：将用户ID移出在线用户集合
 	_ = s.redis.SRem(ctx, "online_users", userID)
 	return err
 }

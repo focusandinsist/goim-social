@@ -8,11 +8,19 @@ import (
 
 // Config 应用配置
 type Config struct {
+	App      AppConfig      `yaml:"app"`
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
 	Redis    RedisConfig    `yaml:"redis"`
 	Kafka    KafkaConfig    `yaml:"kafka"`
 	Connect  ConnectConfig  `yaml:"connect"`
+}
+
+// AppConfig 应用配置
+type AppConfig struct {
+	Name      string `yaml:"name"`
+	Version   string `yaml:"version"`
+	JWTSecret string `yaml:"jwt_secret"`
 }
 
 // ServerConfig 服务器配置
@@ -121,6 +129,11 @@ func LoadConfig(serviceName string) *Config {
 	grpcPort := getEnvOrDefault("GRPC_PORT", defaultGRPCPort)
 
 	return &Config{
+		App: AppConfig{
+			Name:      serviceName,
+			Version:   getEnvOrDefault("APP_VERSION", "1.0.0"),
+			JWTSecret: getEnvOrDefault("JWT_SECRET", "focusandinsist"),
+		},
 		Server: ServerConfig{
 			HTTP: HTTPConfig{
 				Network: "tcp",
