@@ -24,7 +24,7 @@
             "name": "2. Group Service (HTTP:21002, gRPC:22002)",
             "type": "go",
             "request": "launch",
-            "program": "./apps/group/cmd/main.go",
+            "program": "./apps/group-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "group-service",
@@ -40,7 +40,7 @@
             "name": "3. Friend Service (HTTP:21003, gRPC:22003)",
             "type": "go",
             "request": "launch",
-            "program": "./apps/friend/cmd/main.go",
+            "program": "./apps/friend-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "friend-service",
@@ -56,7 +56,7 @@
             "name": "4. Message Service (HTTP:21004, gRPC:22004)",
             "type": "go",
             "request": "launch",
-            "program": "./apps/message/cmd/main.go",
+            "program": "./apps/message-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "message-service",
@@ -72,7 +72,7 @@
             "name": "5. Connect Service (HTTP:21005, gRPC:22005)",
             "type": "go",
             "request": "launch",
-            "program": "./apps/connect/cmd/main.go",
+            "program": "./apps/connect-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "connect-service",
@@ -88,7 +88,7 @@
             "name": "Recommend Service",
             "type": "go",
             "request": "launch",
-            "program": "./apps/recommend/cmd/main.go",
+            "program": "./apps/recommend-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "recommend-service"

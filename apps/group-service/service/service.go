@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"websocket-server/api/rest"
-	"websocket-server/apps/group/model"
+	"websocket-server/apps/group-service/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"

@@ -58,7 +58,7 @@ func (am *AuthMiddleware) GinAuth() gin.HandlerFunc {
 		// 将用户信息存储到上下文
 		c.Set("userID", claims.UserID)
 		c.Set("username", claims.Username)
-		
+
 		am.logger.Log(kratoslog.LevelDebug, "msg", "User authenticated", "userID", claims.UserID, "path", c.Request.URL.Path)
 		c.Next()
 	}
@@ -100,7 +100,7 @@ func (am *AuthMiddleware) GRPCAuth() grpc.UnaryServerInterceptor {
 		// 将用户信息添加到上下文
 		ctx = context.WithValue(ctx, "userID", claims.UserID)
 		ctx = context.WithValue(ctx, "username", claims.Username)
-		
+
 		am.logger.Log(kratoslog.LevelDebug, "msg", "User authenticated", "userID", claims.UserID, "method", info.FullMethod)
 		return handler(ctx, req)
 	}
@@ -143,9 +143,9 @@ func (am *AuthMiddleware) GRPCStreamAuth() grpc.StreamServerInterceptor {
 		// 创建包装的流，包含用户信息
 		wrappedStream := &wrappedServerStream{
 			ServerStream: ss,
-			ctx: context.WithValue(ctx, "userID", claims.UserID),
+			ctx:          context.WithValue(ctx, "userID", claims.UserID),
 		}
-		
+
 		am.logger.Log(kratoslog.LevelDebug, "msg", "User authenticated", "userID", claims.UserID, "method", info.FullMethod)
 		return handler(srv, wrappedStream)
 	}
@@ -156,12 +156,12 @@ func (am *AuthMiddleware) extractTokenFromHeader(authHeader string) string {
 	if authHeader == "" {
 		return ""
 	}
-	
+
 	// 支持 "Bearer token" 和直接的 "token" 格式
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		return strings.TrimPrefix(authHeader, "Bearer ")
 	}
-	
+
 	return authHeader
 }
 
@@ -172,14 +172,15 @@ func (am *AuthMiddleware) shouldSkipAuth(path string) bool {
 		"/metrics",
 		"/api/v1/auth/login",
 		"/api/v1/auth/register",
+		"/api/v1/connect/ws", // WebSocket连接有自己的认证逻辑
 	}
-	
+
 	for _, skipPath := range skipPaths {
 		if strings.HasPrefix(path, skipPath) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -190,13 +191,13 @@ func (am *AuthMiddleware) shouldSkipGRPCAuth(method string) bool {
 		"/UserService/Login",
 		"/UserService/Register",
 	}
-	
+
 	for _, skipMethod := range skipMethods {
 		if strings.Contains(method, skipMethod) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 

@@ -9,7 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	friendpb "websocket-server/api/rest"
-	"websocket-server/apps/friend/model"
+	"websocket-server/apps/friend-service/model"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"

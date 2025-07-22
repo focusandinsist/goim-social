@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"websocket-server/apps/group/service"
+	"websocket-server/apps/group-service/service"
 	"websocket-server/pkg/logger"
 )
 

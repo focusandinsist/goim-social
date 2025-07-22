@@ -41,30 +41,43 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 func (h *Handler) WebSocketHandler(c *gin.Context) {
 	// 从 header 获取 token
 	token := c.GetHeader("Authorization")
-	if token == "" || !h.service.ValidateToken(token) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "缺少或无效认证 token"})
+	if token == "" {
+		h.logger.Error(c.Request.Context(), "Missing authorization token")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "缺少认证 token"})
 		return
 	}
-
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "WebSocket upgrade failed", logger.F("error", err.Error()))
-		return
-	}
-	defer conn.Close()
 
 	// 从headers中获取userID
 	userIDStr := c.GetHeader("User-ID")
 	if userIDStr == "" {
+		h.logger.Error(c.Request.Context(), "Missing User-ID header")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少User-ID header"})
 		return
 	}
 
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
+		h.logger.Error(c.Request.Context(), "Invalid User-ID format", logger.F("userID", userIDStr), logger.F("error", err.Error()))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的User-ID格式"})
 		return
 	}
+
+	// 验证token
+	h.logger.Info(c.Request.Context(), "Validating token", logger.F("token", token), logger.F("userID", userID))
+	if !h.service.ValidateToken(token) {
+		h.logger.Error(c.Request.Context(), "Invalid token", logger.F("token", token), logger.F("userID", userID))
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效认证 token"})
+		return
+	}
+	h.logger.Info(c.Request.Context(), "Token validation successful", logger.F("userID", userID))
+
+	// 升级到WebSocket连接
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		h.logger.Error(c.Request.Context(), "WebSocket upgrade failed", logger.F("error", err.Error()))
+		return
+	}
+	defer conn.Close()
 
 	// 将userID存储到gin.Context中，供后续使用
 	c.Set("user_id", userID)

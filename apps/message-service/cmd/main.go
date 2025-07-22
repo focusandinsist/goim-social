@@ -3,65 +3,34 @@ package main
 import (
 	"context"
 	"log"
-	"net"
-	"os"
-	"os/signal"
-	"syscall"
 
-	kratoslog "github.com/go-kratos/kratos/v2/log"
+	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 
 	"websocket-server/api/rest"
 	"websocket-server/apps/message-service/consumer"
 	"websocket-server/apps/message-service/handler"
 	"websocket-server/apps/message-service/service"
-	"websocket-server/pkg/config"
-	"websocket-server/pkg/database"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/redis"
 	"websocket-server/pkg/server"
 )
 
 func main() {
-	// 加载配置
-	cfg := config.LoadConfig("message-service")
+	// 创建应用程序
+	app := server.NewApplication("message-service")
 
-	// 初始化Kratos日志
-	kratosLogger := kratoslog.With(kratoslog.NewStdLogger(os.Stdout),
-		"service.name", "message-service",
-		"service.version", "v1.0.0",
-	)
-
-	// 初始化原有日志系统
-	if err := logger.Init("info"); err != nil {
-		log.Fatalf("Failed to initialize logger: %v", err)
-	}
-	loggerInstance := logger.GetLogger()
-
-	// 初始化 MongoDB
-	mongoDB, err := database.NewMongoDB(cfg.Database.MongoDB.URI, cfg.Database.MongoDB.DBName)
-	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
-	}
-
-	// 初始化 Redis
-	redisClient := redis.NewRedisClient(cfg.Redis.Addr)
-
-	// 初始化 Kafka
-	kafkaProducer, err := kafka.InitProducer(cfg.Kafka.Brokers)
-	if err != nil {
-		log.Fatalf("Failed to connect to Kafka: %v", err)
-	}
+	// 启用HTTP和gRPC服务器
+	app.EnableHTTP()
+	app.EnableGRPC()
 
 	// 初始化Service层
-	svc := service.NewService(mongoDB, redisClient, kafkaProducer)
+	svc := service.NewService(app.GetMongoDB(), app.GetRedisClient(), app.GetKafkaProducer())
 
 	// 启动Kafka消费者
 	ctx := context.Background()
+	cfg := app.GetConfig()
 
 	// 启动存储消费者
-	storageConsumer := consumer.NewStorageConsumer(mongoDB, redisClient)
+	storageConsumer := consumer.NewStorageConsumer(app.GetMongoDB(), app.GetRedisClient())
 	go func() {
 		log.Println("启动存储消费者...")
 		if err := storageConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
@@ -70,7 +39,7 @@ func main() {
 	}()
 
 	// 启动推送消费者
-	pushConsumer := consumer.NewPushConsumer(redisClient)
+	pushConsumer := consumer.NewPushConsumer(app.GetRedisClient())
 	go func() {
 		log.Println("启动推送消费者...")
 		if err := pushConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
@@ -78,48 +47,20 @@ func main() {
 		}
 	}()
 
-	// 创建HTTP服务器
-	httpServer := server.NewHTTPServerWrapper(cfg, kratosLogger)
-	httpHandler := handler.NewHandler(svc, loggerInstance)
-	httpHandler.RegisterRoutes(httpServer.GetEngine())
+	// 注册HTTP路由
+	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
+		httpHandler := handler.NewHandler(svc, app.GetLogger())
+		httpHandler.RegisterRoutes(engine)
+	})
 
-	// 创建gRPC服务器
-	grpcService := svc.NewGRPCService(svc)
-	nativeGrpcServer := grpc.NewServer()
-	rest.RegisterMessageServiceServer(nativeGrpcServer, grpcService)
+	// 注册gRPC服务
+	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
+		grpcService := svc.NewGRPCService(svc)
+		rest.RegisterMessageServiceServer(grpcSrv, grpcService)
+	})
 
-	// 启动gRPC服务器
-	go func() {
-		lis, err := net.Listen("tcp", cfg.Server.GRPC.Addr)
-		if err != nil {
-			log.Fatalf("Failed to listen gRPC: %v", err)
-		}
-		log.Printf("gRPC server starting on %s", cfg.Server.GRPC.Addr)
-		if err := nativeGrpcServer.Serve(lis); err != nil {
-			log.Fatalf("Failed to serve gRPC: %v", err)
-		}
-	}()
-
-	// 启动HTTP服务器
-	go func() {
-		log.Printf("HTTP server starting on %s", cfg.Server.HTTP.Addr)
-		if err := httpServer.Start(context.Background()); err != nil {
-			log.Fatalf("Failed to start HTTP server: %v", err)
-		}
-	}()
-
-	// 优雅关闭
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
-	<-stop
-
-	log.Println("Shutting down servers...")
-
-	// 停止gRPC服务器
-	nativeGrpcServer.GracefulStop()
-
-	// 停止HTTP服务器
-	if err := httpServer.Stop(context.Background()); err != nil {
-		log.Printf("Failed to stop HTTP server: %v", err)
+	// 运行应用程序
+	if err := app.Run(); err != nil {
+		panic(err)
 	}
 }

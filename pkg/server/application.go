@@ -117,7 +117,7 @@ func (app *Application) EnableHTTP() HTTPServer {
 	httpServer.RegisterRoutes(func(engine *gin.Engine) {
 		engine.Use(app.loggingMiddleware.GinLogging())
 		engine.Use(app.loggingMiddleware.GinRecovery())
-		engine.Use(app.authMiddleware.GinAuth()) // TODO: 认证中间件暂时加上，后续待定
+		engine.Use(app.authMiddleware.GinAuth())
 	})
 
 	return httpServer

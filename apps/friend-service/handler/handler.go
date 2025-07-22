@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"websocket-server/apps/friend/model"
-	"websocket-server/apps/friend/service"
+	"websocket-server/apps/friend-service/model"
+	"websocket-server/apps/friend-service/service"
 	"websocket-server/pkg/logger"
 )
 
