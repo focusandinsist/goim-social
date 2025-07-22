@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"time"
-	"websocket-server/pkg/config"
 
 	"github.com/gin-gonic/gin"
 	kratoslog "github.com/go-kratos/kratos/v2/log"
+
+	"websocket-server/pkg/config"
 )
 
 // NewGinEngine 创建Gin引擎
@@ -19,7 +19,6 @@ func NewGinEngine() *gin.Engine {
 	// 添加中间件
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
-	r.Use(corsMiddleware())
 
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
@@ -32,22 +31,6 @@ func NewGinEngine() *gin.Engine {
 	return r
 }
 
-// corsMiddleware CORS中间件
-func corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		c.Next()
-	}
-}
-
 // parseDuration 解析时间字符串
 func parseDuration(s string, defaultDuration time.Duration) time.Duration {
 	if d, err := time.ParseDuration(s); err == nil {
@@ -56,10 +39,19 @@ func parseDuration(s string, defaultDuration time.Duration) time.Duration {
 	return defaultDuration
 }
 
+// HTTPServer HTTP服务器接口
+type HTTPServer interface {
+	GetEngine() *gin.Engine
+	RegisterRoutes(registerFunc func(*gin.Engine))
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+}
+
 // HTTPServerWrapper Gin HTTP服务器包装器
 type HTTPServerWrapper struct {
 	engine *gin.Engine
 	server *http.Server
+	logger kratoslog.Logger
 }
 
 // NewHTTPServerWrapper 创建HTTP服务器包装器
@@ -77,6 +69,7 @@ func NewHTTPServerWrapper(c *config.Config, logger kratoslog.Logger) *HTTPServer
 	return &HTTPServerWrapper{
 		engine: engine,
 		server: server,
+		logger: logger,
 	}
 }
 
@@ -85,14 +78,19 @@ func (w *HTTPServerWrapper) GetEngine() *gin.Engine {
 	return w.engine
 }
 
+// RegisterRoutes 注册路由
+func (w *HTTPServerWrapper) RegisterRoutes(registerFunc func(*gin.Engine)) {
+	registerFunc(w.engine)
+}
+
 // Start 启动服务器
 func (w *HTTPServerWrapper) Start(ctx context.Context) error {
-	log.Printf("HTTP server starting on %s", w.server.Addr)
+	w.logger.Log(kratoslog.LevelInfo, "msg", "HTTP server starting", "addr", w.server.Addr)
 	return w.server.ListenAndServe()
 }
 
 // Stop 停止服务器
 func (w *HTTPServerWrapper) Stop(ctx context.Context) error {
-	log.Println("HTTP server stopping")
+	w.logger.Log(kratoslog.LevelInfo, "msg", "HTTP server stopping")
 	return w.server.Shutdown(ctx)
 }

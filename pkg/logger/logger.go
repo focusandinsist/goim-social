@@ -15,6 +15,7 @@ type Logger interface {
 	Error(ctx context.Context, msg string, fields ...Field)
 	Warn(ctx context.Context, msg string, fields ...Field)
 	Debug(ctx context.Context, msg string, fields ...Field)
+	Fatal(ctx context.Context, msg string, fields ...Field)
 	WithContext(ctx context.Context) Logger
 }
 
@@ -42,6 +43,8 @@ func NewLogger(level string) (Logger, error) {
 		zapLevel = zapcore.WarnLevel
 	case "error":
 		zapLevel = zapcore.ErrorLevel
+	case "fatal":
+		zapLevel = zapcore.FatalLevel
 	default:
 		zapLevel = zapcore.InfoLevel
 	}
@@ -80,6 +83,11 @@ func (l *logger) Debug(ctx context.Context, msg string, fields ...Field) {
 	l.log(ctx, zapcore.DebugLevel, msg, fields...)
 }
 
+// Fatal 致命错误日志
+func (l *logger) Fatal(ctx context.Context, msg string, fields ...Field) {
+	l.log(ctx, zapcore.FatalLevel, msg, fields...)
+}
+
 // WithContext 带上下文的日志
 func (l *logger) WithContext(ctx context.Context) Logger {
 	return &logger{zapLogger: l.zapLogger.With(l.extractFields(ctx)...)}
@@ -111,6 +119,8 @@ func (l *logger) log(ctx context.Context, level zapcore.Level, msg string, field
 		l.zapLogger.Warn(msg, zapFields...)
 	case zapcore.DebugLevel:
 		l.zapLogger.Debug(msg, zapFields...)
+	case zapcore.FatalLevel:
+		l.zapLogger.Fatal(msg, zapFields...)
 	}
 }
 
@@ -204,6 +214,10 @@ func (l *fallbackLogger) Warn(ctx context.Context, msg string, fields ...Field) 
 
 func (l *fallbackLogger) Debug(ctx context.Context, msg string, fields ...Field) {
 	log.Printf("[DEBUG] %s", msg)
+}
+
+func (l *fallbackLogger) Fatal(ctx context.Context, msg string, fields ...Field) {
+	log.Fatalf("[FATAL] %s", msg)
 }
 
 func (l *fallbackLogger) WithContext(ctx context.Context) Logger {

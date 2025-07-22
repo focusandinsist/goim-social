@@ -79,7 +79,7 @@ func InitProducer(brokers []string) (*Producer, error) {
 // handleErrors 处理发送错误，将失败消息加入重试队列
 func (p *Producer) handleErrors() {
 	for err := range p.asyncProducer.Errors() {
-		fmt.Printf("❌ Kafka Producer错误: %v, topic=%s, partition=%d\n",
+		fmt.Printf("Kafka Producer错误: %v, topic=%s, partition=%d\n",
 			err.Err, err.Msg.Topic, err.Msg.Partition)
 
 		// 创建重试消息
@@ -92,9 +92,9 @@ func (p *Producer) handleErrors() {
 		// 加入重试队列
 		select {
 		case p.retryQueue <- retryMsg:
-			fmt.Printf("📝 消息已加入重试队列: topic=%s\n", err.Msg.Topic)
+			fmt.Printf("消息已加入重试队列: topic=%s\n", err.Msg.Topic)
 		default:
-			fmt.Printf("⚠️  重试队列已满，消息丢弃: topic=%s\n", err.Msg.Topic)
+			fmt.Printf("重试队列已满，消息丢弃: topic=%s\n", err.Msg.Topic)
 		}
 	}
 }
@@ -102,7 +102,7 @@ func (p *Producer) handleErrors() {
 // handleSuccesses 处理发送成功
 func (p *Producer) handleSuccesses() {
 	for success := range p.asyncProducer.Successes() {
-		fmt.Printf("✅ Kafka消息发送成功: topic=%s, partition=%d, offset=%d\n",
+		fmt.Printf("Kafka消息发送成功: topic=%s, partition=%d, offset=%d\n",
 			success.Topic, success.Partition, success.Offset)
 	}
 }
@@ -112,7 +112,7 @@ func (p *Producer) handleRetries() {
 	for retryMsg := range p.retryQueue {
 		// 检查是否超过最大重试次数
 		if retryMsg.RetryCount >= p.maxRetries {
-			fmt.Printf("❌ 消息重试次数超限，最终丢弃: topic=%s, retries=%d\n",
+			fmt.Printf("消息重试次数超限，最终丢弃: topic=%s, retries=%d\n",
 				retryMsg.Message.Topic, retryMsg.RetryCount)
 			continue
 		}
@@ -124,7 +124,7 @@ func (p *Producer) handleRetries() {
 		retryMsg.RetryCount++
 		retryMsg.LastAttempt = time.Now()
 
-		fmt.Printf("🔄 重试发送消息: topic=%s, attempt=%d/%d\n",
+		fmt.Printf("重试发送消息: topic=%s, attempt=%d/%d\n",
 			retryMsg.Message.Topic, retryMsg.RetryCount, p.maxRetries)
 
 		// 重新发送消息
@@ -140,11 +140,11 @@ func (p *Producer) SendMessage(topic string, key, value []byte) error {
 		Value: sarama.ByteEncoder(value),
 	}
 
-	fmt.Printf("📤 准备发送消息到topic: %s, 消息大小: %d bytes\n", topic, len(value))
+	fmt.Printf("准备发送消息到topic: %s, 消息大小: %d bytes\n", topic, len(value))
 
 	// 发送消息到异步队列
 	p.asyncProducer.Input() <- msg
-	fmt.Printf("📨 消息已提交到异步队列\n")
+	fmt.Printf("消息已提交到异步队列\n")
 
 	return nil
 }
@@ -194,19 +194,19 @@ func InitConsumer(cfg KafkaConfig, handler ConsumerHandler) (*Consumer, error) {
 func (c *Consumer) StartConsuming(ctx context.Context) error {
 	go func() {
 		for {
-			fmt.Printf("🔄 消费者开始新的消费循环...\n")
+			fmt.Printf("消费者开始新的消费循环...\n")
 			if err := c.group.Consume(ctx, c.topics, c); err != nil {
-				fmt.Printf("❌ 消费者错误: %v\n", err)
+				fmt.Printf("消费者错误: %v\n", err)
 			}
 			if ctx.Err() != nil {
-				fmt.Printf("🛑 消费者上下文取消，退出\n")
+				fmt.Printf("消费者上下文取消，退出\n")
 				return
 			}
-			fmt.Printf("⚠️  消费者循环结束，重新开始...\n")
+			fmt.Printf("消费者循环结束，重新开始...\n")
 		}
 	}()
 	<-c.ready
-	fmt.Printf("✅ 消费者已准备就绪\n")
+	fmt.Printf("消费者已准备就绪\n")
 	return nil
 }
 
@@ -223,16 +223,16 @@ func (c *Consumer) Cleanup(_ sarama.ConsumerGroupSession) error {
 
 // ConsumeClaim 消费消息
 func (c *Consumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	fmt.Printf("🎯 开始消费分区 %d 的消息\n", claim.Partition())
+	fmt.Printf("开始消费分区 %d 的消息\n", claim.Partition())
 
 	for msg := range claim.Messages() {
-		fmt.Printf("📨 收到消息: partition=%d, offset=%d\n", msg.Partition, msg.Offset)
+		fmt.Printf("收到消息: partition=%d, offset=%d\n", msg.Partition, msg.Offset)
 
 		if err := c.Handler.HandleMessage(msg); err == nil {
 			sess.MarkMessage(msg, "")
-			fmt.Printf("✅ 消息已标记为已处理: offset=%d\n", msg.Offset)
+			fmt.Printf("消息已标记为已处理: offset=%d\n", msg.Offset)
 		} else {
-			fmt.Printf("❌ 消息处理失败: %v, offset=%d\n", err, msg.Offset)
+			fmt.Printf("消息处理失败: %v, offset=%d\n", err, msg.Offset)
 		}
 	}
 

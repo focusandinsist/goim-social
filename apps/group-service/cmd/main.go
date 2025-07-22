@@ -5,14 +5,14 @@ import (
 	"google.golang.org/grpc"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/user-service/handler"
-	"websocket-server/apps/user-service/service"
+	"websocket-server/apps/group-service/handler"
+	"websocket-server/apps/group-service/service"
 	"websocket-server/pkg/server"
 )
 
 func main() {
 	// 创建应用程序
-	app := server.NewApplication("user-service")
+	app := server.NewApplication("group-service")
 
 	// 启用HTTP和gRPC服务器
 	app.EnableHTTP()
@@ -30,7 +30,7 @@ func main() {
 	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
 		grpcService := svc.NewGRPCService(svc)
-		rest.RegisterUserServiceServer(grpcSrv, grpcService)
+		rest.RegisterGroupServiceServer(grpcSrv, grpcService)
 	})
 
 	// 运行应用程序

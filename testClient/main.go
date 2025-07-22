@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"websocket-server/api/rest"
-
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
+
+	"websocket-server/api/rest"
 )
 
 // 全局变量：已收到的消息集合（用于去重）
@@ -525,14 +525,10 @@ func startHeartbeat(c *websocket.Conn, userID int64) {
 	ticker := time.NewTicker(20 * time.Second) // 每20秒发送一次ping
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			// 发送ping消息
-			if err := c.WriteMessage(websocket.PingMessage, []byte("heartbeat")); err != nil {
-				log.Printf("❌ 用户 %d 发送ping失败: %v", userID, err)
-				return
-			}
+	for range ticker.C {
+		if err := c.WriteMessage(websocket.PingMessage, []byte("heartbeat")); err != nil {
+			log.Printf("❌ 用户 %d 发送ping失败: %v", userID, err)
+			return
 		}
 	}
 }
