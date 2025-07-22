@@ -14,6 +14,7 @@ import (
 	"websocket-server/api/rest"
 	"websocket-server/apps/connect/model"
 	"websocket-server/pkg/auth"
+	"websocket-server/pkg/config"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
@@ -27,14 +28,16 @@ import (
 type ConnectionManager struct {
 	localConnections map[int64]*websocket.Conn // 本地WebSocket连接
 	redis            *redis.RedisClient        // Redis客户端
+	config           *config.Config            // 配置
 	mutex            sync.RWMutex              // 读写锁
 }
 
 // 创建连接管理器
-func NewConnectionManager(redis *redis.RedisClient) *ConnectionManager {
+func NewConnectionManager(redis *redis.RedisClient, cfg *config.Config) *ConnectionManager {
 	return &ConnectionManager{
 		localConnections: make(map[int64]*websocket.Conn),
 		redis:            redis,
+		config:           cfg,
 	}
 }
 
@@ -66,7 +69,7 @@ func (cm *ConnectionManager) AddConnection(ctx context.Context, userID int64, co
 		"userID":        userID,
 		"connID":        connID,
 		"serverID":      serverID,
-		"clientType":    "web",
+		"clientType":    cm.getDefaultClientType(),
 		"timestamp":     time.Now().Unix(),
 		"lastHeartbeat": time.Now().Unix(),
 	}
@@ -79,13 +82,19 @@ func (cm *ConnectionManager) AddConnection(ctx context.Context, userID int64, co
 	}
 
 	// 5. 设置连接过期时间
-	if err := cm.redis.Expire(ctx, key, 2*time.Hour); err != nil {
+	expireTime := time.Duration(cm.config.Connect.Connection.ExpireTime) * time.Hour
+	if err := cm.redis.Expire(ctx, key, expireTime); err != nil {
 		log.Printf("⚠️ 设置连接过期时间失败: %v", err)
 	}
 
 	totalConnections := len(cm.localConnections)
 	log.Printf("✅ 用户 %d 连接已添加 (本地+Redis)，当前总连接数: %d", userID, totalConnections)
 	return nil
+}
+
+// getDefaultClientType 获取默认客户端类型
+func (cm *ConnectionManager) getDefaultClientType() string {
+	return cm.config.Connect.Connection.ClientType
 }
 
 // 原子式移除连接 - 同时清理本地连接和Redis状态
@@ -197,18 +206,20 @@ type Service struct {
 	db         *database.MongoDB
 	redis      *redis.RedisClient
 	kafka      *kafka.Producer
+	config     *config.Config                          // 配置
 	instanceID string                                  // Connect服务实例ID
 	msgStream  rest.MessageService_MessageStreamClient // 消息流连接
 	connMgr    *ConnectionManager                      // 统一连接管理器
 }
 
-func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer) *Service {
+func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
 	service := &Service{
 		db:         db,
 		redis:      redis,
 		kafka:      kafka,
+		config:     cfg,
 		instanceID: fmt.Sprintf("connect-%d", time.Now().UnixNano()), // 生成唯一实例ID
-		connMgr:    NewConnectionManager(redis),                      // 初始化连接管理器
+		connMgr:    NewConnectionManager(redis, cfg),                 // 初始化连接管理器
 	}
 
 	// 注册服务实例
@@ -336,8 +347,8 @@ func (s *Service) registerInstance() error {
 	// 服务实例信息
 	instanceInfo := map[string]interface{}{
 		"instance_id": s.instanceID,
-		"host":        "localhost", // 可以从配置获取
-		"port":        21003,       // 可以从配置获取
+		"host":        s.config.Connect.Instance.Host,
+		"port":        s.config.Connect.Instance.Port,
 		"status":      "active",
 		"started_at":  time.Now().Unix(),
 		"last_ping":   time.Now().Unix(),
@@ -350,7 +361,8 @@ func (s *Service) registerInstance() error {
 	}
 
 	// 设置过期时间（心跳机制）
-	if err := s.redis.Expire(ctx, key, 30*time.Second); err != nil {
+	expireTime := time.Duration(s.config.Connect.Heartbeat.Timeout) * time.Second
+	if err := s.redis.Expire(ctx, key, expireTime); err != nil {
 		log.Printf("⚠️ 设置实例过期时间失败: %v", err)
 	}
 
@@ -375,7 +387,10 @@ func (s *Service) registerInstance() error {
 
 // startHeartbeat 启动心跳机制
 func (s *Service) startHeartbeat() {
-	ticker := time.NewTicker(10 * time.Second) // 每10秒心跳一次
+	interval := time.Duration(s.config.Connect.Heartbeat.Interval) * time.Second
+	timeout := time.Duration(s.config.Connect.Heartbeat.Timeout) * time.Second
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -391,7 +406,7 @@ func (s *Service) startHeartbeat() {
 			}
 
 			// 续期
-			if err := s.redis.Expire(ctx, key, 30*time.Second); err != nil {
+			if err := s.redis.Expire(ctx, key, timeout); err != nil {
 				log.Printf("❌ 续期失败: %v", err)
 			}
 		}
@@ -555,7 +570,8 @@ func (s *Service) Connect(ctx context.Context, userID int64, token string, serve
 	if err := s.redis.HMSet(ctx, key, fields); err != nil {
 		return nil, err
 	}
-	_ = s.redis.Expire(ctx, key, 2*time.Hour)
+	expireTime := time.Duration(s.config.Connect.Connection.ExpireTime) * time.Hour
+	_ = s.redis.Expire(ctx, key, expireTime)
 	// 新增：将用户ID加入在线用户集合
 	_ = s.redis.SAdd(ctx, "online_users", userID)
 	return conn, nil
@@ -578,7 +594,8 @@ func (s *Service) Heartbeat(ctx context.Context, userID int64, connID string) er
 		return err
 	}
 	// 刷新过期时间
-	return s.redis.Expire(ctx, key, 2*time.Hour)
+	expireTime := time.Duration(s.config.Connect.Connection.ExpireTime) * time.Hour
+	return s.redis.Expire(ctx, key, expireTime)
 }
 
 // OnlineStatus 查询用户是否有活跃连接
@@ -663,7 +680,8 @@ func (s *Service) StartMessageStream() {
 			log.Printf("🔄 重试连接Message服务... (第%d次) - 等待Message服务启动完成", i+1)
 		}
 
-		conn, err := grpc.Dial("localhost:22004", grpc.WithInsecure())
+		addr := fmt.Sprintf("%s:%d", s.config.Connect.MessageService.Host, s.config.Connect.MessageService.Port)
+		conn, err := grpc.Dial(addr, grpc.WithInsecure())
 		if err != nil {
 			log.Printf("❌ 连接Message服务失败: %v", err)
 			if i < 9 {

@@ -53,7 +53,7 @@ func main() {
 	}
 
 	// 初始化Service层
-	svc := service.NewService(mongoDB, redisClient, kafkaProducer)
+	svc := service.NewService(mongoDB, redisClient, kafkaProducer, cfg)
 
 	// 创建HTTP服务器
 	httpServer := server.NewHTTPServerWrapper(cfg, kratosLogger)

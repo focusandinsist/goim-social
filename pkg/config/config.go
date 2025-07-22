@@ -11,6 +11,7 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	Redis    RedisConfig    `yaml:"redis"`
 	Kafka    KafkaConfig    `yaml:"kafka"`
+	Connect  ConnectConfig  `yaml:"connect"`
 }
 
 // ServerConfig 服务器配置
@@ -55,6 +56,38 @@ type RedisConfig struct {
 type KafkaConfig struct {
 	Brokers []string `yaml:"brokers"`
 	GroupID string   `yaml:"group_id"`
+}
+
+// ConnectConfig Connect服务配置
+type ConnectConfig struct {
+	MessageService MessageServiceConfig `yaml:"message_service"`
+	Instance       InstanceConfig       `yaml:"instance"`
+	Heartbeat      HeartbeatConfig      `yaml:"heartbeat"`
+	Connection     ConnectionConfig     `yaml:"connection"`
+}
+
+// MessageServiceConfig Message服务连接配置
+type MessageServiceConfig struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
+
+// InstanceConfig 实例配置
+type InstanceConfig struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
+
+// HeartbeatConfig 心跳配置
+type HeartbeatConfig struct {
+	Interval int `yaml:"interval"` // 心跳间隔（秒）
+	Timeout  int `yaml:"timeout"`  // 超时时间（秒）
+}
+
+// ConnectionConfig 连接配置
+type ConnectionConfig struct {
+	ExpireTime int    `yaml:"expire_time"` // 连接过期时间（小时）
+	ClientType string `yaml:"client_type"` // 默认客户端类型
 }
 
 // LoadConfig 从环境变量加载配置
@@ -111,6 +144,24 @@ func LoadConfig(serviceName string) *Config {
 		Kafka: KafkaConfig{
 			Brokers: []string{getEnvOrDefault("KAFKA_BROKERS", "localhost:9092")},
 			GroupID: getEnvOrDefault("KAFKA_GROUP_ID", serviceName+"-group"),
+		},
+		Connect: ConnectConfig{
+			MessageService: MessageServiceConfig{
+				Host: getEnvOrDefault("MESSAGE_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("MESSAGE_SERVICE_PORT", 22004),
+			},
+			Instance: InstanceConfig{
+				Host: getEnvOrDefault("INSTANCE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("INSTANCE_PORT", 21003),
+			},
+			Heartbeat: HeartbeatConfig{
+				Interval: getEnvIntOrDefault("HEARTBEAT_INTERVAL", 10),
+				Timeout:  getEnvIntOrDefault("HEARTBEAT_TIMEOUT", 30),
+			},
+			Connection: ConnectionConfig{
+				ExpireTime: getEnvIntOrDefault("CONNECTION_EXPIRE_TIME", 2),
+				ClientType: getEnvOrDefault("DEFAULT_CLIENT_TYPE", "web"),
+			},
 		},
 	}
 }
