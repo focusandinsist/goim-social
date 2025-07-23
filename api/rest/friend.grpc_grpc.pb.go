@@ -26,6 +26,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FriendEventServiceClient interface {
+	// 通知好友事件
 	NotifyFriendEvent(ctx context.Context, in *NotifyFriendEventRequest, opts ...grpc.CallOption) (*NotifyFriendEventResponse, error)
 }
 
@@ -50,6 +51,7 @@ func (c *friendEventServiceClient) NotifyFriendEvent(ctx context.Context, in *No
 // All implementations must embed UnimplementedFriendEventServiceServer
 // for forward compatibility
 type FriendEventServiceServer interface {
+	// 通知好友事件
 	NotifyFriendEvent(context.Context, *NotifyFriendEventRequest) (*NotifyFriendEventResponse, error)
 	mustEmbedUnimplementedFriendEventServiceServer()
 }

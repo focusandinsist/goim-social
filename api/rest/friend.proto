@@ -32,11 +32,18 @@ message DeleteFriendResponse {
 // 查询好友列表请求
 message ListFriendsRequest {
   int64 user_id = 1;
+  int32 page = 2;      // 页码，从1开始
+  int32 page_size = 3; // 每页大小，默认20
 }
 
 // 查询好友列表响应
 message ListFriendsResponse {
-  repeated FriendInfo friends = 1;
+  bool success = 1;
+  string message = 2;
+  repeated FriendInfo friends = 3;
+  int32 total = 4;     // 总数
+  int32 page = 5;      // 当前页
+  int32 page_size = 6; // 每页大小
 }
 
 // 好友信息
@@ -45,4 +52,92 @@ message FriendInfo {
   int64 friend_id = 2;
   string remark = 3;
   int64 created_at = 4;
+}
+
+// 获取单个好友请求
+message GetFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+}
+
+// 获取单个好友响应
+message GetFriendResponse {
+  bool success = 1;
+  string message = 2;
+  FriendInfo friend = 3;
+}
+
+// 好友申请请求
+message ApplyFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+}
+
+// 好友申请响应
+message ApplyFriendResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 回应好友申请请求
+message RespondFriendApplyRequest {
+  int64 user_id = 1;      // 被申请人
+  int64 applicant_id = 2; // 申请人
+  bool agree = 3;         // true=同意，false=拒绝
+}
+
+// 回应好友申请响应
+message RespondFriendApplyResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 查询好友申请列表请求
+message ListFriendApplyRequest {
+  int64 user_id = 1;
+}
+
+// 好友申请信息
+message FriendApplyInfo {
+  int64 applicant_id = 1;
+  string remark = 2;
+  int64 timestamp = 3;
+  string status = 4; // pending/accepted/rejected
+}
+
+// 查询好友申请列表响应
+message ListFriendApplyResponse {
+  repeated FriendApplyInfo applies = 1;
+}
+
+// 好友简介请求
+message FriendProfileRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+}
+
+// 好友简介响应
+message FriendProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string alias = 3;
+  int32 age = 4;
+  string gender = 5;
+  string avatar = 6;
+  string nickname = 7;
+}
+
+// 设置好友别名请求
+message SetFriendAliasRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string alias = 3;
+}
+
+// 设置好友别名响应
+message SetFriendAliasResponse {
+  bool success = 1;
+  string message = 2;
 }

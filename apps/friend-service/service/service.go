@@ -5,26 +5,23 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo/options"
-
 	friendpb "websocket-server/api/rest"
+	"websocket-server/apps/friend-service/dao"
 	"websocket-server/apps/friend-service/model"
-	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
 )
 
 type Service struct {
-	db            *database.MongoDB
+	dao           dao.FriendDAO
 	redis         *redis.RedisClient
 	kafka         *kafka.Producer
-	messageClient friendpb.FriendEventServiceClient // 新增：gRPC客户端
+	messageClient friendpb.FriendEventServiceClient
 }
 
-func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, messageClient friendpb.FriendEventServiceClient) *Service {
+func NewService(friendDAO dao.FriendDAO, redis *redis.RedisClient, kafka *kafka.Producer, messageClient friendpb.FriendEventServiceClient) *Service {
 	return &Service{
-		db:            db,
+		dao:           friendDAO,
 		redis:         redis,
 		kafka:         kafka,
 		messageClient: messageClient,
@@ -33,17 +30,15 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 
 // AddFriend 添加好友
 func (s *Service) AddFriend(ctx context.Context, userID, friendID int64, remark string) error {
-	// 1. 先查是否已是好友
-	filter := bson.M{"user_id": userID, "friend_id": friendID}
-	count, err := s.db.GetCollection("friends").CountDocuments(ctx, filter)
+	isFriend, err := s.dao.IsFriend(ctx, userID, friendID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to check friend relation: %v", err)
 	}
-	if count > 0 {
-		return nil // 已是好友，直接返回
+	if isFriend {
+		return fmt.Errorf("already friends")
 	}
 
-	// 2. 不是好友，先通过 gRPC 通知 message 微服务
+	// 不是好友，先通过 gRPC 通知 message 微服务
 	event := &friendpb.FriendEvent{
 		Type:      friendpb.FriendEventType_ADD_FRIEND,
 		UserId:    userID,
@@ -57,87 +52,144 @@ func (s *Service) AddFriend(ctx context.Context, userID, friendID int64, remark 
 		return fmt.Errorf("notify message service failed: %v", err)
 	}
 
-	// 3. 正常加好友逻辑
+	// 双向添加好友关系
+	// TODO: 事务
 	friend := &model.Friend{
 		UserID:    userID,
 		FriendID:  friendID,
 		Remark:    remark,
 		CreatedAt: time.Now().Unix(),
 	}
-	_, err = s.db.GetCollection("friends").InsertOne(ctx, friend)
-	return err
+	if err := s.dao.CreateFriend(ctx, friend); err != nil {
+		return fmt.Errorf("failed to create friend relation: %v", err)
+	}
+
+	friendReverse := &model.Friend{
+		UserID:    friendID,
+		FriendID:  userID,
+		Remark:    "", // 反向关系默认无备注
+		CreatedAt: time.Now().Unix(),
+	}
+	if err := s.dao.CreateFriend(ctx, friendReverse); err != nil {
+		return fmt.Errorf("failed to create reverse friend relation: %v", err)
+	}
+
+	return nil
 }
 
 // DeleteFriend 删除好友
 func (s *Service) DeleteFriend(ctx context.Context, userID, friendID int64) error {
-	// 用map也行，用bson也行，bson省略异步map=>bson的转化
-	// _, err := s.db.GetCollection("friends").DeleteOne(ctx, map[string]interface{}{"user_id": userID, "friend_id": friendID})
-	filter := bson.M{"user_id": userID, "friend_id": friendID}
-	_, err := s.db.GetCollection("friends").DeleteOne(ctx, filter)
-	return err
+	// 先通知Message服务
+	if s.messageClient != nil {
+		event := &friendpb.FriendEvent{
+			Type:      friendpb.FriendEventType_DELETE_FRIEND,
+			UserId:    userID,
+			FriendId:  friendID,
+			Timestamp: time.Now().Unix(),
+		}
+		req := &friendpb.NotifyFriendEventRequest{Event: event}
+		resp, err := s.messageClient.NotifyFriendEvent(ctx, req)
+		if err != nil || !resp.GetSuccess() {
+			return fmt.Errorf("notify message service failed: %v", err)
+		}
+	}
+
+	// TODO:事务 删除好友关系（双向删除）
+	if err := s.dao.DeleteFriend(ctx, userID, friendID); err != nil {
+		return fmt.Errorf("failed to delete friend relation: %v", err)
+	}
+
+	if err := s.dao.DeleteFriend(ctx, friendID, userID); err != nil {
+		return fmt.Errorf("failed to delete reverse friend relation: %v", err)
+	}
+
+	return nil
+}
+
+// UpdateFriendRemark 更新好友备注
+func (s *Service) UpdateFriendRemark(ctx context.Context, userID, friendID int64, newRemark string) error {
+	return s.dao.UpdateFriendRemark(ctx, userID, friendID, newRemark)
+}
+
+// GetFriend 获取单个好友信息
+func (s *Service) GetFriend(ctx context.Context, userID, friendID int64) (*model.Friend, error) {
+	return s.dao.GetFriend(ctx, userID, friendID)
 }
 
 // ListFriends 查询好友列表
 func (s *Service) ListFriends(ctx context.Context, userID int64) ([]*model.Friend, error) {
-	var friends []*model.Friend
-	filter := bson.M{"user_id": userID}
-	opts := options.FindOptions{}
-	opts.SetLimit(50) // 上限50个好友
-	cursor, err := s.db.GetCollection("friends").Find(ctx, filter)
+	return s.dao.ListFriends(ctx, userID)
+}
+
+// ApplyFriend 申请加好友
+func (s *Service) ApplyFriend(ctx context.Context, userID, friendID int64, remark string) error {
+	if userID == friendID {
+		return fmt.Errorf("不能添加自己为好友")
+	}
+
+	// 检查是否已是好友
+	isFriend, err := s.dao.IsFriend(ctx, userID, friendID)
 	if err != nil {
-		err = cursor.All(ctx, &friends)
+		return fmt.Errorf("failed to check friend relation: %v", err)
 	}
-	return friends, err
-}
-
-// gRPC服务端实现
-type GRPCService struct {
-	friendpb.UnimplementedFriendEventServiceServer
-	svc *Service
-}
-
-// NewGRPCService 创建gRPC服务
-func (s *Service) NewGRPCService(svc *Service) *GRPCService {
-	return &GRPCService{svc: svc}
-}
-
-// NotifyFriendEvent 处理好友事件通知
-func (g *GRPCService) NotifyFriendEvent(ctx context.Context, req *friendpb.NotifyFriendEventRequest) (*friendpb.NotifyFriendEventResponse, error) {
-	event := req.GetEvent()
-	if event == nil {
-		return &friendpb.NotifyFriendEventResponse{
-			Success: false,
-			Message: "event is nil",
-		}, nil
+	if isFriend {
+		return fmt.Errorf("已是好友")
 	}
 
-	// 根据事件类型处理
-	switch event.Type {
-	case friendpb.FriendEventType_ADD_FRIEND:
-		err := g.svc.AddFriend(ctx, event.UserId, event.FriendId, event.Remark)
-		if err != nil {
-			return &friendpb.NotifyFriendEventResponse{
-				Success: false,
-				Message: err.Error(),
-			}, nil
+	// 检查是否已存在未处理的申请
+	existingApply, err := s.dao.GetFriendApply(ctx, friendID, userID)
+	if err == nil && existingApply != nil && existingApply.Status == "pending" {
+		return fmt.Errorf("已申请，等待对方处理")
+	}
+
+	apply := &model.FriendApply{
+		UserID:      friendID, // 被申请人
+		ApplicantID: userID,   // 申请人
+		Remark:      remark,
+		Status:      "pending",
+		Timestamp:   time.Now().Unix(),
+	}
+	return s.dao.CreateFriendApply(ctx, apply)
+}
+
+// RespondFriendApply 同意/拒绝好友申请
+func (s *Service) RespondFriendApply(ctx context.Context, userID, applicantID int64, agree bool) error {
+	status := "rejected"
+	if agree {
+		status = "accepted"
+	}
+
+	if err := s.dao.UpdateFriendApplyStatus(ctx, userID, applicantID, status); err != nil {
+		return fmt.Errorf("failed to update friend apply status: %v", err)
+	}
+
+	// 同意则创建双向好友关系
+	if agree {
+		friend1 := &model.Friend{
+			UserID:    userID,
+			FriendID:  applicantID,
+			Remark:    "",
+			CreatedAt: time.Now().Unix(),
 		}
-	case friendpb.FriendEventType_DELETE_FRIEND:
-		err := g.svc.DeleteFriend(ctx, event.UserId, event.FriendId)
-		if err != nil {
-			return &friendpb.NotifyFriendEventResponse{
-				Success: false,
-				Message: err.Error(),
-			}, nil
+		friend2 := &model.Friend{
+			UserID:    applicantID,
+			FriendID:  userID,
+			Remark:    "",
+			CreatedAt: time.Now().Unix(),
 		}
-	default:
-		return &friendpb.NotifyFriendEventResponse{
-			Success: false,
-			Message: "unknown event type",
-		}, nil
+
+		if err := s.dao.CreateFriend(ctx, friend1); err != nil {
+			return fmt.Errorf("failed to create friend relation 1: %v", err)
+		}
+		if err := s.dao.CreateFriend(ctx, friend2); err != nil {
+			return fmt.Errorf("failed to create friend relation 2: %v", err)
+		}
 	}
 
-	return &friendpb.NotifyFriendEventResponse{
-		Success: true,
-		Message: "ok",
-	}, nil
+	return nil
+}
+
+// ListFriendApply 查询好友申请列表
+func (s *Service) ListFriendApply(ctx context.Context, userID int64) ([]*model.FriendApply, error) {
+	return s.dao.ListFriendApply(ctx, userID)
 }

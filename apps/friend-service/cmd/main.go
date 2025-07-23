@@ -5,7 +5,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	friendpb "websocket-server/api/rest"
+	"websocket-server/api/rest"
+	"websocket-server/apps/friend-service/dao"
 	"websocket-server/apps/friend-service/handler"
 	"websocket-server/apps/friend-service/service"
 	"websocket-server/pkg/server"
@@ -26,21 +27,26 @@ func main() {
 		panic(err)
 	}
 	defer conn.Close()
-	messageClient := friendpb.NewFriendEventServiceClient(conn)
+	messageClient := rest.NewFriendEventServiceClient(conn)
+
+	// 初始化DAO层
+	friendDAO := dao.NewFriendDAO(app.GetMongoDB())
 
 	// 初始化Service层
-	svc := service.NewService(app.GetMongoDB(), app.GetRedisClient(), app.GetKafkaProducer(), messageClient)
+	svc := service.NewService(friendDAO, app.GetRedisClient(), app.GetKafkaProducer(), messageClient)
+
+	// 初始化Handler
+	httpHandler := handler.NewHTTPHandler(svc, app.GetLogger())
+	grpcHandler := handler.NewGRPCHandler(svc, app.GetLogger())
 
 	// 注册HTTP路由
 	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
-		httpHandler := handler.NewHandler(svc, app.GetLogger())
 		httpHandler.RegisterRoutes(engine)
 	})
 
 	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
-		grpcService := svc.NewGRPCService(svc)
-		friendpb.RegisterFriendEventServiceServer(grpcSrv, grpcService)
+		rest.RegisterFriendEventServiceServer(grpcSrv, grpcHandler)
 	})
 
 	// 运行应用程序
