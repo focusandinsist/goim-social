@@ -45,12 +45,19 @@ type GRPCConfig struct {
 
 // DatabaseConfig 数据库配置
 type DatabaseConfig struct {
-	MongoDB MongoDBConfig `yaml:"mongodb"`
+	MongoDB    MongoDBConfig    `yaml:"mongodb"`
+	PostgreSQL PostgreSQLConfig `yaml:"postgresql"`
 }
 
 // MongoDBConfig MongoDB配置
 type MongoDBConfig struct {
 	URI    string `yaml:"uri"`
+	DBName string `yaml:"db_name"`
+}
+
+// PostgreSQLConfig PostgreSQL配置
+type PostgreSQLConfig struct {
+	DSN    string `yaml:"dsn"`
 	DBName string `yaml:"db_name"`
 }
 
@@ -150,6 +157,10 @@ func LoadConfig(serviceName string) *Config {
 			MongoDB: MongoDBConfig{
 				URI:    getEnvOrDefault("MONGODB_URI", "mongodb://localhost:27017"),
 				DBName: getEnvOrDefault("MONGODB_DB", serviceName+"DB"),
+			},
+			PostgreSQL: PostgreSQLConfig{
+				DSN:    getEnvOrDefault("POSTGRESQL_DSN", "host=localhost user=postgres password=postgres dbname="+serviceName+"DB port=5432 sslmode=disable TimeZone=Asia/Shanghai"),
+				DBName: getEnvOrDefault("POSTGRESQL_DB", serviceName+"DB"),
 			},
 		},
 		Redis: RedisConfig{

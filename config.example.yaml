@@ -26,6 +26,9 @@ database:
   mongodb:
     uri: mongodb://localhost:27017
     db_name: serviceDB
+  postgresql:
+    dsn: "host=localhost user=postgres password=postgres dbname=serviceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+    db_name: serviceDB
 
 redis:
   addr: localhost:6379

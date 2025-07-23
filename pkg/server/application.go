@@ -30,6 +30,7 @@ type Application struct {
 
 	// 基础设施组件
 	mongoDB       *database.MongoDB
+	postgreSQL    *database.PostgreSQL
 	redisClient   *redis.RedisClient
 	kafkaProducer *kafka.Producer
 
@@ -97,6 +98,14 @@ func (app *Application) initInfrastructure() {
 	}
 	app.mongoDB = mongoDB
 
+	// 初始化PostgreSQL
+	postgreSQL, err := database.NewPostgreSQL(app.config.Database.PostgreSQL.DSN, app.config.Database.PostgreSQL.DBName)
+	if err != nil {
+		app.logger.Log(kratoslog.LevelFatal, "msg", "Failed to connect to PostgreSQL", "error", err)
+		panic(err)
+	}
+	app.postgreSQL = postgreSQL
+
 	// 初始化Redis
 	app.redisClient = redis.NewRedisClient(app.config.Redis.Addr)
 
@@ -152,6 +161,11 @@ func (app *Application) GetRedisClient() *redis.RedisClient {
 // GetKafkaProducer 获取Kafka生产者
 func (app *Application) GetKafkaProducer() *kafka.Producer {
 	return app.kafkaProducer
+}
+
+// GetPostgreSQL 获取PostgreSQL连接
+func (app *Application) GetPostgreSQL() *database.PostgreSQL {
+	return app.postgreSQL
 }
 
 // GetLogger 获取原有日志器
@@ -220,6 +234,25 @@ func (app *Application) registerLifecycleHooks() {
 		Priority: 200,
 		OnStop: func(ctx context.Context) error {
 			return app.clientManager.CloseAll()
+		},
+	})
+
+	// 数据库清理钩子
+	app.lifecycle.AddHook(lifecycle.Hook{
+		Name:     "databases",
+		Priority: 300,
+		OnStop: func(ctx context.Context) error {
+			if app.mongoDB != nil {
+				if err := app.mongoDB.Close(); err != nil {
+					app.logger.Log(kratoslog.LevelError, "msg", "Failed to close MongoDB", "error", err)
+				}
+			}
+			if app.postgreSQL != nil {
+				if err := app.postgreSQL.Close(); err != nil {
+					app.logger.Log(kratoslog.LevelError, "msg", "Failed to close PostgreSQL", "error", err)
+				}
+			}
+			return nil
 		},
 	})
 }

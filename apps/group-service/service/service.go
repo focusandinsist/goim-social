@@ -2,197 +2,393 @@ package service
 
 import (
 	"context"
-	"websocket-server/api/rest"
+	"fmt"
+	"time"
+
+	"websocket-server/apps/group-service/dao"
 	"websocket-server/apps/group-service/model"
-	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
+	"websocket-server/pkg/logger"
 	"websocket-server/pkg/redis"
 )
 
+// Service 群组服务
 type Service struct {
-	db    *database.MongoDB
-	redis *redis.RedisClient
-	kafka *kafka.Producer
+	dao    dao.GroupDAO
+	redis  *redis.RedisClient
+	kafka  *kafka.Producer
+	logger logger.Logger
 }
 
-func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer) *Service {
+// NewService 创建群组服务实例
+func NewService(groupDAO dao.GroupDAO, redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logger) *Service {
 	return &Service{
-		db:    db,
-		redis: redis,
-		kafka: kafka,
+		dao:    groupDAO,
+		redis:  redis,
+		kafka:  kafka,
+		logger: log,
 	}
-}
-
-// Message 群消息结构体
-// 如有需要可迁移到 model 层
-
-type Message struct {
-	ID      int64
-	Content string
 }
 
 // CreateGroup 创建群组
-func (s *Service) CreateGroup(ctx context.Context, name, description string, ownerID int64, memberIDs []int64) (*model.Group, error) {
-	// TODO: 实现数据库写入
-	return &model.Group{
-		ID:          1,
-		Name:        name,
-		Description: description,
-		OwnerID:     ownerID,
-		MemberIDs:   memberIDs,
-	}, nil
+func (s *Service) CreateGroup(ctx context.Context, name, description, avatar string, ownerID int64, isPublic bool, maxMembers int32, memberIDs []int64) (*model.Group, error) {
+	if name == "" {
+		return nil, fmt.Errorf("群组名称不能为空")
+	}
+	if ownerID <= 0 {
+		return nil, fmt.Errorf("群主ID无效")
+	}
+	if maxMembers <= 0 {
+		maxMembers = model.DefaultMaxMembers
+	}
+
+	// 创建群组
+	group := &model.Group{
+		Name:         name,
+		Description:  description,
+		Avatar:       avatar,
+		OwnerID:      ownerID,
+		MemberCount:  1, // 群主自己
+		MaxMembers:   maxMembers,
+		IsPublic:     isPublic,
+		Announcement: "",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := s.dao.CreateGroup(ctx, group); err != nil {
+		return nil, fmt.Errorf("创建群组失败: %v", err)
+	}
+
+	// 添加群主为成员
+	ownerMember := &model.GroupMember{
+		GroupID:  group.ID,
+		UserID:   ownerID,
+		Role:     model.RoleOwner,
+		Nickname: "",
+		JoinedAt: time.Now(),
+	}
+	if err := s.dao.AddMember(ctx, ownerMember); err != nil {
+		return nil, fmt.Errorf("添加群主失败: %v", err)
+	}
+
+	// 添加初始成员
+	memberCount := int32(1) // 群主
+	for _, memberID := range memberIDs {
+		if memberID == ownerID {
+			continue
+		}
+		member := &model.GroupMember{
+			GroupID:  group.ID,
+			UserID:   memberID,
+			Role:     model.RoleMember,
+			Nickname: "",
+			JoinedAt: time.Now(),
+		}
+		if err := s.dao.AddMember(ctx, member); err != nil {
+			// 记录错误但不中断流程
+			s.logger.Error(ctx, "Failed to add initial member to group",
+				logger.F("groupID", group.ID),
+				logger.F("memberID", memberID),
+				logger.F("error", err.Error()))
+			continue
+		}
+		memberCount++
+	}
+
+	// 更新成员数量
+	group.MemberCount = memberCount
+	if err := s.dao.UpdateMemberCount(ctx, group.ID, memberCount); err != nil {
+		// 记录错误但不影响返回结果
+		s.logger.Error(ctx, "Failed to update member count after group creation",
+			logger.F("groupID", group.ID),
+			logger.F("memberCount", memberCount),
+			logger.F("error", err.Error()))
+	}
+
+	return group, nil
 }
 
-// AddMembers 添加成员到群组
-func (s *Service) AddMembers(ctx context.Context, groupID int64, userIDs []int64) error {
-	// TODO: 实现添加成员逻辑
+// GetGroupInfo 获取群组信息
+func (s *Service) GetGroupInfo(ctx context.Context, groupID, userID int64) (*model.Group, []*model.GroupMember, error) {
+	isMember, err := s.dao.IsMember(ctx, groupID, userID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("检查成员身份失败: %v", err)
+	}
+
+	group, err := s.dao.GetGroup(ctx, groupID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("获取群组信息失败: %v", err)
+	}
+
+	// 如果是私有群且用户不是成员，只返回基本信息
+	if !group.IsPublic && !isMember {
+		return &model.Group{
+			ID:          group.ID,
+			Name:        group.Name,
+			Avatar:      group.Avatar,
+			MemberCount: group.MemberCount,
+			IsPublic:    group.IsPublic,
+		}, nil, nil
+	}
+
+	// 获取群成员列表
+	members, err := s.dao.GetGroupMembers(ctx, groupID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("获取群成员失败: %v", err)
+	}
+
+	return group, members, nil
+}
+
+// SearchGroups 搜索群组
+func (s *Service) SearchGroups(ctx context.Context, keyword string, page, pageSize int32) ([]*model.Group, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = model.DefaultPageSize
+	}
+
+	return s.dao.SearchGroups(ctx, keyword, page, pageSize)
+}
+
+// GetUserGroups 获取用户群组列表
+func (s *Service) GetUserGroups(ctx context.Context, userID int64, page, pageSize int32) ([]*model.Group, int64, error) {
+	if userID <= 0 {
+		return nil, 0, fmt.Errorf("用户ID无效")
+	}
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = model.DefaultPageSize
+	}
+
+	return s.dao.GetUserGroups(ctx, userID, page, pageSize)
+}
+
+// DisbandGroup 解散群组
+func (s *Service) DisbandGroup(ctx context.Context, groupID, userID int64) error {
+	member, err := s.dao.GetMember(ctx, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("获取成员信息失败: %v", err)
+	}
+	if member == nil || member.Role != model.RoleOwner {
+		return fmt.Errorf("只有群主可以解散群组")
+	}
+
+	// 删除群组（级联删除成员、邀请、申请等）
+	return s.dao.DeleteGroup(ctx, groupID)
+}
+
+// JoinGroup 加入群组
+func (s *Service) JoinGroup(ctx context.Context, groupID, userID int64, reason string) error {
+	group, err := s.dao.GetGroup(ctx, groupID)
+	if err != nil {
+		return fmt.Errorf("群组不存在: %v", err)
+	}
+
+	isMember, err := s.dao.IsMember(ctx, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("检查成员身份失败: %v", err)
+	}
+	if isMember {
+		return fmt.Errorf("已是群成员")
+	}
+
+	if group.MemberCount >= group.MaxMembers {
+		return fmt.Errorf("群组已满")
+	}
+
+	// 如果是公开群，直接加入
+	if group.IsPublic {
+		member := &model.GroupMember{
+			GroupID:  groupID,
+			UserID:   userID,
+			Role:     model.RoleMember,
+			Nickname: "",
+			JoinedAt: time.Now(),
+		}
+		if err := s.dao.AddMember(ctx, member); err != nil {
+			return fmt.Errorf("加入群组失败: %v", err)
+		}
+
+		// 更新成员数量
+		newCount := group.MemberCount + 1
+		if err := s.dao.UpdateMemberCount(ctx, groupID, newCount); err != nil {
+			// 日志记录错误，但不影响结果
+			s.logger.Error(ctx, "Failed to update member count after joining group",
+				logger.F("groupID", groupID),
+				logger.F("newCount", newCount),
+				logger.F("error", err.Error()))
+		}
+
+		return nil
+	}
+
+	// 私有群需要申请
+	return s.createJoinRequest(ctx, groupID, userID, reason)
+}
+
+// createJoinRequest 创建加群申请
+func (s *Service) createJoinRequest(ctx context.Context, groupID, userID int64, reason string) error {
+	existingRequest, err := s.dao.GetJoinRequest(ctx, groupID, userID)
+	if err == nil && existingRequest != nil && existingRequest.Status == model.JoinRequestStatusPending {
+		return fmt.Errorf("已有待处理的申请")
+	}
+
+	request := &model.GroupJoinRequest{
+		GroupID:   groupID,
+		UserID:    userID,
+		Reason:    reason,
+		Status:    model.JoinRequestStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	return s.dao.CreateJoinRequest(ctx, request)
+}
+
+// LeaveGroup 退出群组
+func (s *Service) LeaveGroup(ctx context.Context, groupID, userID int64) error {
+	member, err := s.dao.GetMember(ctx, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("获取成员信息失败: %v", err)
+	}
+	if member == nil {
+		return fmt.Errorf("不是群成员")
+	}
+
+	if member.Role == model.RoleOwner {
+		return fmt.Errorf("群主不能退出群组，请解散群组")
+	}
+
+	if err := s.dao.RemoveMember(ctx, groupID, userID); err != nil {
+		return fmt.Errorf("退出群组失败: %v", err)
+	}
+
+	// 更新成员数量
+	count, err := s.dao.GetMemberCount(ctx, groupID)
+	if err == nil {
+		if updateErr := s.dao.UpdateMemberCount(ctx, groupID, count); updateErr != nil {
+			s.logger.Error(ctx, "Failed to update member count after leaving group",
+				logger.F("groupID", groupID),
+				logger.F("count", count),
+				logger.F("error", updateErr.Error()))
+		}
+	} else {
+		s.logger.Error(ctx, "Failed to get member count after leaving group",
+			logger.F("groupID", groupID),
+			logger.F("error", err.Error()))
+	}
+
 	return nil
 }
 
-// SendMessage 发送群消息
-func (s *Service) SendMessage(ctx context.Context, groupID, senderID int64, content string, messageType int) (*Message, error) {
-	// TODO: 实现消息发送逻辑
-	return &Message{
-		ID:      1,
-		Content: content,
-	}, nil
-}
+// KickMember 踢出成员
+func (s *Service) KickMember(ctx context.Context, groupID, operatorID, targetUserID int64) error {
+	operator, err := s.dao.GetMember(ctx, groupID, operatorID)
+	if err != nil {
+		return fmt.Errorf("获取操作者信息失败: %v", err)
+	}
+	if operator == nil || (operator.Role != model.RoleOwner && operator.Role != model.RoleAdmin) {
+		return fmt.Errorf("权限不足")
+	}
 
-// GetGroup 获取群组信息
-func (s *Service) GetGroup(ctx context.Context, groupID int64) (*model.Group, error) {
-	// TODO: 实现获取群组信息逻辑
-	return &model.Group{
-		ID:          groupID,
-		Name:        "示例群",
-		Description: "desc",
-		OwnerID:     1,
-		MemberIDs:   []int64{1, 2, 3},
-	}, nil
-}
+	target, err := s.dao.GetMember(ctx, groupID, targetUserID)
+	if err != nil {
+		return fmt.Errorf("获取目标用户信息失败: %v", err)
+	}
+	if target == nil {
+		return fmt.Errorf("目标用户不是群成员")
+	}
 
-// DeleteGroup 删除群组
-func (s *Service) DeleteGroup(ctx context.Context, groupID, userID int64) error {
-	// TODO: 实现删除群组逻辑
+	if target.Role == model.RoleOwner {
+		return fmt.Errorf("不能踢出群主")
+	}
+
+	if operator.Role == model.RoleAdmin && target.Role == model.RoleAdmin {
+		return fmt.Errorf("只有群主可以踢出管理员")
+	}
+
+	if err := s.dao.RemoveMember(ctx, groupID, targetUserID); err != nil {
+		return fmt.Errorf("踢出成员失败: %v", err)
+	}
+
+	// 更新成员数量
+	count, err := s.dao.GetMemberCount(ctx, groupID)
+	if err == nil {
+		if updateErr := s.dao.UpdateMemberCount(ctx, groupID, count); updateErr != nil {
+			s.logger.Error(ctx, "Failed to update member count after kicking member",
+				logger.F("groupID", groupID),
+				logger.F("targetUserID", targetUserID),
+				logger.F("count", count),
+				logger.F("error", updateErr.Error()))
+		}
+	} else {
+		s.logger.Error(ctx, "Failed to get member count after kicking member",
+			logger.F("groupID", groupID),
+			logger.F("targetUserID", targetUserID),
+			logger.F("error", err.Error()))
+	}
+
 	return nil
 }
 
-// GetGroupList 获取群组列表
-func (s *Service) GetGroupList(ctx context.Context, userID int64, page, size int) ([]*model.Group, int, error) {
-	// TODO: 实现获取群组列表逻辑
-	return []*model.Group{}, 0, nil
-}
-
-// GetGroupInfo 获取群组详细信息
-func (s *Service) GetGroupInfo(ctx context.Context, groupID, userID int64) (*model.Group, error) {
-	// TODO: 实现获取群组详细信息逻辑
-	return &model.Group{
-		ID:          groupID,
-		Name:        "示例群",
-		Description: "desc",
-		OwnerID:     1,
-		MemberIDs:   []int64{1, 2, 3},
-	}, nil
-}
-
-// 业务方法中可直接用 s.db, s.redis, s.kafka
-
-// GRPCService gRPC服务实现
-type GRPCService struct {
-	rest.UnimplementedGroupServiceServer
-	svc *Service
-}
-
-// NewGRPCService 构造函数
-func (s *Service) NewGRPCService(svc *Service) *GRPCService {
-	return &GRPCService{svc: svc}
-}
-
-// CreateGroup gRPC接口实现
-func (g *GRPCService) CreateGroup(ctx context.Context, req *rest.CreateGroupRequest) (*rest.CreateGroupResponse, error) {
-	group, err := g.svc.CreateGroup(ctx, req.Name, req.Description, req.OwnerId, req.MemberIds)
+// InviteToGroup 邀请加入群组
+func (s *Service) InviteToGroup(ctx context.Context, groupID, inviterID, inviteeID int64, message string) error {
+	inviter, err := s.dao.GetMember(ctx, groupID, inviterID)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("获取邀请者信息失败: %v", err)
+	}
+	if inviter == nil {
+		return fmt.Errorf("邀请者不是群成员")
 	}
 
-	return &rest.CreateGroupResponse{
-		Group: &rest.GroupInfo{
-			Id:          group.ID,
-			Name:        group.Name,
-			Description: group.Description,
-			OwnerId:     group.OwnerID,
-			MemberIds:   group.MemberIDs,
-		},
-	}, nil
-}
-
-// AddMembers gRPC接口实现
-func (g *GRPCService) AddMembers(ctx context.Context, req *rest.AddMembersRequest) (*rest.AddMembersResponse, error) {
-	err := g.svc.AddMembers(ctx, req.GroupId, req.UserIds)
-	return &rest.AddMembersResponse{Success: err == nil}, err
-}
-
-// GetGroup gRPC接口实现
-func (g *GRPCService) GetGroup(ctx context.Context, req *rest.GetGroupRequest) (*rest.GetGroupResponse, error) {
-	group, err := g.svc.GetGroup(ctx, req.GroupId)
+	isMember, err := s.dao.IsMember(ctx, groupID, inviteeID)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("检查被邀请者身份失败: %v", err)
+	}
+	if isMember {
+		return fmt.Errorf("被邀请者已是群成员")
 	}
 
-	return &rest.GetGroupResponse{
-		Group: &rest.GroupInfo{
-			Id:          group.ID,
-			Name:        group.Name,
-			Description: group.Description,
-			OwnerId:     group.OwnerID,
-			MemberIds:   group.MemberIDs,
-		},
-	}, nil
+	existingInvitation, err := s.dao.GetInvitation(ctx, groupID, inviteeID)
+	if err == nil && existingInvitation != nil && existingInvitation.Status == model.InvitationStatusPending {
+		return fmt.Errorf("已有待处理的邀请")
+	}
+
+	// 创建邀请
+	invitation := &model.GroupInvitation{
+		GroupID:   groupID,
+		InviterID: inviterID,
+		InviteeID: inviteeID,
+		Message:   message,
+		Status:    model.InvitationStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	return s.dao.CreateInvitation(ctx, invitation)
 }
 
-// DeleteGroup gRPC接口实现
-func (g *GRPCService) DeleteGroup(ctx context.Context, req *rest.DeleteGroupRequest) (*rest.DeleteGroupResponse, error) {
-	err := g.svc.DeleteGroup(ctx, req.GroupId, req.UserId)
-	return &rest.DeleteGroupResponse{Success: err == nil}, err
-}
-
-// GetGroupList gRPC接口实现
-func (g *GRPCService) GetGroupList(ctx context.Context, req *rest.GetGroupListRequest) (*rest.GetGroupListResponse, error) {
-	groups, total, err := g.svc.GetGroupList(ctx, req.UserId, int(req.Page), int(req.Size))
+// PublishAnnouncement 发布群公告
+func (s *Service) PublishAnnouncement(ctx context.Context, groupID, userID int64, content string) error {
+	member, err := s.dao.GetMember(ctx, groupID, userID)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("获取成员信息失败: %v", err)
+	}
+	if member == nil || (member.Role != model.RoleOwner && member.Role != model.RoleAdmin) {
+		return fmt.Errorf("权限不足")
 	}
 
-	var groupInfos []*rest.GroupInfo
-	for _, group := range groups {
-		groupInfos = append(groupInfos, &rest.GroupInfo{
-			Id:          group.ID,
-			Name:        group.Name,
-			Description: group.Description,
-			OwnerId:     group.OwnerID,
-			MemberIds:   group.MemberIDs,
-		})
+	// 更新群公告
+	group := &model.Group{
+		ID:           groupID,
+		Announcement: content,
+		UpdatedAt:    time.Now(),
 	}
 
-	return &rest.GetGroupListResponse{
-		Groups: groupInfos,
-		Total:  int32(total),
-	}, nil
-}
-
-// GetGroupInfo gRPC接口实现
-func (g *GRPCService) GetGroupInfo(ctx context.Context, req *rest.GetGroupInfoRequest) (*rest.GetGroupInfoResponse, error) {
-	group, err := g.svc.GetGroupInfo(ctx, req.GroupId, req.UserId)
-	if err != nil {
-		return nil, err
-	}
-
-	return &rest.GetGroupInfoResponse{
-		Group: &rest.GroupInfo{
-			Id:          group.ID,
-			Name:        group.Name,
-			Description: group.Description,
-			OwnerId:     group.OwnerID,
-			MemberIds:   group.MemberIDs,
-		},
-	}, nil
+	return s.dao.UpdateGroup(ctx, group)
 }
