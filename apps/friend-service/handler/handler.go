@@ -1,16 +1,14 @@
 package handler
 
 import (
-	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/friend-service/model"
 	"websocket-server/apps/friend-service/service"
 	"websocket-server/pkg/logger"
+	"websocket-server/pkg/utils"
 )
 
 type Handler struct {
@@ -22,50 +20,26 @@ func NewHandler(service *service.Service, logger logger.Logger) *Handler {
 	return &Handler{service: service, logger: logger}
 }
 
-// sendProtoResponse 发送protobuf响应
-func (h *Handler) sendProtoResponse(c *gin.Context, msg proto.Message) {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to marshal protobuf response", logger.F("error", err.Error()))
-		c.Status(http.StatusInternalServerError)
-		return
-	}
-	c.Data(http.StatusOK, "application/x-protobuf", data)
-}
-
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	api := r.Group("/api/v1/friend")
 	{
-		api.POST("/add", h.AddFriend)                    // 添加好友
-		api.POST("/delete", h.DeleteFriend)              // 删除好友
 		api.POST("/list", h.ListFriends)                 // 查询好友列表
-		api.POST("/get", h.GetFriend)                    // 获取单个好友信息
+		api.POST("/profile", h.GetFriendProfile)         // 获取单个好友个人简介
 		api.POST("/update_remark", h.UpdateFriendRemark) // 更新好友备注
-		api.POST("/apply", h.ApplyFriend)                // 申请加好友
-		api.POST("/respond_apply", h.RespondFriendApply) // 同意/拒绝好友申请
 		api.POST("/apply_list", h.ListFriendApply)       // 查询好友申请列表
+		api.POST("/apply", h.ApplyFriend)                // 申请加好友
+		api.POST("/respond_apply", h.RespondFriendApply) // 回应好友申请
+		api.POST("/delete", h.DeleteFriend)              // 删除好友
 	}
 }
 
-func (h *Handler) AddFriend(c *gin.Context) {
+func (h *Handler) DeleteFriend(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	// 读取protobuf请求体
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to read request body", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.AddFriendResponse{
-			Success: false,
-			Message: "Failed to read request body",
-		})
-		return
-	}
-
-	// 解析protobuf请求
-	var req rest.AddFriendRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
+	var req rest.DeleteFriendRequest
+	if err := utils.ReadProtoRequest(c, &req); err != nil {
 		h.logger.Error(ctx, "Invalid protobuf request", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.AddFriendResponse{
+		utils.SendProtoError(c, http.StatusBadRequest, &rest.DeleteFriendResponse{
 			Success: false,
 			Message: "Invalid protobuf request",
 		})
@@ -73,9 +47,9 @@ func (h *Handler) AddFriend(c *gin.Context) {
 	}
 
 	// 调用服务层
-	if err := h.service.AddFriend(ctx, req.UserId, req.FriendId, req.Remark); err != nil {
-		h.logger.Error(ctx, "Add friend failed", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.AddFriendResponse{
+	if err := h.service.DeleteFriend(ctx, req.GetUserId(), req.GetFriendId()); err != nil {
+		h.logger.Error(ctx, "Delete friend failed", logger.F("error", err.Error()))
+		utils.SendProtoError(c, http.StatusInternalServerError, &rest.DeleteFriendResponse{
 			Success: false,
 			Message: err.Error(),
 		})
@@ -83,178 +57,209 @@ func (h *Handler) AddFriend(c *gin.Context) {
 	}
 
 	// 返回成功响应
-	h.sendProtoResponse(c, &rest.AddFriendResponse{
+	utils.SendProtoResponse(c, &rest.DeleteFriendResponse{
 		Success: true,
-		Message: "添加好友成功",
+		Message: "删除好友成功",
 	})
-}
-
-func (h *Handler) DeleteFriend(c *gin.Context) {
-	ctx := c.Request.Context()
-	var req model.DeleteFriendRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error(ctx, "Invalid delete friend request", logger.F("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := h.service.DeleteFriend(ctx, req.UserID, req.FriendID); err != nil {
-		h.logger.Error(ctx, "Delete friend failed", logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "删除好友成功"})
 }
 
 func (h *Handler) ListFriends(c *gin.Context) {
 	ctx := c.Request.Context()
-	var req model.ListFriendsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error(ctx, "Invalid list friends request", logger.F("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	friends, err := h.service.ListFriends(ctx, req.UserID)
-	if err != nil {
-		h.logger.Error(ctx, "List friends failed", logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"friends": friends})
-}
 
-func (h *Handler) GetFriend(c *gin.Context) {
-	ctx := c.Request.Context()
-	var req model.GetFriendRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error(ctx, "Invalid get friend request", logger.F("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	friend, err := h.service.GetFriend(ctx, req.UserID, req.FriendID)
-	if err != nil {
-		h.logger.Error(ctx, "Get friend failed", logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"friend": friend})
-}
-
-func (h *Handler) UpdateFriendRemark(c *gin.Context) {
-	ctx := c.Request.Context()
-	var req model.UpdateFriendRemarkRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error(ctx, "Invalid update friend remark request", logger.F("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := h.service.UpdateFriendRemark(ctx, req.UserID, req.FriendID, req.NewRemark); err != nil {
-		h.logger.Error(ctx, "Update friend remark failed", logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "更新好友备注成功"})
-}
-
-// 申请加好友
-func (h *Handler) ApplyFriend(c *gin.Context) {
-	ctx := c.Request.Context()
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to read request body", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.ApplyFriendResponse{
-			Success: false,
-			Message: "Failed to read request body",
-		})
-		return
-	}
-	var req rest.ApplyFriendRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
+	var req rest.ListFriendsRequest
+	if err := utils.ReadProtoRequest(c, &req); err != nil {
 		h.logger.Error(ctx, "Invalid protobuf request", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.ApplyFriendResponse{
+		utils.SendProtoError(c, http.StatusBadRequest, &rest.ListFriendsResponse{
 			Success: false,
 			Message: "Invalid protobuf request",
 		})
 		return
 	}
-	if err := h.service.ApplyFriend(ctx, req.UserId, req.FriendId, req.Remark); err != nil {
-		h.logger.Error(ctx, "Apply friend failed", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.ApplyFriendResponse{
+
+	// 调用服务层
+	friends, err := h.service.ListFriends(ctx, req.GetUserId())
+	if err != nil {
+		h.logger.Error(ctx, "List friends failed", logger.F("error", err.Error()))
+		utils.SendProtoError(c, http.StatusInternalServerError, &rest.ListFriendsResponse{
 			Success: false,
 			Message: err.Error(),
 		})
 		return
 	}
-	h.sendProtoResponse(c, &rest.ApplyFriendResponse{
+
+	// 转换为protobuf格式
+	var pbFriends []*rest.FriendInfo
+	for _, friend := range friends {
+		pbFriends = append(pbFriends, &rest.FriendInfo{
+			UserId:    friend.UserID,
+			FriendId:  friend.FriendID,
+			Remark:    friend.Remark,
+			CreatedAt: friend.CreatedAt,
+		})
+	}
+
+	// 返回成功响应
+	utils.SendProtoResponse(c, &rest.ListFriendsResponse{
+		Success:  true,
+		Message:  "查询成功",
+		Friends:  pbFriends,
+		Total:    int32(len(pbFriends)),
+		Page:     req.GetPage(),
+		PageSize: req.GetPageSize(),
+	})
+}
+
+func (h *Handler) GetFriendProfile(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req rest.FriendProfileRequest
+	if err := utils.ReadProtoRequest(c, &req); err != nil {
+		h.logger.Error(ctx, "Invalid protobuf request", logger.F("error", err.Error()))
+		utils.SendProtoError(c, http.StatusBadRequest, &rest.FriendProfileResponse{
+			Success: false,
+			Message: "Invalid protobuf request",
+		})
+		return
+	}
+
+	friend, err := h.service.GetFriend(ctx, req.GetUserId(), req.GetFriendId())
+	if err != nil {
+		h.logger.Error(ctx, "Get friend failed", logger.F("error", err.Error()))
+		utils.SendProtoError(c, http.StatusInternalServerError, &rest.FriendProfileResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	utils.SendProtoResponse(c, &rest.FriendProfileResponse{
+		Success: true,
+		Message: "查询成功",
+		Alias:   friend.Remark,
+		// TODO: 还有其他字段，回头丰富一下
+	})
+}
+
+func (h *Handler) UpdateFriendRemark(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req rest.SetFriendAliasRequest
+	if err := utils.ReadProtoRequest(c, &req); err != nil {
+		h.logger.Error(ctx, "Invalid protobuf request", logger.F("error", err.Error()))
+		utils.SendProtoError(c, http.StatusBadRequest, &rest.SetFriendAliasResponse{
+			Success: false,
+			Message: "Invalid protobuf request",
+		})
+		return
+	}
+
+	if err := h.service.UpdateFriendRemark(ctx, req.GetUserId(), req.GetFriendId(), req.GetAlias()); err != nil {
+		h.logger.Error(ctx, "Update friend remark failed", logger.F("error", err.Error()))
+		utils.SendProtoError(c, http.StatusInternalServerError, &rest.SetFriendAliasResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	utils.SendProtoResponse(c, &rest.SetFriendAliasResponse{
+		Success: true,
+		Message: "更新好友备注成功",
+	})
+}
+
+func (h *Handler) ApplyFriend(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req rest.ApplyFriendRequest
+	if err := utils.ReadProtoRequest(c, &req); err != nil {
+		h.logger.Error(ctx, "Invalid protobuf request", logger.F("error", err.Error()))
+		utils.SendProtoError(c, http.StatusBadRequest, &rest.ApplyFriendResponse{
+			Success: false,
+			Message: "Invalid protobuf request",
+		})
+		return
+	}
+
+	// 调用服务层
+	if err := h.service.ApplyFriend(ctx, req.UserId, req.FriendId, req.Remark); err != nil {
+		h.logger.Error(ctx, "Apply friend failed", logger.F("error", err.Error()))
+		utils.SendProtoError(c, http.StatusInternalServerError, &rest.ApplyFriendResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// 返回成功响应
+	utils.SendProtoResponse(c, &rest.ApplyFriendResponse{
 		Success: true,
 		Message: "好友申请已提交，等待对方处理",
 	})
 }
 
-// 同意/拒绝好友申请
 func (h *Handler) RespondFriendApply(c *gin.Context) {
 	ctx := c.Request.Context()
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to read request body", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.RespondFriendApplyResponse{
-			Success: false,
-			Message: "Failed to read request body",
-		})
-		return
-	}
+
 	var req rest.RespondFriendApplyRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
+	if err := utils.ReadProtoRequest(c, &req); err != nil {
 		h.logger.Error(ctx, "Invalid protobuf request", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.RespondFriendApplyResponse{
+		utils.SendProtoError(c, http.StatusBadRequest, &rest.RespondFriendApplyResponse{
 			Success: false,
 			Message: "Invalid protobuf request",
 		})
 		return
 	}
+
+	// 调用服务层
 	if err := h.service.RespondFriendApply(ctx, req.UserId, req.ApplicantId, req.Agree); err != nil {
 		h.logger.Error(ctx, "Respond friend apply failed", logger.F("error", err.Error()))
-		h.sendProtoResponse(c, &rest.RespondFriendApplyResponse{
+		utils.SendProtoError(c, http.StatusInternalServerError, &rest.RespondFriendApplyResponse{
 			Success: false,
 			Message: err.Error(),
 		})
 		return
 	}
-	h.sendProtoResponse(c, &rest.RespondFriendApplyResponse{
+
+	// 返回成功响应
+	utils.SendProtoResponse(c, &rest.RespondFriendApplyResponse{
 		Success: true,
 		Message: "操作成功",
 	})
 }
 
-// 查询好友申请列表
+// ListFriendApply 查询好友申请列表
 func (h *Handler) ListFriendApply(c *gin.Context) {
 	ctx := c.Request.Context()
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to read request body", logger.F("error", err.Error()))
-		c.Status(http.StatusBadRequest)
-		return
-	}
+
 	var req rest.ListFriendApplyRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
+	if err := utils.ReadProtoRequest(c, &req); err != nil {
 		h.logger.Error(ctx, "Invalid protobuf request", logger.F("error", err.Error()))
 		c.Status(http.StatusBadRequest)
 		return
 	}
+
+	// 调用服务层
 	applies, err := h.service.ListFriendApply(ctx, req.UserId)
 	if err != nil {
 		h.logger.Error(ctx, "List friend apply failed", logger.F("error", err.Error()))
 		c.Status(http.StatusInternalServerError)
 		return
 	}
-	var resp rest.ListFriendApplyResponse
+
+	// 转换为protobuf格式
+	var pbApplies []*rest.FriendApplyInfo
 	for _, a := range applies {
-		resp.Applies = append(resp.Applies, &rest.FriendApplyInfo{
+		pbApplies = append(pbApplies, &rest.FriendApplyInfo{
 			ApplicantId: a.ApplicantID,
 			Remark:      a.Remark,
 			Timestamp:   a.Timestamp,
 			Status:      a.Status,
 		})
 	}
-	data, _ := proto.Marshal(&resp)
-	c.Data(http.StatusOK, "application/x-protobuf", data)
+
+	// 返回成功响应
+	utils.SendProtoResponse(c, &rest.ListFriendApplyResponse{
+		Applies: pbApplies,
+	})
 }

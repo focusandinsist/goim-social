@@ -123,3 +123,34 @@ message FriendApplyInfo {
 message ListFriendApplyResponse {
   repeated FriendApplyInfo applies = 1;
 }
+
+// 好友简介请求
+message FriendProfileRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+}
+
+// 好友简介响应
+message FriendProfileResponse {
+  bool success = 1;
+  string message = 2;
+  string alias = 3;
+  int32 age = 4;
+  string gender = 5;
+  string avatar = 6;
+  string nickname = 7;
+}
+
+// 设置好友别名请求
+message SetFriendAliasRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string alias = 3;
+}
+
+// 设置好友别名响应
+message SetFriendAliasResponse {
+  bool success = 1;
+  string message = 2;
+}
