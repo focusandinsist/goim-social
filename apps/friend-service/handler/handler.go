@@ -38,7 +38,7 @@ func (h *Handler) DeleteFriend(c *gin.Context) {
 		res *rest.DeleteFriendResponse
 		err error
 	)
-	if err := c.Bind(&req); err != nil {
+	if err = c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid delete friend request", logger.F("error", err.Error()))
 		res := &rest.DeleteFriendResponse{
 			Success: false,
@@ -114,10 +114,15 @@ func (h *Handler) ListFriends(c *gin.Context) {
 }
 
 func (h *Handler) GetFriendProfile(c *gin.Context) {
-	ctx := c.Request.Context()
 
-	var req rest.FriendProfileRequest
-	if err := c.Bind(&req); err != nil {
+	var (
+		ctx = c.Request.Context()
+		req rest.FriendProfileRequest
+		res *rest.FriendProfileResponse
+		err error
+	)
+
+	if err = c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid friend profile request", logger.F("error", err.Error()))
 		res := &rest.FriendProfileResponse{
 			Success: false,
@@ -128,7 +133,7 @@ func (h *Handler) GetFriendProfile(c *gin.Context) {
 	}
 
 	friend, err := h.service.GetFriend(ctx, req.GetUserId(), req.GetFriendId())
-	res := &rest.FriendProfileResponse{
+	res = &rest.FriendProfileResponse{
 		Success: err == nil,
 		Message: func() string {
 			if err != nil {
@@ -154,10 +159,15 @@ func (h *Handler) GetFriendProfile(c *gin.Context) {
 }
 
 func (h *Handler) UpdateFriendRemark(c *gin.Context) {
-	ctx := c.Request.Context()
 
-	var req rest.SetFriendAliasRequest
-	if err := c.Bind(&req); err != nil {
+	var (
+		ctx = c.Request.Context()
+		req rest.SetFriendAliasRequest
+		res *rest.SetFriendAliasResponse
+		err error
+	)
+
+	if err = c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid set friend alias request", logger.F("error", err.Error()))
 		res := &rest.SetFriendAliasResponse{
 			Success: false,
@@ -167,8 +177,8 @@ func (h *Handler) UpdateFriendRemark(c *gin.Context) {
 		return
 	}
 
-	err := h.service.UpdateFriendRemark(ctx, req.GetUserId(), req.GetFriendId(), req.GetAlias())
-	res := &rest.SetFriendAliasResponse{
+	err = h.service.UpdateFriendRemark(ctx, req.GetUserId(), req.GetFriendId(), req.GetAlias())
+	res = &rest.SetFriendAliasResponse{
 		Success: err == nil,
 		Message: func() string {
 			if err != nil {
@@ -184,10 +194,14 @@ func (h *Handler) UpdateFriendRemark(c *gin.Context) {
 }
 
 func (h *Handler) ApplyFriend(c *gin.Context) {
-	ctx := c.Request.Context()
 
-	var req rest.ApplyFriendRequest
-	if err := c.Bind(&req); err != nil {
+	var (
+		ctx = c.Request.Context()
+		req rest.ApplyFriendRequest
+		res *rest.ApplyFriendResponse
+		err error
+	)
+	if err = c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid apply friend request", logger.F("error", err.Error()))
 		res := &rest.ApplyFriendResponse{
 			Success: false,
@@ -197,8 +211,8 @@ func (h *Handler) ApplyFriend(c *gin.Context) {
 		return
 	}
 
-	err := h.service.ApplyFriend(ctx, req.UserId, req.FriendId, req.Remark)
-	res := &rest.ApplyFriendResponse{
+	err = h.service.ApplyFriend(ctx, req.UserId, req.FriendId, req.Remark)
+	res = &rest.ApplyFriendResponse{
 		Success: err == nil,
 		Message: func() string {
 			if err != nil {
@@ -214,10 +228,13 @@ func (h *Handler) ApplyFriend(c *gin.Context) {
 }
 
 func (h *Handler) RespondFriendApply(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	var req rest.RespondFriendApplyRequest
-	if err := c.Bind(&req); err != nil {
+	var (
+		ctx = c.Request.Context()
+		req rest.RespondFriendApplyRequest
+		res *rest.RespondFriendApplyResponse
+		err error
+	)
+	if err = c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid respond friend apply request", logger.F("error", err.Error()))
 		res := &rest.RespondFriendApplyResponse{
 			Success: false,
@@ -227,8 +244,8 @@ func (h *Handler) RespondFriendApply(c *gin.Context) {
 		return
 	}
 
-	err := h.service.RespondFriendApply(ctx, req.UserId, req.ApplicantId, req.Agree)
-	res := &rest.RespondFriendApplyResponse{
+	err = h.service.RespondFriendApply(ctx, req.UserId, req.ApplicantId, req.Agree)
+	res = &rest.RespondFriendApplyResponse{
 		Success: err == nil,
 		Message: func() string {
 			if err != nil {

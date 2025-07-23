@@ -67,19 +67,6 @@ message GetFriendResponse {
   FriendInfo friend = 3;
 }
 
-// 更新好友备注请求
-message UpdateFriendRemarkRequest {
-  int64 user_id = 1;
-  int64 friend_id = 2;
-  string new_remark = 3;
-}
-
-// 更新好友备注响应
-message UpdateFriendRemarkResponse {
-  bool success = 1;
-  string message = 2;
-}
-
 // 好友申请请求
 message ApplyFriendRequest {
   int64 user_id = 1;
@@ -93,14 +80,14 @@ message ApplyFriendResponse {
   string message = 2;
 }
 
-// 同意/拒绝好友申请请求
+// 回应好友申请请求
 message RespondFriendApplyRequest {
   int64 user_id = 1;      // 被申请人
   int64 applicant_id = 2; // 申请人
   bool agree = 3;         // true=同意，false=拒绝
 }
 
-// 同意/拒绝好友申请响应
+// 回应好友申请响应
 message RespondFriendApplyResponse {
   bool success = 1;
   string message = 2;
