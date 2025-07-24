@@ -220,9 +220,9 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		connMgr:    NewConnectionManager(redis, cfg),                 // 初始化连接管理器
 	}
 
-	// 初始化Chat服务客户端
-	if err := service.initChatClient(); err != nil {
-		log.Printf("Chat服务客户端初始化失败: %v", err)
+	// 初始化Logic服务客户端
+	if err := service.initLogicClient(); err != nil {
+		log.Printf("Logic服务客户端初始化失败: %v", err)
 	}
 
 	// 注册服务实例
@@ -236,34 +236,34 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 	return service
 }
 
-// initChatClient 初始化Chat服务客户端
-func (s *Service) initChatClient() error {
-	// Chat服务地址
-	chatAddr := fmt.Sprintf("%s:%d", s.config.Connect.ChatService.Host, s.config.Connect.ChatService.Port)
+// initLogicClient 初始化Logic服务客户端
+func (s *Service) initLogicClient() error {
+	// Logic服务地址
+	logicAddr := fmt.Sprintf("%s:%d", s.config.Connect.LogicService.Host, s.config.Connect.LogicService.Port)
 
 	// 建立gRPC连接
-	conn, err := grpc.Dial(chatAddr, grpc.WithInsecure())
+	conn, err := grpc.Dial(logicAddr, grpc.WithInsecure())
 	if err != nil {
-		return fmt.Errorf("连接Chat服务失败: %v", err)
+		return fmt.Errorf("连接Logic服务失败: %v", err)
 	}
 
-	// 创建Chat服务客户端
+	// 创建Logic服务客户端
 	s.chatClient = rest.NewChatServiceClient(conn)
 
-	log.Printf("Chat服务客户端初始化成功，地址: %s", chatAddr)
+	log.Printf("Logic服务客户端初始化成功，地址: %s", logicAddr)
 	return nil
 }
 
-// StartChatConnection 初始化与Chat服务的连接
-func (s *Service) StartChatConnection() {
-	log.Printf("初始化Chat服务连接...")
+// StartLogicConnection 初始化与Logic服务的连接
+func (s *Service) StartLogicConnection() {
+	log.Printf("初始化Logic服务连接...")
 
 	if s.chatClient == nil {
-		log.Printf("Chat服务客户端未初始化")
+		log.Printf("Logic服务客户端未初始化")
 		return
 	}
 
-	log.Printf("Chat服务连接已就绪")
+	log.Printf("Logic服务连接已就绪")
 }
 
 // cleanupOnStartup 启动时清理本实例的旧连接数据
@@ -534,6 +534,8 @@ func (s *Service) handleCrossNodeMessage(ctx context.Context, payload string) er
 	switch msgType {
 	case "forward_message":
 		return s.handleForwardMessage(ctx, crossNodeMsg)
+	case "push_message":
+		return s.handlePushMessage(ctx, crossNodeMsg)
 	default:
 		log.Printf("未知的跨节点消息类型: %s", msgType)
 	}
@@ -570,6 +572,40 @@ func (s *Service) handleForwardMessage(ctx context.Context, crossNodeMsg map[str
 
 	// 推送给本地用户
 	return s.pushToLocalUser(ctx, userID, &message)
+}
+
+// handlePushMessage 处理推送消息
+func (s *Service) handlePushMessage(ctx context.Context, crossNodeMsg map[string]interface{}) error {
+	// 提取目标用户ID
+	targetUserFloat, ok := crossNodeMsg["target_user"].(float64)
+	if !ok {
+		return fmt.Errorf("目标用户ID无效")
+	}
+	targetUserID := int64(targetUserFloat)
+
+	// 提取消息内容
+	messageData, ok := crossNodeMsg["message"]
+	if !ok {
+		return fmt.Errorf("消息内容无效")
+	}
+
+	// 重新序列化消息
+	msgBytes, err := json.Marshal(messageData)
+	if err != nil {
+		return fmt.Errorf("序列化消息失败: %v", err)
+	}
+
+	// 反序列化为WSMessage
+	var message rest.WSMessage
+	if err := json.Unmarshal(msgBytes, &message); err != nil {
+		return fmt.Errorf("反序列化WSMessage失败: %v", err)
+	}
+
+	log.Printf("Connect服务收到推送消息: UserID=%d, MessageID=%d, Content=%s",
+		targetUserID, message.MessageId, message.Content)
+
+	// 推送给本地用户
+	return s.pushToLocalUser(ctx, targetUserID, &message)
 }
 
 // Connect 处理连接，写入 redis hash，并维护在线用户 set
@@ -827,32 +863,32 @@ func (s *Service) notifyMessageFailure(originalSender int64, failureReason strin
 	log.Printf("通知用户 %d 消息发送失败: %s", originalSender, failureReason)
 }
 
-// sendMessageViaUnaryCall 通过Chat服务单向调用发送消息（降级方案）
+// sendMessageViaUnaryCall 通过Logic服务单向调用发送消息
 func (s *Service) sendMessageViaUnaryCall(ctx context.Context, wsMsg *rest.WSMessage) error {
 	if s.chatClient == nil {
-		return fmt.Errorf("Chat服务客户端未初始化")
+		return fmt.Errorf("Logic服务客户端未初始化")
 	}
 
-	log.Printf("通过Chat服务单向调用发送消息: From=%d, To=%d, GroupID=%d, Content=%s",
+	log.Printf("通过Logic服务单向调用发送消息: From=%d, To=%d, GroupID=%d, Content=%s",
 		wsMsg.From, wsMsg.To, wsMsg.GroupId, wsMsg.Content)
 
-	// 调用Chat服务的SendMessage方法
+	// 调用Logic服务的SendMessage方法
 	req := &rest.SendChatMessageRequest{
 		Msg: wsMsg,
 	}
 
 	resp, err := s.chatClient.SendMessage(ctx, req)
 	if err != nil {
-		log.Printf("Chat服务单向调用发送消息失败: %v", err)
+		log.Printf("Logic服务单向调用发送消息失败: %v", err)
 		return err
 	}
 
 	if !resp.Success {
-		log.Printf("Chat服务处理消息失败: %s", resp.Message)
-		return fmt.Errorf("Chat服务处理消息失败: %s", resp.Message)
+		log.Printf("Logic服务处理消息失败: %s", resp.Message)
+		return fmt.Errorf("Logic服务处理消息失败: %s", resp.Message)
 	}
 
-	log.Printf("Chat服务单向调用发送消息成功: MessageID=%d, SuccessCount=%d",
+	log.Printf("Logic服务单向调用发送消息成功: MessageID=%d, SuccessCount=%d",
 		resp.MessageId, resp.SuccessCount)
 	return nil
 }

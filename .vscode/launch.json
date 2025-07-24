@@ -66,13 +66,13 @@
             }
         },
         {
-            "name": "5. Chat Service (HTTP:21005, gRPC:22005)",
+            "name": "5. Logic Service (HTTP:21005, gRPC:22005)",
             "type": "go",
             "request": "launch",
-            "program": "./apps/chat-service/cmd/main.go",
+            "program": "./apps/logic-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
-                "SERVICE_NAME": "chat-service",
+                "SERVICE_NAME": "logic-service",
                 "HTTP_PORT": "21005",
                 "GRPC_PORT": "22005",
                 "GROUP_SERVICE_HOST": "localhost",
@@ -95,8 +95,8 @@
                 "GRPC_PORT": "22006",
                 "MESSAGE_SERVICE_HOST": "localhost",
                 "MESSAGE_SERVICE_PORT": "22004",
-                "CHAT_SERVICE_HOST": "localhost",
-                "CHAT_SERVICE_PORT": "22005",
+                "LOGIC_SERVICE_HOST": "localhost",
+                "LOGIC_SERVICE_PORT": "22005",
                 "MONGODB_URI": "mongodb://localhost:27017",
                 "MONGODB_DB": "connectDB",
                 "REDIS_ADDR": "localhost:6379",
@@ -131,7 +131,7 @@
                 "2. Group Service (HTTP:21002, gRPC:22002)",
                 "3. Friend Service (HTTP:21003, gRPC:22003)",
                 "4. Message Service (HTTP:21004, gRPC:22004)",
-                "5. Chat Service (HTTP:21005, gRPC:22005)",
+                "5. Logic Service (HTTP:21005, gRPC:22005)",
                 "6. Connect Service (HTTP:21006, gRPC:22006)"
             ],
             "stopAll": true

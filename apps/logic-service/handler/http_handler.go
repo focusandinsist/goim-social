@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/chat-service/service"
+	"websocket-server/apps/logic-service/service"
 	"websocket-server/pkg/logger"
 	"websocket-server/pkg/utils"
 )
@@ -25,9 +25,9 @@ func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	}
 }
 
-// RegisterRoutes 注册HTTP路由,Chat服务是内部服务，只提供健康检查和测试接口
+// RegisterRoutes 注册HTTP路由,Logic服务是内部服务，只提供健康检查和测试接口
 func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
-	api := r.Group("/api/v1/chat")
+	api := r.Group("/api/v1/logic")
 	{
 		api.GET("/health", h.HealthCheck)  // 健康检查
 		api.POST("/route", h.RouteMessage) // 消息路由测试
@@ -89,7 +89,7 @@ func (h *HTTPHandler) RouteMessage(c *gin.Context) {
 func (h *HTTPHandler) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "ok",
-		"service":   "chat-service",
+		"service":   "logic-service",
 		"timestamp": utils.GetCurrentTimestamp(),
 	})
 }

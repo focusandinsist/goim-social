@@ -44,7 +44,7 @@ func (s *StorageConsumer) Start(ctx context.Context, brokers []string) error {
 	cfg := kafka.KafkaConfig{
 		Brokers: brokers,
 		GroupID: "storage-consumer-group",
-		Topics:  []string{"message-events"},
+		Topics:  []string{"uplink_messages"},
 	}
 
 	consumer, err := kafka.InitConsumer(cfg, s)
@@ -53,7 +53,7 @@ func (s *StorageConsumer) Start(ctx context.Context, brokers []string) error {
 	}
 
 	s.consumer = consumer
-	log.Printf("存储消费者启动成功，监听topic: message-events")
+	log.Printf("存储消费者启动成功，监听topic: uplink_messages")
 
 	return s.consumer.StartConsuming(ctx)
 }

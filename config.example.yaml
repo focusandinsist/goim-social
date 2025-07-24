@@ -10,8 +10,8 @@
 # 2. Group Service   - HTTP:21002, gRPC:22002 (基础服务，PostgreSQL)
 # 3. Friend Service  - HTTP:21003, gRPC:22003 (依赖User，MongoDB)
 # 4. Message Service - HTTP:21004, gRPC:22004 (依赖User、Group，MongoDB)
-# 5. Chat Service    - HTTP:21005, gRPC:22005 (依赖Group、Message)
-# 6. Connect Service - HTTP:21006, gRPC:22006 (依赖Message、Chat，MongoDB)
+# 5. Logic Service   - HTTP:21005, gRPC:22005 (依赖Group、Message)
+# 6. Connect Service - HTTP:21006, gRPC:22006 (依赖Message、Logic，MongoDB)
 
 server:
   http:
@@ -45,7 +45,7 @@ connect:
   message_service:
     host: localhost
     port: 22004
-  chat_service:
+  logic_service:
     host: localhost
     port: 22005
   instance:
@@ -58,7 +58,7 @@ connect:
     expire_time: 2
     client_type: web
 
-chat:
+logic:
   group_service:
     host: localhost
     port: 22002

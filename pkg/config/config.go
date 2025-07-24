@@ -14,7 +14,7 @@ type Config struct {
 	Redis    RedisConfig    `yaml:"redis"`
 	Kafka    KafkaConfig    `yaml:"kafka"`
 	Connect  ConnectConfig  `yaml:"connect"`
-	Chat     ChatConfig     `yaml:"chat"`
+	Logic    LogicConfig    `yaml:"logic"`
 }
 
 // AppConfig 应用配置
@@ -78,14 +78,14 @@ type KafkaConfig struct {
 // ConnectConfig Connect服务配置
 type ConnectConfig struct {
 	MessageService MessageServiceConfig `yaml:"message_service"`
-	ChatService    ServiceEndpoint      `yaml:"chat_service"`
+	LogicService   ServiceEndpoint      `yaml:"logic_service"`
 	Instance       InstanceConfig       `yaml:"instance"`
 	Heartbeat      HeartbeatConfig      `yaml:"heartbeat"`
 	Connection     ConnectionConfig     `yaml:"connection"`
 }
 
-// ChatConfig Chat服务配置
-type ChatConfig struct {
+// LogicConfig Logic服务配置
+type LogicConfig struct {
 	GroupService   ServiceEndpoint `yaml:"group_service"`
 	MessageService ServiceEndpoint `yaml:"message_service"`
 }
@@ -139,14 +139,14 @@ func LoadConfig(serviceName string) *Config {
 	case "message-service":
 		defaultHTTPPort = "21004"
 		defaultGRPCPort = "22004"
-	case "chat-service":
+	case "logic-service":
 		defaultHTTPPort = "21005"
 		defaultGRPCPort = "22005"
 	case "connect-service":
 		defaultHTTPPort = "21006"
 		defaultGRPCPort = "22006"
 	default:
-		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, connect-service", serviceName))
+		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, logic-service, connect-service", serviceName))
 	}
 
 	httpPort := getEnvOrDefault("HTTP_PORT", defaultHTTPPort)
@@ -194,9 +194,9 @@ func LoadConfig(serviceName string) *Config {
 				Host: getEnvOrDefault("MESSAGE_SERVICE_HOST", "localhost"),
 				Port: getEnvIntOrDefault("MESSAGE_SERVICE_PORT", 22004),
 			},
-			ChatService: ServiceEndpoint{
-				Host: getEnvOrDefault("CHAT_SERVICE_HOST", "localhost"),
-				Port: getEnvIntOrDefault("CHAT_SERVICE_PORT", 22005),
+			LogicService: ServiceEndpoint{
+				Host: getEnvOrDefault("LOGIC_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("LOGIC_SERVICE_PORT", 22005),
 			},
 			Instance: InstanceConfig{
 				Host: getEnvOrDefault("INSTANCE_HOST", "localhost"),
@@ -211,7 +211,7 @@ func LoadConfig(serviceName string) *Config {
 				ClientType: getEnvOrDefault("DEFAULT_CLIENT_TYPE", "web"),
 			},
 		},
-		Chat: ChatConfig{
+		Logic: LogicConfig{
 			GroupService: ServiceEndpoint{
 				Host: getEnvOrDefault("GROUP_SERVICE_HOST", "localhost"),
 				Port: getEnvIntOrDefault("GROUP_SERVICE_PORT", 22002),

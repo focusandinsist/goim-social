@@ -7,14 +7,14 @@ import (
 	"google.golang.org/grpc"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/chat-service/handler"
-	"websocket-server/apps/chat-service/service"
+	"websocket-server/apps/logic-service/handler"
+	"websocket-server/apps/logic-service/service"
 	"websocket-server/pkg/server"
 )
 
 func main() {
 	// 创建应用程序
-	app := server.NewApplication("chat-service")
+	app := server.NewApplication("logic-service")
 
 	// 启用HTTP和gRPC服务器
 	app.EnableHTTP()
@@ -25,14 +25,14 @@ func main() {
 
 	// Group服务地址
 	groupAddr := "localhost:22002" // group服务的gRPC端口
-	if config.Chat.GroupService.Host != "" {
-		groupAddr = fmt.Sprintf("%s:%d", config.Chat.GroupService.Host, config.Chat.GroupService.Port)
+	if config.Logic.GroupService.Host != "" {
+		groupAddr = fmt.Sprintf("%s:%d", config.Logic.GroupService.Host, config.Logic.GroupService.Port)
 	}
 
 	// Message服务地址
 	messageAddr := "localhost:22004" // message服务的gRPC端口
-	if config.Chat.MessageService.Host != "" {
-		messageAddr = fmt.Sprintf("%s:%d", config.Chat.MessageService.Host, config.Chat.MessageService.Port)
+	if config.Logic.MessageService.Host != "" {
+		messageAddr = fmt.Sprintf("%s:%d", config.Logic.MessageService.Host, config.Logic.MessageService.Port)
 	}
 
 	// Friend服务地址
@@ -52,7 +52,7 @@ func main() {
 		userAddr,
 	)
 	if err != nil {
-		panic("Failed to create chat service: " + err.Error())
+		panic("Failed to create logic service: " + err.Error())
 	}
 
 	// 初始化Handler
@@ -64,7 +64,7 @@ func main() {
 		httpHandler.RegisterRoutes(engine)
 	})
 
-	// 注册gRPC服务
+	// 注册gRPC服务 (暂时使用ChatService接口，后续会重命名)
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
 		rest.RegisterChatServiceServer(grpcSrv, grpcHandler)
 	})

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/chat-service/service"
+	"websocket-server/apps/logic-service/service"
 	"websocket-server/pkg/logger"
 )
 

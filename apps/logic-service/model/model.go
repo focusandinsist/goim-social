@@ -4,8 +4,8 @@ import (
 	"time"
 )
 
-// ChatMessage 聊天消息模型
-type ChatMessage struct {
+// LogicMessage 逻辑消息模型
+type LogicMessage struct {
 	MessageID   int64     `json:"message_id"`
 	From        int64     `json:"from"`
 	To          int64     `json:"to"`       // 单聊时的目标用户ID
@@ -28,7 +28,7 @@ type MessageRouteInfo struct {
 // MessageDistribution 消息分发结果
 type MessageDistribution struct {
 	MessageID     int64                  `json:"message_id"`
-	OriginalMsg   *ChatMessage           `json:"original_msg"`
+	OriginalMsg   *LogicMessage          `json:"original_msg"`
 	Distributions []*PersonalMessageCopy `json:"distributions"`
 	FailedUsers   []int64                `json:"failed_users"`
 	TotalUsers    int                    `json:"total_users"`

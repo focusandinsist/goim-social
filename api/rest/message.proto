@@ -54,4 +54,30 @@ message GetHistoryResponse {
   int32 size = 4;
 }
 
+// 获取未读消息请求
+message GetUnreadMessagesRequest {
+  int64 user_id = 1;
+}
+
+// 获取未读消息响应
+message GetUnreadMessagesResponse {
+  bool success = 1;
+  string message = 2;
+  repeated WSMessage messages = 3;
+  int32 total = 4;
+}
+
+// 标记消息已读请求
+message MarkMessagesReadRequest {
+  int64 user_id = 1;
+  repeated int64 message_ids = 2;
+}
+
+// 标记消息已读响应
+message MarkMessagesReadResponse {
+  bool success = 1;
+  string message = 2;
+  repeated int64 failed_ids = 3;
+}
+
 

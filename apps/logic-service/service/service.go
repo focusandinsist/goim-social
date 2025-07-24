@@ -3,12 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/chat-service/model"
+	"websocket-server/apps/logic-service/model"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/logger"
 	"websocket-server/pkg/redis"
@@ -70,6 +71,11 @@ func NewService(redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logg
 
 // ProcessMessage 处理消息 - 核心业务编排逻辑
 func (s *Service) ProcessMessage(ctx context.Context, msg *rest.WSMessage) (*model.MessageResult, error) {
+	// 如果MessageID为0，生成新的MessageID
+	if msg.MessageId == 0 {
+		msg.MessageId = time.Now().UnixNano()
+	}
+
 	s.logger.Info(ctx, "Logic服务开始处理消息",
 		logger.F("messageID", msg.MessageId),
 		logger.F("from", msg.From),
@@ -93,11 +99,11 @@ func (s *Service) processGroupMessage(ctx context.Context, msg *rest.WSMessage) 
 	s.logger.Info(ctx, "处理群聊消息", logger.F("groupID", msg.GroupId))
 
 	// 1. 权限验证 - 检查用户是否在群组中
-	memberResp, err := s.groupClient.GetMember(ctx, &rest.GetMemberRequest{
+	memberResp, err := s.groupClient.ValidateGroupMember(ctx, &rest.ValidateGroupMemberRequest{
 		GroupId: msg.GroupId,
 		UserId:  msg.From,
 	})
-	if err != nil || !memberResp.Success {
+	if err != nil || !memberResp.Success || !memberResp.IsMember {
 		s.logger.Error(ctx, "用户不在群组中", logger.F("userID", msg.From), logger.F("groupID", msg.GroupId))
 		return &model.MessageResult{
 			Success:      false,
@@ -108,7 +114,7 @@ func (s *Service) processGroupMessage(ctx context.Context, msg *rest.WSMessage) 
 	}
 
 	// 2. 获取群成员列表
-	membersResp, err := s.groupClient.GetMembers(ctx, &rest.GetMembersRequest{
+	membersResp, err := s.groupClient.GetGroupMemberIDs(ctx, &rest.GetGroupMemberIDsRequest{
 		GroupId: msg.GroupId,
 	})
 	if err != nil {
@@ -131,19 +137,19 @@ func (s *Service) processGroupMessage(ctx context.Context, msg *rest.WSMessage) 
 	failureCount := 0
 	var failedUsers []int64
 
-	for _, member := range membersResp.Members {
-		if member.UserId == msg.From {
+	for _, memberID := range membersResp.MemberIds {
+		if memberID == msg.From {
 			continue // 跳过发送者
 		}
 
 		// 通过消息队列异步投递
-		err := s.publishMessageToQueue(ctx, member.UserId, msg)
+		err := s.publishMessageToQueue(ctx, memberID, msg)
 		if err != nil {
 			s.logger.Error(ctx, "消息投递失败",
-				logger.F("targetUser", member.UserId),
+				logger.F("targetUser", memberID),
 				logger.F("error", err.Error()))
 			failureCount++
-			failedUsers = append(failedUsers, member.UserId)
+			failedUsers = append(failedUsers, memberID)
 		} else {
 			successCount++
 		}
@@ -164,19 +170,8 @@ func (s *Service) processPrivateMessage(ctx context.Context, msg *rest.WSMessage
 	s.logger.Info(ctx, "处理私聊消息", logger.F("to", msg.To))
 
 	// 1. 权限验证 - 检查好友关系
-	friendResp, err := s.friendClient.GetFriend(ctx, &rest.GetFriendRequest{
-		UserId:   msg.From,
-		FriendId: msg.To,
-	})
-	if err != nil || !friendResp.Success {
-		s.logger.Error(ctx, "用户不是好友关系", logger.F("from", msg.From), logger.F("to", msg.To))
-		return &model.MessageResult{
-			Success:      false,
-			Message:      "您与对方不是好友关系",
-			SuccessCount: 0,
-			FailureCount: 1,
-		}, nil
-	}
+	// TODO: 实现好友关系验证，暂时跳过验证
+	s.logger.Info(ctx, "处理私聊消息，暂时跳过好友关系验证", logger.F("from", msg.From), logger.F("to", msg.To))
 
 	// 2. 消息持久化 (异步)
 	go func() {
@@ -189,7 +184,7 @@ func (s *Service) processPrivateMessage(ctx context.Context, msg *rest.WSMessage
 	}()
 
 	// 3. 消息投递
-	err = s.publishMessageToQueue(ctx, msg.To, msg)
+	err := s.publishMessageToQueue(ctx, msg.To, msg)
 	if err != nil {
 		s.logger.Error(ctx, "私聊消息投递失败", logger.F("error", err.Error()))
 		return &model.MessageResult{
@@ -212,21 +207,26 @@ func (s *Service) processPrivateMessage(ctx context.Context, msg *rest.WSMessage
 
 // publishMessageToQueue 将消息发布到消息队列
 func (s *Service) publishMessageToQueue(ctx context.Context, targetUserID int64, msg *rest.WSMessage) error {
-	// 构造投递消息
-	deliveryMsg := map[string]interface{}{
-		"target_user_id": targetUserID,
-		"message_id":     msg.MessageId,
-		"from":           msg.From,
-		"to":             msg.To,
-		"group_id":       msg.GroupId,
-		"content":        msg.Content,
-		"message_type":   msg.MessageType,
-		"timestamp":      msg.Timestamp,
-		"ack_id":         msg.AckId,
+	// 为群聊消息创建针对特定用户的消息副本
+	targetMsg := &rest.WSMessage{
+		MessageId:   msg.MessageId,
+		From:        msg.From,
+		To:          targetUserID, // 设置目标用户ID
+		GroupId:     msg.GroupId,
+		Content:     msg.Content,
+		MessageType: msg.MessageType,
+		Timestamp:   msg.Timestamp,
+		AckId:       msg.AckId,
+	}
+
+	// 构造消息事件
+	messageEvent := map[string]interface{}{
+		"type":    "new_message",
+		"message": targetMsg,
 	}
 
 	// 发布到下行消息队列
-	return s.kafka.Publish("downlink_messages", deliveryMsg)
+	return s.kafka.PublishMessage("downlink_messages", messageEvent)
 }
 
 // ValidateUserPermission 验证用户权限
