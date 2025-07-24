@@ -6,13 +6,18 @@ import (
 
 // User 用户模型
 type User struct {
-	ID        int64     `bson:"_id" json:"id"`
-	Username  string    `bson:"username" json:"username"`
-	Password  string    `bson:"password" json:"-"`
-	Email     string    `bson:"email" json:"email"`
-	Nickname  string    `bson:"nickname" json:"nickname"`
-	Avatar    string    `bson:"avatar" json:"avatar"`
-	Status    int       `bson:"status" json:"status"`
-	CreatedAt time.Time `bson:"created_at" json:"created_at"`
-	UpdatedAt time.Time `bson:"updated_at" json:"updated_at"`
-} 
+	ID        int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	Username  string    `json:"username" gorm:"type:varchar(50);uniqueIndex;not null"`
+	Password  string    `json:"-" gorm:"type:varchar(255);not null"`
+	Email     string    `json:"email" gorm:"type:varchar(100);uniqueIndex;not null"`
+	Nickname  string    `json:"nickname" gorm:"type:varchar(100);not null"`
+	Avatar    string    `json:"avatar" gorm:"type:varchar(500)"`
+	Status    int       `json:"status" gorm:"default:0;index"` // 0:正常 1:禁用 2:删除
+	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName 指定表名
+func (User) TableName() string {
+	return "users"
+}

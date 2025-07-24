@@ -55,20 +55,18 @@ func (s *Service) AddFriend(ctx context.Context, userID, friendID int64, remark 
 	// 双向添加好友关系
 	// TODO: 事务
 	friend := &model.Friend{
-		UserID:    userID,
-		FriendID:  friendID,
-		Remark:    remark,
-		CreatedAt: time.Now().Unix(),
+		UserID:   userID,
+		FriendID: friendID,
+		Remark:   remark,
 	}
 	if err := s.dao.CreateFriend(ctx, friend); err != nil {
 		return fmt.Errorf("failed to create friend relation: %v", err)
 	}
 
 	friendReverse := &model.Friend{
-		UserID:    friendID,
-		FriendID:  userID,
-		Remark:    "", // 反向关系默认无备注
-		CreatedAt: time.Now().Unix(),
+		UserID:   friendID,
+		FriendID: userID,
+		Remark:   "", // 反向关系默认无备注
 	}
 	if err := s.dao.CreateFriend(ctx, friendReverse); err != nil {
 		return fmt.Errorf("failed to create reverse friend relation: %v", err)
@@ -147,7 +145,6 @@ func (s *Service) ApplyFriend(ctx context.Context, userID, friendID int64, remar
 		ApplicantID: userID,   // 申请人
 		Remark:      remark,
 		Status:      "pending",
-		Timestamp:   time.Now().Unix(),
 	}
 	return s.dao.CreateFriendApply(ctx, apply)
 }
@@ -166,16 +163,14 @@ func (s *Service) RespondFriendApply(ctx context.Context, userID, applicantID in
 	// 同意则创建双向好友关系
 	if agree {
 		friend1 := &model.Friend{
-			UserID:    userID,
-			FriendID:  applicantID,
-			Remark:    "",
-			CreatedAt: time.Now().Unix(),
+			UserID:   userID,
+			FriendID: applicantID,
+			Remark:   "",
 		}
 		friend2 := &model.Friend{
-			UserID:    applicantID,
-			FriendID:  userID,
-			Remark:    "",
-			CreatedAt: time.Now().Unix(),
+			UserID:   applicantID,
+			FriendID: userID,
+			Remark:   "",
 		}
 
 		if err := s.dao.CreateFriend(ctx, friend1); err != nil {

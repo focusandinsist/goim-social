@@ -8,6 +8,7 @@ import (
 	"websocket-server/api/rest"
 	"websocket-server/apps/friend-service/dao"
 	"websocket-server/apps/friend-service/handler"
+	"websocket-server/apps/friend-service/model"
 	"websocket-server/apps/friend-service/service"
 	"websocket-server/pkg/server"
 )
@@ -29,8 +30,19 @@ func main() {
 	defer conn.Close()
 	messageClient := rest.NewFriendEventServiceClient(conn)
 
+	// 初始化PostgreSQL连接
+	postgreSQL := app.GetPostgreSQL()
+
+	// 自动迁移数据库表结构
+	if err := postgreSQL.AutoMigrate(
+		&model.Friend{},
+		&model.FriendApply{},
+	); err != nil {
+		panic("Failed to migrate database: " + err.Error())
+	}
+
 	// 初始化DAO层
-	friendDAO := dao.NewFriendDAO(app.GetMongoDB())
+	friendDAO := dao.NewFriendDAO(postgreSQL)
 
 	// 初始化Service层
 	svc := service.NewService(friendDAO, app.GetRedisClient(), app.GetKafkaProducer(), messageClient)
