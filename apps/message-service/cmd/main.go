@@ -55,7 +55,7 @@ func main() {
 
 	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
-		grpcService := svc.NewGRPCService(svc)
+		grpcService := service.NewGRPCService(svc)
 		rest.RegisterMessageServiceServer(grpcSrv, grpcService)
 	})
 

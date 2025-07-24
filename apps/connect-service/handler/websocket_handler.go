@@ -154,8 +154,8 @@ func (ws *WSHandler) handleWebSocketMessages(c *gin.Context, conn *websocket.Con
 func (ws *WSHandler) routeWebSocketMessage(c *gin.Context, conn *websocket.Conn, wsMsg *rest.WSMessage) {
 	switch wsMsg.MessageType {
 	case 1: // 文本消息
-		if err := ws.svc.ForwardMessageToMessageService(c.Request.Context(), wsMsg); err != nil {
-			ws.log.Error(c.Request.Context(), "ForwardMessageToMessageService failed", logger.F("error", err.Error()))
+		if err := ws.svc.ForwardMessageToLogicService(c.Request.Context(), wsMsg); err != nil {
+			ws.log.Error(c.Request.Context(), "ForwardMessageToLogicService failed", logger.F("error", err.Error()))
 		}
 	case 2: // 心跳
 		if err := ws.svc.HandleHeartbeat(c.Request.Context(), wsMsg, conn); err != nil {

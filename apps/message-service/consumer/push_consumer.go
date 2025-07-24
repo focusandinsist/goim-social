@@ -22,21 +22,13 @@ type PushConsumer struct {
 	redis         *redis.RedisClient
 }
 
-// StreamManager 管理所有Connect服务的流连接
+// StreamManager 管理所有Connect服务的连接（已废弃双向流）
 type StreamManager struct {
-	streams map[string]*ConnectStream
-	mutex   sync.RWMutex
+	// 保留结构体以避免编译错误，但不再使用双向流
+	mutex sync.RWMutex
 }
 
-// ConnectStream 存储Connect服务的流连接
-type ConnectStream struct {
-	ServiceID string
-	Stream    rest.MessageService_MessageStreamServer
-}
-
-var globalStreamManager = &StreamManager{
-	streams: make(map[string]*ConnectStream),
-}
+var globalStreamManager = &StreamManager{}
 
 // NewPushConsumer 创建推送消费者
 func NewPushConsumer(redis *redis.RedisClient) *PushConsumer {
@@ -155,50 +147,25 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	return nil
 }
 
-// AddStream 添加Connect服务流连接
-func (sm *StreamManager) AddStream(serviceID string, stream rest.MessageService_MessageStreamServer) {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-	sm.streams[serviceID] = &ConnectStream{
-		ServiceID: serviceID,
-		Stream:    stream,
-	}
-	log.Printf("添加Connect服务流连接: %s", serviceID)
-}
+// // AddStream 添加Connect服务流连接
+// func (sm *StreamManager) AddStream(serviceID string, stream rest.MessageService_MessageStreamServer) {
+// 	sm.mutex.Lock()
+// 	defer sm.mutex.Unlock()
+// 	sm.streams[serviceID] = &ConnectStream{
+// 		ServiceID: serviceID,
+// 		Stream:    stream,
+// 	}
+// 	log.Printf("添加Connect服务流连接: %s", serviceID)
+// }
 
-// RemoveStream 移除Connect服务流连接
+// RemoveStream 移除Connect服务连接（已废弃）
 func (sm *StreamManager) RemoveStream(serviceID string) {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
-	delete(sm.streams, serviceID)
-	log.Printf("移除Connect服务流连接: %s", serviceID)
+	log.Printf("RemoveStream已废弃，不再使用双向流: %s", serviceID)
 }
 
-// PushToAllStreams 推送消息到所有Connect服务
+// PushToAllStreams 推送消息到所有Connect服务（已废弃，改用消息队列）
 func (sm *StreamManager) PushToAllStreams(targetUserID int64, message *rest.WSMessage) {
-	sm.mutex.RLock()
-	defer sm.mutex.RUnlock()
-
-	for serviceID, connectStream := range sm.streams {
-		go func(sid string, stream rest.MessageService_MessageStreamServer) {
-			err := stream.Send(&rest.MessageStreamResponse{
-				ResponseType: &rest.MessageStreamResponse_PushEvent{
-					PushEvent: &rest.MessagePushEvent{
-						TargetUserId: targetUserID,
-						Message:      message,
-						EventType:    "new_message",
-					},
-				},
-			})
-			if err != nil {
-				log.Printf("推送消息到Connect服务 %s 失败: %v", sid, err)
-				// 如果推送失败，移除这个连接
-				sm.RemoveStream(sid)
-			} else {
-				log.Printf("成功推送消息到Connect服务 %s, 目标用户: %d", sid, targetUserID)
-			}
-		}(serviceID, connectStream.Stream)
-	}
+	log.Printf("PushToAllStreams已废弃，请使用消息队列进行消息推送: UserID=%d", targetUserID)
 }
 
 // GetStreamManager 获取全局流管理器

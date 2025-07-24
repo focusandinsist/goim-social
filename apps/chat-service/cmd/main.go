@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
@@ -36,6 +35,12 @@ func main() {
 		messageAddr = fmt.Sprintf("%s:%d", config.Chat.MessageService.Host, config.Chat.MessageService.Port)
 	}
 
+	// Friend服务地址
+	friendAddr := "localhost:22003" // friend服务的gRPC端口
+
+	// User服务地址
+	userAddr := "localhost:22001" // user服务的gRPC端口
+
 	// 初始化Service层
 	svc, err := service.NewService(
 		app.GetRedisClient(),
@@ -43,6 +48,8 @@ func main() {
 		app.GetLogger(),
 		groupAddr,
 		messageAddr,
+		friendAddr,
+		userAddr,
 	)
 	if err != nil {
 		panic("Failed to create chat service: " + err.Error())
@@ -61,13 +68,6 @@ func main() {
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
 		rest.RegisterChatServiceServer(grpcSrv, grpcHandler)
 	})
-
-	// 启动与Message服务的gRPC双向流连接
-	go func() {
-		ctx := context.Background()
-		app.GetLogger().Info(ctx, "Starting message stream connection from Chat service")
-		svc.StartMessageStream()
-	}()
 
 	// 运行应用程序
 	if err := app.Run(); err != nil {

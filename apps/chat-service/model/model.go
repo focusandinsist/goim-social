@@ -68,3 +68,13 @@ type ForwardResult struct {
 	FailureCount int     `json:"failure_count"`
 	FailedUsers  []int64 `json:"failed_users"`
 }
+
+// MessageResult 消息处理结果
+type MessageResult struct {
+	Success      bool    `json:"success"`
+	Message      string  `json:"message"`
+	MessageID    int64   `json:"message_id"`
+	SuccessCount int     `json:"success_count"`
+	FailureCount int     `json:"failure_count"`
+	FailedUsers  []int64 `json:"failed_users"`
+}

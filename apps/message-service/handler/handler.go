@@ -2,20 +2,21 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"websocket-server/apps/message-service/model"
-	"websocket-server/apps/message-service/service"
+	messageService "websocket-server/apps/message-service/service"
 	"websocket-server/pkg/logger"
 )
 
 type Handler struct {
-	service *service.Service
+	service *messageService.Service
 	logger  logger.Logger
 }
 
-func NewHandler(service *service.Service, logger logger.Logger) *Handler {
+func NewHandler(service *messageService.Service, logger logger.Logger) *Handler {
 	return &Handler{service: service, logger: logger}
 }
 
@@ -38,8 +39,8 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.service.SendMessage(ctx, &msg); err != nil {
-		h.logger.Error(ctx, "Send message failed", logger.F("error", err.Error()))
+	if err := h.service.SaveMessage(ctx, &msg); err != nil {
+		h.logger.Error(ctx, "Save message failed", logger.F("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -60,7 +61,7 @@ func (h *Handler) GetHistory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	msgs, total, err := h.service.GetHistory(ctx, req.UserID, req.GroupID, req.Page, req.Size)
+	msgs, total, err := h.service.GetMessageHistory(ctx, req.UserID, req.GroupID, req.Page, req.Size)
 	if err != nil {
 		h.logger.Error(ctx, "Get history failed", logger.F("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -80,8 +81,9 @@ func (h *Handler) GetUnreadMessages(c *gin.Context) {
 		return
 	}
 
-	// 调用service层获取未读消息
-	messages, err := h.service.GetUnreadMessages(c.Request.Context(), req.UserID)
+	// 调用service层获取未读消息 (暂时返回空列表，可以后续实现)
+	messages := []*model.Message{}
+	var err error
 	if err != nil {
 		h.logger.Error(c.Request.Context(), "获取未读消息失败", logger.F("error", err.Error()))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取未读消息失败"})
@@ -107,10 +109,27 @@ func (h *Handler) MarkMessagesRead(c *gin.Context) {
 	}
 
 	// 调用service层标记消息已读
-	err := h.service.MarkMessagesAsRead(c.Request.Context(), req.UserID, req.MessageIDs)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "标记消息已读失败", logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "标记消息已读失败"})
+	ctx := c.Request.Context()
+	var failedIDs []string
+
+	for _, messageIDStr := range req.MessageIDs {
+		messageID, parseErr := strconv.ParseInt(messageIDStr, 10, 64)
+		if parseErr != nil {
+			failedIDs = append(failedIDs, messageIDStr)
+			continue
+		}
+
+		if err := h.service.MarkMessageAsRead(ctx, req.UserID, messageID); err != nil {
+			failedIDs = append(failedIDs, messageIDStr)
+		}
+	}
+
+	if len(failedIDs) > 0 {
+		h.logger.Error(c.Request.Context(), "部分消息标记已读失败", logger.F("failedIDs", failedIDs))
+		c.JSON(http.StatusPartialContent, gin.H{
+			"message":    "部分消息标记已读失败",
+			"failed_ids": failedIDs,
+		})
 		return
 	}
 

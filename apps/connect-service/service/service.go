@@ -204,12 +204,10 @@ type Service struct {
 	db         *database.MongoDB
 	redis      *redis.RedisClient
 	kafka      *kafka.Producer
-	config     *config.Config                          // 配置
-	instanceID string                                  // Connect服务实例ID
-	msgStream  rest.MessageService_MessageStreamClient // 消息流连接（保留用于接收推送）
-	chatStream rest.ChatService_MessageStreamClient    // Chat服务流连接（用于发送消息）
-	chatClient rest.ChatServiceClient                  // Chat服务客户端
-	connMgr    *ConnectionManager                      // 统一连接管理器
+	config     *config.Config         // 配置
+	instanceID string                 // Connect服务实例ID
+	chatClient rest.ChatServiceClient // Chat服务客户端
+	connMgr    *ConnectionManager     // 统一连接管理器
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
@@ -256,70 +254,16 @@ func (s *Service) initChatClient() error {
 	return nil
 }
 
-// StartChatStream 启动与Chat服务的双向流连接
-func (s *Service) StartChatStream() {
-	log.Printf("开始连接Chat服务双向流...")
+// StartChatConnection 初始化与Chat服务的连接
+func (s *Service) StartChatConnection() {
+	log.Printf("初始化Chat服务连接...")
 
-	// 重试连接Chat服务
-	for i := 0; i < 10; i++ {
-		if i == 0 {
-			log.Printf("尝试连接Chat服务双向流... (第%d次)", i+1)
-		} else {
-			log.Printf("重试连接Chat服务双向流... (第%d次) - 等待Chat服务启动完成", i+1)
-		}
-
-		if s.chatClient == nil {
-			log.Printf("Chat服务客户端未初始化，等待2秒后重试...")
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		// 创建双向流连接
-		stream, err := s.chatClient.MessageStream(context.Background())
-		if err != nil {
-			log.Printf("创建Chat服务双向流失败: %v", err)
-			if i < 9 {
-				log.Printf("等待2秒后重试...")
-			}
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		s.chatStream = stream // 保存stream连接
-		log.Printf("成功连接到Chat服务双向流")
-
-		// 启动接收goroutine
-		go s.handleChatStreamMessages(stream)
-
-		log.Printf("Chat服务双向流连接建立完成")
+	if s.chatClient == nil {
+		log.Printf("Chat服务客户端未初始化")
 		return
 	}
 
-	log.Printf("连接Chat服务双向流失败，已重试10次")
-}
-
-// handleChatStreamMessages 处理来自Chat服务的流消息
-func (s *Service) handleChatStreamMessages(stream rest.ChatService_MessageStreamClient) {
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			log.Printf("接收Chat服务流消息失败: %v", err)
-			s.chatStream = nil // 清空连接
-
-			// 重新连接
-			go func() {
-				time.Sleep(5 * time.Second)
-				s.StartChatStream()
-			}()
-			return
-		}
-
-		log.Printf("收到Chat服务流消息: From=%d, To=%d, Content=%s",
-			msg.From, msg.To, msg.Content)
-
-		// 处理来自Chat服务的消息（如果需要的话）
-		// 这里可以处理Chat服务的响应或通知
-	}
+	log.Printf("Chat服务连接已就绪")
 }
 
 // cleanupOnStartup 启动时清理本实例的旧连接数据
@@ -697,18 +641,12 @@ func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]
 	return status, nil
 }
 
-// ForwardMessageToMessageService 通过 gRPC 转发消息到 Message 微服务
-func (s *Service) ForwardMessageToMessageService(ctx context.Context, wsMsg *rest.WSMessage) error {
+// ForwardMessageToLogicService 通过 gRPC 转发消息到 Logic 微服务
+func (s *Service) ForwardMessageToLogicService(ctx context.Context, wsMsg *rest.WSMessage) error {
 	log.Printf("Connect服务转发消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
 
-	// 双向流是IM系统的核心，必须可用
-	if s.msgStream == nil {
-		log.Printf("双向流连接不可用，IM系统无法正常工作")
-		return fmt.Errorf("双向流连接不可用，无法转发消息")
-	}
-
-	log.Printf("通过双向流转发消息")
-	return s.SendMessageViaStream(ctx, wsMsg)
+	// 使用Chat服务的单向调用
+	return s.sendMessageViaUnaryCall(ctx, wsMsg)
 }
 
 // HandleHeartbeat 处理心跳包
@@ -751,95 +689,6 @@ func (s *Service) HandleOnlineStatusEvent(ctx context.Context, wsMsg *rest.WSMes
 // ValidateToken 校验 JWT token
 func (s *Service) ValidateToken(token string) bool {
 	return auth.ValidateToken(token)
-}
-
-func (s *Service) StartMessageStream() {
-	log.Printf("开始连接Message服务...")
-
-	// 重试连接Message服务
-	for i := 0; i < 10; i++ {
-		if i == 0 {
-			log.Printf("尝试连接Message服务... (第%d次)", i+1)
-		} else {
-			log.Printf("重试连接Message服务... (第%d次) - 等待Message服务启动完成", i+1)
-		}
-
-		addr := fmt.Sprintf("%s:%d", s.config.Connect.MessageService.Host, s.config.Connect.MessageService.Port)
-		conn, err := grpc.Dial(addr, grpc.WithInsecure())
-		if err != nil {
-			log.Printf("连接Message服务失败: %v", err)
-			if i < 9 {
-				log.Printf("等待2秒后重试...")
-			}
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		client := rest.NewMessageServiceClient(conn)
-		stream, err := client.MessageStream(context.Background())
-		if err != nil {
-			log.Printf("创建消息流失败: %v", err)
-			conn.Close()
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		s.msgStream = stream // 保存stream连接
-		log.Printf("成功连接到Message服务")
-
-		// 发送订阅请求
-		err = stream.Send(&rest.MessageStreamRequest{
-			RequestType: &rest.MessageStreamRequest_Subscribe{
-				Subscribe: &rest.SubscribeRequest{ConnectServiceId: s.instanceID},
-			},
-		})
-		if err != nil {
-			log.Printf("发送订阅请求失败: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		// 连接成功，启动消息接收goroutine
-		go func(stream rest.MessageService_MessageStreamClient) {
-			for {
-				resp, err := stream.Recv()
-				if err != nil {
-					log.Printf("消息流接收失败: %v", err)
-					return
-				}
-				switch respType := resp.ResponseType.(type) {
-				case *rest.MessageStreamResponse_PushEvent:
-					event := respType.PushEvent
-					// 推送给本地用户
-					err := s.pushToLocalConnection(event.TargetUserId, event.Message)
-					if err != nil {
-						log.Printf("pushToLocalConnection fail: %v", err)
-						continue
-					}
-					// 发送推送结果反馈
-					err = stream.Send(&rest.MessageStreamRequest{
-						RequestType: &rest.MessageStreamRequest_PushResult{
-							PushResult: &rest.PushResultRequest{
-								Success:      true,
-								TargetUserId: event.TargetUserId,
-							},
-						},
-					})
-					if err != nil {
-						log.Printf("stream.Send fail: %v", err)
-						continue
-					}
-				case *rest.MessageStreamResponse_Failure:
-					failure := respType.Failure
-					// 通知原发送者消息失败
-					s.notifyMessageFailure(failure.OriginalSender, failure.FailureReason)
-				}
-			}
-		}(stream)
-
-		// 连接成功，跳出重试循环
-		break
-	}
 }
 
 // isPushDuplicate 检查消息是否已推送给用户（防重复推送）
@@ -968,31 +817,6 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 		return fmt.Errorf("MessageID不能为0")
 	}
 
-	// 通过双向流发送ACK请求给Message服务
-	if s.msgStream != nil {
-		ackReq := &rest.MessageStreamRequest{
-			RequestType: &rest.MessageStreamRequest_Ack{
-				Ack: &rest.MessageAckRequest{
-					AckId:     wsMsg.AckId,
-					MessageId: messageID,
-					UserId:    userID,
-					Timestamp: time.Now().Unix(),
-				},
-			},
-		}
-
-		err := s.msgStream.Send(ackReq)
-		if err != nil {
-			log.Printf("发送消息ACK失败: %v", err)
-			return err
-		} else {
-			log.Printf("已发送消息ACK: MessageID=%d, UserID=%d", messageID, userID)
-		}
-	} else {
-		log.Printf("双向流连接不可用，无法发送ACK")
-		return fmt.Errorf("双向流连接不可用")
-	}
-
 	return nil
 }
 
@@ -1001,30 +825,6 @@ func (s *Service) notifyMessageFailure(originalSender int64, failureReason strin
 	// TODO: 实现失败通知逻辑
 	// 这里应该通知原发送者消息发送失败
 	log.Printf("通知用户 %d 消息发送失败: %s", originalSender, failureReason)
-}
-
-// SendMessageViaStream 通过Chat服务双向流发送消息
-func (s *Service) SendMessageViaStream(ctx context.Context, wsMsg *rest.WSMessage) error {
-	// 优先使用双向流，如果不可用则使用单向调用
-	if s.chatStream != nil {
-		log.Printf("通过Chat服务双向流发送消息: From=%d, To=%d, GroupID=%d, Content=%s",
-			wsMsg.From, wsMsg.To, wsMsg.GroupId, wsMsg.Content)
-
-		err := s.chatStream.Send(wsMsg)
-		if err != nil {
-			log.Printf("Chat服务双向流发送消息失败: %v", err)
-			s.chatStream = nil // 清空连接
-
-			// 降级到单向调用
-			return s.sendMessageViaUnaryCall(ctx, wsMsg)
-		}
-
-		log.Printf("Chat服务双向流发送消息成功")
-		return nil
-	}
-
-	// 双向流不可用，使用单向调用
-	return s.sendMessageViaUnaryCall(ctx, wsMsg)
 }
 
 // sendMessageViaUnaryCall 通过Chat服务单向调用发送消息（降级方案）

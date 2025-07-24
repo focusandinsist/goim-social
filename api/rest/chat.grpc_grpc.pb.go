@@ -8,7 +8,6 @@ package rest
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -20,8 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ChatService_SendMessage_FullMethodName   = "/rest.ChatService/SendMessage"
-	ChatService_MessageStream_FullMethodName = "/rest.ChatService/MessageStream"
+	ChatService_SendMessage_FullMethodName = "/rest.ChatService/SendMessage"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -30,8 +28,6 @@ const (
 type ChatServiceClient interface {
 	// 发送消息（支持单聊和群聊）
 	SendMessage(ctx context.Context, in *SendChatMessageRequest, opts ...grpc.CallOption) (*SendChatMessageResponse, error)
-	// 双向流消息处理（与Connect服务的实时通信）
-	MessageStream(ctx context.Context, opts ...grpc.CallOption) (ChatService_MessageStreamClient, error)
 }
 
 type chatServiceClient struct {
@@ -51,45 +47,12 @@ func (c *chatServiceClient) SendMessage(ctx context.Context, in *SendChatMessage
 	return out, nil
 }
 
-func (c *chatServiceClient) MessageStream(ctx context.Context, opts ...grpc.CallOption) (ChatService_MessageStreamClient, error) {
-	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[0], ChatService_MessageStream_FullMethodName, opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &chatServiceMessageStreamClient{stream}
-	return x, nil
-}
-
-type ChatService_MessageStreamClient interface {
-	Send(*WSMessage) error
-	Recv() (*WSMessage, error)
-	grpc.ClientStream
-}
-
-type chatServiceMessageStreamClient struct {
-	grpc.ClientStream
-}
-
-func (x *chatServiceMessageStreamClient) Send(m *WSMessage) error {
-	return x.ClientStream.SendMsg(m)
-}
-
-func (x *chatServiceMessageStreamClient) Recv() (*WSMessage, error) {
-	m := new(WSMessage)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
 type ChatServiceServer interface {
 	// 发送消息（支持单聊和群聊）
 	SendMessage(context.Context, *SendChatMessageRequest) (*SendChatMessageResponse, error)
-	// 双向流消息处理（与Connect服务的实时通信）
-	MessageStream(ChatService_MessageStreamServer) error
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -99,9 +62,6 @@ type UnimplementedChatServiceServer struct {
 
 func (UnimplementedChatServiceServer) SendMessage(context.Context, *SendChatMessageRequest) (*SendChatMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
-}
-func (UnimplementedChatServiceServer) MessageStream(ChatService_MessageStreamServer) error {
-	return status.Errorf(codes.Unimplemented, "method MessageStream not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -134,32 +94,6 @@ func _ChatService_SendMessage_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ChatService_MessageStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ChatServiceServer).MessageStream(&chatServiceMessageStreamServer{stream})
-}
-
-type ChatService_MessageStreamServer interface {
-	Send(*WSMessage) error
-	Recv() (*WSMessage, error)
-	grpc.ServerStream
-}
-
-type chatServiceMessageStreamServer struct {
-	grpc.ServerStream
-}
-
-func (x *chatServiceMessageStreamServer) Send(m *WSMessage) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func (x *chatServiceMessageStreamServer) Recv() (*WSMessage, error) {
-	m := new(WSMessage)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -172,13 +106,6 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ChatService_SendMessage_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "MessageStream",
-			Handler:       _ChatService_MessageStream_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "chat.grpc.proto",
 }
