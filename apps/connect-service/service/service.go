@@ -206,7 +206,9 @@ type Service struct {
 	kafka      *kafka.Producer
 	config     *config.Config                          // 配置
 	instanceID string                                  // Connect服务实例ID
-	msgStream  rest.MessageService_MessageStreamClient // 消息流连接
+	msgStream  rest.MessageService_MessageStreamClient // 消息流连接（保留用于接收推送）
+	chatStream rest.ChatService_MessageStreamClient    // Chat服务流连接（用于发送消息）
+	chatClient rest.ChatServiceClient                  // Chat服务客户端
 	connMgr    *ConnectionManager                      // 统一连接管理器
 }
 
@@ -220,6 +222,11 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		connMgr:    NewConnectionManager(redis, cfg),                 // 初始化连接管理器
 	}
 
+	// 初始化Chat服务客户端
+	if err := service.initChatClient(); err != nil {
+		log.Printf("Chat服务客户端初始化失败: %v", err)
+	}
+
 	// 注册服务实例
 	if err := service.registerInstance(); err != nil {
 		log.Printf("服务实例注册失败: %v", err)
@@ -229,6 +236,90 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 	go service.cleanupOnStartup()
 
 	return service
+}
+
+// initChatClient 初始化Chat服务客户端
+func (s *Service) initChatClient() error {
+	// Chat服务地址
+	chatAddr := fmt.Sprintf("%s:%d", s.config.Connect.ChatService.Host, s.config.Connect.ChatService.Port)
+
+	// 建立gRPC连接
+	conn, err := grpc.Dial(chatAddr, grpc.WithInsecure())
+	if err != nil {
+		return fmt.Errorf("连接Chat服务失败: %v", err)
+	}
+
+	// 创建Chat服务客户端
+	s.chatClient = rest.NewChatServiceClient(conn)
+
+	log.Printf("Chat服务客户端初始化成功，地址: %s", chatAddr)
+	return nil
+}
+
+// StartChatStream 启动与Chat服务的双向流连接
+func (s *Service) StartChatStream() {
+	log.Printf("开始连接Chat服务双向流...")
+
+	// 重试连接Chat服务
+	for i := 0; i < 10; i++ {
+		if i == 0 {
+			log.Printf("尝试连接Chat服务双向流... (第%d次)", i+1)
+		} else {
+			log.Printf("重试连接Chat服务双向流... (第%d次) - 等待Chat服务启动完成", i+1)
+		}
+
+		if s.chatClient == nil {
+			log.Printf("Chat服务客户端未初始化，等待2秒后重试...")
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// 创建双向流连接
+		stream, err := s.chatClient.MessageStream(context.Background())
+		if err != nil {
+			log.Printf("创建Chat服务双向流失败: %v", err)
+			if i < 9 {
+				log.Printf("等待2秒后重试...")
+			}
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		s.chatStream = stream // 保存stream连接
+		log.Printf("成功连接到Chat服务双向流")
+
+		// 启动接收goroutine
+		go s.handleChatStreamMessages(stream)
+
+		log.Printf("Chat服务双向流连接建立完成")
+		return
+	}
+
+	log.Printf("连接Chat服务双向流失败，已重试10次")
+}
+
+// handleChatStreamMessages 处理来自Chat服务的流消息
+func (s *Service) handleChatStreamMessages(stream rest.ChatService_MessageStreamClient) {
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			log.Printf("接收Chat服务流消息失败: %v", err)
+			s.chatStream = nil // 清空连接
+
+			// 重新连接
+			go func() {
+				time.Sleep(5 * time.Second)
+				s.StartChatStream()
+			}()
+			return
+		}
+
+		log.Printf("收到Chat服务流消息: From=%d, To=%d, Content=%s",
+			msg.From, msg.To, msg.Content)
+
+		// 处理来自Chat服务的消息（如果需要的话）
+		// 这里可以处理Chat服务的响应或通知
+	}
 }
 
 // cleanupOnStartup 启动时清理本实例的旧连接数据
@@ -912,29 +1003,57 @@ func (s *Service) notifyMessageFailure(originalSender int64, failureReason strin
 	log.Printf("通知用户 %d 消息发送失败: %s", originalSender, failureReason)
 }
 
-// SendMessageViaStream 通过双向流发送消息
+// SendMessageViaStream 通过Chat服务双向流发送消息
 func (s *Service) SendMessageViaStream(ctx context.Context, wsMsg *rest.WSMessage) error {
-	if s.msgStream == nil {
-		return fmt.Errorf("消息流连接未建立")
+	// 优先使用双向流，如果不可用则使用单向调用
+	if s.chatStream != nil {
+		log.Printf("通过Chat服务双向流发送消息: From=%d, To=%d, GroupID=%d, Content=%s",
+			wsMsg.From, wsMsg.To, wsMsg.GroupId, wsMsg.Content)
+
+		err := s.chatStream.Send(wsMsg)
+		if err != nil {
+			log.Printf("Chat服务双向流发送消息失败: %v", err)
+			s.chatStream = nil // 清空连接
+
+			// 降级到单向调用
+			return s.sendMessageViaUnaryCall(ctx, wsMsg)
+		}
+
+		log.Printf("Chat服务双向流发送消息成功")
+		return nil
 	}
 
-	// 通过双向流发送消息
-	log.Printf("通过双向流发送消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
+	// 双向流不可用，使用单向调用
+	return s.sendMessageViaUnaryCall(ctx, wsMsg)
+}
 
-	err := s.msgStream.Send(&rest.MessageStreamRequest{
-		RequestType: &rest.MessageStreamRequest_SendMessage{
-			SendMessage: &rest.SendWSMessageRequest{
-				Msg: wsMsg,
-			},
-		},
-	})
+// sendMessageViaUnaryCall 通过Chat服务单向调用发送消息（降级方案）
+func (s *Service) sendMessageViaUnaryCall(ctx context.Context, wsMsg *rest.WSMessage) error {
+	if s.chatClient == nil {
+		return fmt.Errorf("Chat服务客户端未初始化")
+	}
 
+	log.Printf("通过Chat服务单向调用发送消息: From=%d, To=%d, GroupID=%d, Content=%s",
+		wsMsg.From, wsMsg.To, wsMsg.GroupId, wsMsg.Content)
+
+	// 调用Chat服务的SendMessage方法
+	req := &rest.SendChatMessageRequest{
+		Msg: wsMsg,
+	}
+
+	resp, err := s.chatClient.SendMessage(ctx, req)
 	if err != nil {
-		log.Printf("双向流发送消息失败: %v", err)
+		log.Printf("Chat服务单向调用发送消息失败: %v", err)
 		return err
 	}
 
-	log.Printf("双向流发送消息成功")
+	if !resp.Success {
+		log.Printf("Chat服务处理消息失败: %s", resp.Message)
+		return fmt.Errorf("Chat服务处理消息失败: %s", resp.Message)
+	}
+
+	log.Printf("Chat服务单向调用发送消息成功: MessageID=%d, SuccessCount=%d",
+		resp.MessageId, resp.SuccessCount)
 	return nil
 }
 

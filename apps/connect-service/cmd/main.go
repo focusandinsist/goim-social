@@ -38,10 +38,16 @@ func main() {
 		rest.RegisterConnectServiceServer(grpcSrv, grpcHandler)
 	})
 
-	// 启动与Message服务的gRPC双向流连接
+	// 启动与Message服务的gRPC双向流连接（用于接收推送）
 	go func() {
 		app.GetKratosLogger().Log(kratoslog.LevelInfo, "msg", "Starting message stream connection")
 		svc.StartMessageStream()
+	}()
+
+	// 启动与Chat服务的gRPC双向流连接（用于发送消息）
+	go func() {
+		app.GetKratosLogger().Log(kratoslog.LevelInfo, "msg", "Starting chat stream connection")
+		svc.StartChatStream()
 	}()
 
 	// 运行应用程序

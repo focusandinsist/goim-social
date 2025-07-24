@@ -14,6 +14,7 @@ type Config struct {
 	Redis    RedisConfig    `yaml:"redis"`
 	Kafka    KafkaConfig    `yaml:"kafka"`
 	Connect  ConnectConfig  `yaml:"connect"`
+	Chat     ChatConfig     `yaml:"chat"`
 }
 
 // AppConfig 应用配置
@@ -77,9 +78,22 @@ type KafkaConfig struct {
 // ConnectConfig Connect服务配置
 type ConnectConfig struct {
 	MessageService MessageServiceConfig `yaml:"message_service"`
+	ChatService    ServiceEndpoint      `yaml:"chat_service"`
 	Instance       InstanceConfig       `yaml:"instance"`
 	Heartbeat      HeartbeatConfig      `yaml:"heartbeat"`
 	Connection     ConnectionConfig     `yaml:"connection"`
+}
+
+// ChatConfig Chat服务配置
+type ChatConfig struct {
+	GroupService   ServiceEndpoint `yaml:"group_service"`
+	MessageService ServiceEndpoint `yaml:"message_service"`
+}
+
+// ServiceEndpoint 服务端点配置
+type ServiceEndpoint struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
 }
 
 // MessageServiceConfig Message服务连接配置
@@ -125,9 +139,12 @@ func LoadConfig(serviceName string) *Config {
 	case "message-service":
 		defaultHTTPPort = "21004"
 		defaultGRPCPort = "22004"
-	case "connect-service":
+	case "chat-service":
 		defaultHTTPPort = "21005"
 		defaultGRPCPort = "22005"
+	case "connect-service":
+		defaultHTTPPort = "21006"
+		defaultGRPCPort = "22006"
 	default:
 		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, connect-service", serviceName))
 	}
@@ -159,7 +176,7 @@ func LoadConfig(serviceName string) *Config {
 				DBName: getEnvOrDefault("MONGODB_DB", serviceName+"DB"),
 			},
 			PostgreSQL: PostgreSQLConfig{
-				DSN:    getEnvOrDefault("POSTGRESQL_DSN", "host=localhost user=postgres password=postgres dbname="+serviceName+"DB port=5432 sslmode=disable TimeZone=Asia/Shanghai"),
+				DSN:    getEnvOrDefault("POSTGRESQL_DSN", "host=localhost user=postgres password=123456 dbname="+serviceName+"DB port=5432 sslmode=disable TimeZone=Asia/Shanghai"),
 				DBName: getEnvOrDefault("POSTGRESQL_DB", serviceName+"DB"),
 			},
 		},
@@ -177,6 +194,10 @@ func LoadConfig(serviceName string) *Config {
 				Host: getEnvOrDefault("MESSAGE_SERVICE_HOST", "localhost"),
 				Port: getEnvIntOrDefault("MESSAGE_SERVICE_PORT", 22004),
 			},
+			ChatService: ServiceEndpoint{
+				Host: getEnvOrDefault("CHAT_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("CHAT_SERVICE_PORT", 22005),
+			},
 			Instance: InstanceConfig{
 				Host: getEnvOrDefault("INSTANCE_HOST", "localhost"),
 				Port: getEnvIntOrDefault("INSTANCE_PORT", 21003),
@@ -188,6 +209,16 @@ func LoadConfig(serviceName string) *Config {
 			Connection: ConnectionConfig{
 				ExpireTime: getEnvIntOrDefault("CONNECTION_EXPIRE_TIME", 2),
 				ClientType: getEnvOrDefault("DEFAULT_CLIENT_TYPE", "web"),
+			},
+		},
+		Chat: ChatConfig{
+			GroupService: ServiceEndpoint{
+				Host: getEnvOrDefault("GROUP_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("GROUP_SERVICE_PORT", 22002),
+			},
+			MessageService: ServiceEndpoint{
+				Host: getEnvOrDefault("MESSAGE_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("MESSAGE_SERVICE_PORT", 22004),
 			},
 		},
 	}

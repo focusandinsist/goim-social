@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+import "message.proto";
+
+// 发送聊天消息请求
+message SendChatMessageRequest {
+  WSMessage msg = 1;
+}
+
+// 发送聊天消息响应
+message SendChatMessageResponse {
+  bool success = 1;
+  string message = 2;
+  int64 message_id = 3;
+  int32 success_count = 4;
+  int32 failure_count = 5;
+  repeated int64 failed_users = 6;
+}
+
+// Chat服务的gRPC接口
+service ChatService {
+  // 发送消息（支持单聊和群聊）
+  rpc SendMessage(SendChatMessageRequest) returns (SendChatMessageResponse);
+
+  // 双向流消息处理（与Connect服务的实时通信）
+  rpc MessageStream(stream WSMessage) returns (stream WSMessage);
+}

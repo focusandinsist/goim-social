@@ -1,7 +1,4 @@
 {
-    // 使用 IntelliSense 了解相关属性。
-    // 悬停以查看现有属性的描述。
-    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
@@ -30,8 +27,8 @@
                 "SERVICE_NAME": "group-service",
                 "HTTP_PORT": "21002",
                 "GRPC_PORT": "22002",
-                "MONGODB_URI": "mongodb://localhost:27017",
-                "MONGODB_DB": "groupDB",
+                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=groupServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
+                "POSTGRESQL_DB": "groupServiceDB",
                 "REDIS_ADDR": "localhost:6379",
                 "KAFKA_BROKERS": "localhost:9092"
             }
@@ -69,15 +66,37 @@
             }
         },
         {
-            "name": "5. Connect Service (HTTP:21005, gRPC:22005)",
+            "name": "5. Chat Service (HTTP:21005, gRPC:22005)",
+            "type": "go",
+            "request": "launch",
+            "program": "./apps/chat-service/cmd/main.go",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_NAME": "chat-service",
+                "HTTP_PORT": "21005",
+                "GRPC_PORT": "22005",
+                "GROUP_SERVICE_HOST": "localhost",
+                "GROUP_SERVICE_PORT": "22002",
+                "MESSAGE_SERVICE_HOST": "localhost",
+                "MESSAGE_SERVICE_PORT": "22004",
+                "REDIS_ADDR": "localhost:6379",
+                "KAFKA_BROKERS": "localhost:9092"
+            }
+        },
+        {
+            "name": "6. Connect Service (HTTP:21006, gRPC:22006)",
             "type": "go",
             "request": "launch",
             "program": "./apps/connect-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "connect-service",
-                "HTTP_PORT": "21005",
-                "GRPC_PORT": "22005",
+                "HTTP_PORT": "21006",
+                "GRPC_PORT": "22006",
+                "MESSAGE_SERVICE_HOST": "localhost",
+                "MESSAGE_SERVICE_PORT": "22004",
+                "CHAT_SERVICE_HOST": "localhost",
+                "CHAT_SERVICE_PORT": "22005",
                 "MONGODB_URI": "mongodb://localhost:27017",
                 "MONGODB_DB": "connectDB",
                 "REDIS_ADDR": "localhost:6379",
@@ -112,7 +131,8 @@
                 "2. Group Service (HTTP:21002, gRPC:22002)",
                 "3. Friend Service (HTTP:21003, gRPC:22003)",
                 "4. Message Service (HTTP:21004, gRPC:22004)",
-                "5. Connect Service (HTTP:21005, gRPC:22005)"
+                "5. Chat Service (HTTP:21005, gRPC:22005)",
+                "6. Connect Service (HTTP:21006, gRPC:22006)"
             ],
             "stopAll": true
         },

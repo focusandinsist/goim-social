@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+// 获取群组成员ID列表请求
+message GetGroupMemberIDsRequest {
+  int64 group_id = 1;
+}
+
+// 获取群组成员ID列表响应
+message GetGroupMemberIDsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated int64 member_ids = 3;
+}
+
+// 验证群成员身份请求
+message ValidateGroupMemberRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+}
+
+// 验证群成员身份响应
+message ValidateGroupMemberResponse {
+  bool success = 1;
+  string message = 2;
+  bool is_member = 3;
+}
+
+// Group服务的gRPC接口
+service GroupService {
+  // 获取群组成员ID列表（用于群消息推送）
+  rpc GetGroupMemberIDs(GetGroupMemberIDsRequest) returns (GetGroupMemberIDsResponse);
+  
+  // 验证群成员身份（用于群消息发送权限验证）
+  rpc ValidateGroupMember(ValidateGroupMemberRequest) returns (ValidateGroupMemberResponse);
+}

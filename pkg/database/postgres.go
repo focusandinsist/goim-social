@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -20,6 +21,11 @@ type PostgreSQL struct {
 
 // NewPostgreSQL 创建PostgreSQL连接
 func NewPostgreSQL(dsn, dbName string) (*PostgreSQL, error) {
+	// 首先尝试创建数据库（如果不存在）
+	if err := createDatabaseIfNotExists(dsn, dbName); err != nil {
+		return nil, fmt.Errorf("failed to create database: %v", err)
+	}
+
 	// 配置GORM
 	config := &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
@@ -48,7 +54,7 @@ func NewPostgreSQL(dsn, dbName string) (*PostgreSQL, error) {
 	// 测试连接
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	if err := sqlDB.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping PostgreSQL: %v", err)
 	}
@@ -121,4 +127,55 @@ func (p *PostgreSQL) Rollback(tx *gorm.DB) *gorm.DB {
 // Commit 提交事务
 func (p *PostgreSQL) Commit(tx *gorm.DB) *gorm.DB {
 	return tx.Commit()
+}
+
+// createDatabaseIfNotExists 创建数据库（如果不存在）
+func createDatabaseIfNotExists(dsn, dbName string) error {
+	// 解析DSN，移除数据库名称，连接到postgres默认数据库
+	adminDSN := strings.Replace(dsn, "dbname="+dbName, "dbname=postgres", 1)
+
+	// 使用GORM连接到PostgreSQL服务器
+	adminDB, err := gorm.Open(postgres.Open(adminDSN), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent), // 静默模式避免过多日志
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to PostgreSQL server: %v", err)
+	}
+
+	// 获取底层sql.DB对象
+	sqlDB, err := adminDB.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get sql.DB: %v", err)
+	}
+	defer sqlDB.Close()
+
+	// 测试连接
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("failed to ping PostgreSQL server: %v", err)
+	}
+
+	// 检查数据库是否存在
+	var exists bool
+	query := "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = ?)"
+	err = adminDB.Raw(query, dbName).Scan(&exists).Error
+	if err != nil {
+		return fmt.Errorf("failed to check if database exists: %v", err)
+	}
+
+	// 如果数据库不存在，创建它
+	if !exists {
+		createQuery := fmt.Sprintf(`CREATE DATABASE "%s"`, dbName)
+		err = adminDB.Exec(createQuery).Error
+		if err != nil {
+			return fmt.Errorf("failed to create database %s: %v", dbName, err)
+		}
+		fmt.Printf("Database %s created successfully\n", dbName)
+	} else {
+		fmt.Printf("Database %s already exists\n", dbName)
+	}
+
+	return nil
 }
