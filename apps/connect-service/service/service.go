@@ -204,10 +204,10 @@ type Service struct {
 	db         *database.MongoDB
 	redis      *redis.RedisClient
 	kafka      *kafka.Producer
-	config     *config.Config                          // 配置
-	instanceID string                                  // Connect服务实例ID
-	msgStream  rest.MessageService_MessageStreamClient // 消息流连接
-	connMgr    *ConnectionManager                      // 统一连接管理器
+	config     *config.Config         // 配置
+	instanceID string                 // Connect服务实例ID
+	chatClient rest.ChatServiceClient // Chat服务客户端
+	connMgr    *ConnectionManager     // 统一连接管理器
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
@@ -220,6 +220,11 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		connMgr:    NewConnectionManager(redis, cfg),                 // 初始化连接管理器
 	}
 
+	// 初始化Logic服务客户端
+	if err := service.initLogicClient(); err != nil {
+		log.Printf("Logic服务客户端初始化失败: %v", err)
+	}
+
 	// 注册服务实例
 	if err := service.registerInstance(); err != nil {
 		log.Printf("服务实例注册失败: %v", err)
@@ -229,6 +234,36 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 	go service.cleanupOnStartup()
 
 	return service
+}
+
+// initLogicClient 初始化Logic服务客户端
+func (s *Service) initLogicClient() error {
+	// Logic服务地址
+	logicAddr := fmt.Sprintf("%s:%d", s.config.Connect.LogicService.Host, s.config.Connect.LogicService.Port)
+
+	// 建立gRPC连接
+	conn, err := grpc.Dial(logicAddr, grpc.WithInsecure())
+	if err != nil {
+		return fmt.Errorf("连接Logic服务失败: %v", err)
+	}
+
+	// 创建Logic服务客户端
+	s.chatClient = rest.NewChatServiceClient(conn)
+
+	log.Printf("Logic服务客户端初始化成功，地址: %s", logicAddr)
+	return nil
+}
+
+// StartLogicConnection 初始化与Logic服务的连接
+func (s *Service) StartLogicConnection() {
+	log.Printf("初始化Logic服务连接...")
+
+	if s.chatClient == nil {
+		log.Printf("Logic服务客户端未初始化")
+		return
+	}
+
+	log.Printf("Logic服务连接已就绪")
 }
 
 // cleanupOnStartup 启动时清理本实例的旧连接数据
@@ -499,6 +534,8 @@ func (s *Service) handleCrossNodeMessage(ctx context.Context, payload string) er
 	switch msgType {
 	case "forward_message":
 		return s.handleForwardMessage(ctx, crossNodeMsg)
+	case "push_message":
+		return s.handlePushMessage(ctx, crossNodeMsg)
 	default:
 		log.Printf("未知的跨节点消息类型: %s", msgType)
 	}
@@ -535,6 +572,40 @@ func (s *Service) handleForwardMessage(ctx context.Context, crossNodeMsg map[str
 
 	// 推送给本地用户
 	return s.pushToLocalUser(ctx, userID, &message)
+}
+
+// handlePushMessage 处理推送消息
+func (s *Service) handlePushMessage(ctx context.Context, crossNodeMsg map[string]interface{}) error {
+	// 提取目标用户ID
+	targetUserFloat, ok := crossNodeMsg["target_user"].(float64)
+	if !ok {
+		return fmt.Errorf("目标用户ID无效")
+	}
+	targetUserID := int64(targetUserFloat)
+
+	// 提取消息内容
+	messageData, ok := crossNodeMsg["message"]
+	if !ok {
+		return fmt.Errorf("消息内容无效")
+	}
+
+	// 重新序列化消息
+	msgBytes, err := json.Marshal(messageData)
+	if err != nil {
+		return fmt.Errorf("序列化消息失败: %v", err)
+	}
+
+	// 反序列化为WSMessage
+	var message rest.WSMessage
+	if err := json.Unmarshal(msgBytes, &message); err != nil {
+		return fmt.Errorf("反序列化WSMessage失败: %v", err)
+	}
+
+	log.Printf("Connect服务收到推送消息: UserID=%d, MessageID=%d, Content=%s",
+		targetUserID, message.MessageId, message.Content)
+
+	// 推送给本地用户
+	return s.pushToLocalUser(ctx, targetUserID, &message)
 }
 
 // Connect 处理连接，写入 redis hash，并维护在线用户 set
@@ -606,18 +677,12 @@ func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]
 	return status, nil
 }
 
-// ForwardMessageToMessageService 通过 gRPC 转发消息到 Message 微服务
-func (s *Service) ForwardMessageToMessageService(ctx context.Context, wsMsg *rest.WSMessage) error {
+// ForwardMessageToLogicService 通过 gRPC 转发消息到 Logic 微服务
+func (s *Service) ForwardMessageToLogicService(ctx context.Context, wsMsg *rest.WSMessage) error {
 	log.Printf("Connect服务转发消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
 
-	// 双向流是IM系统的核心，必须可用
-	if s.msgStream == nil {
-		log.Printf("双向流连接不可用，IM系统无法正常工作")
-		return fmt.Errorf("双向流连接不可用，无法转发消息")
-	}
-
-	log.Printf("通过双向流转发消息")
-	return s.SendMessageViaStream(ctx, wsMsg)
+	// 使用Chat服务的单向调用
+	return s.sendMessageViaUnaryCall(ctx, wsMsg)
 }
 
 // HandleHeartbeat 处理心跳包
@@ -660,95 +725,6 @@ func (s *Service) HandleOnlineStatusEvent(ctx context.Context, wsMsg *rest.WSMes
 // ValidateToken 校验 JWT token
 func (s *Service) ValidateToken(token string) bool {
 	return auth.ValidateToken(token)
-}
-
-func (s *Service) StartMessageStream() {
-	log.Printf("开始连接Message服务...")
-
-	// 重试连接Message服务
-	for i := 0; i < 10; i++ {
-		if i == 0 {
-			log.Printf("尝试连接Message服务... (第%d次)", i+1)
-		} else {
-			log.Printf("重试连接Message服务... (第%d次) - 等待Message服务启动完成", i+1)
-		}
-
-		addr := fmt.Sprintf("%s:%d", s.config.Connect.MessageService.Host, s.config.Connect.MessageService.Port)
-		conn, err := grpc.Dial(addr, grpc.WithInsecure())
-		if err != nil {
-			log.Printf("连接Message服务失败: %v", err)
-			if i < 9 {
-				log.Printf("等待2秒后重试...")
-			}
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		client := rest.NewMessageServiceClient(conn)
-		stream, err := client.MessageStream(context.Background())
-		if err != nil {
-			log.Printf("创建消息流失败: %v", err)
-			conn.Close()
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		s.msgStream = stream // 保存stream连接
-		log.Printf("成功连接到Message服务")
-
-		// 发送订阅请求
-		err = stream.Send(&rest.MessageStreamRequest{
-			RequestType: &rest.MessageStreamRequest_Subscribe{
-				Subscribe: &rest.SubscribeRequest{ConnectServiceId: s.instanceID},
-			},
-		})
-		if err != nil {
-			log.Printf("发送订阅请求失败: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		// 连接成功，启动消息接收goroutine
-		go func(stream rest.MessageService_MessageStreamClient) {
-			for {
-				resp, err := stream.Recv()
-				if err != nil {
-					log.Printf("消息流接收失败: %v", err)
-					return
-				}
-				switch respType := resp.ResponseType.(type) {
-				case *rest.MessageStreamResponse_PushEvent:
-					event := respType.PushEvent
-					// 推送给本地用户
-					err := s.pushToLocalConnection(event.TargetUserId, event.Message)
-					if err != nil {
-						log.Printf("pushToLocalConnection fail: %v", err)
-						continue
-					}
-					// 发送推送结果反馈
-					err = stream.Send(&rest.MessageStreamRequest{
-						RequestType: &rest.MessageStreamRequest_PushResult{
-							PushResult: &rest.PushResultRequest{
-								Success:      true,
-								TargetUserId: event.TargetUserId,
-							},
-						},
-					})
-					if err != nil {
-						log.Printf("stream.Send fail: %v", err)
-						continue
-					}
-				case *rest.MessageStreamResponse_Failure:
-					failure := respType.Failure
-					// 通知原发送者消息失败
-					s.notifyMessageFailure(failure.OriginalSender, failure.FailureReason)
-				}
-			}
-		}(stream)
-
-		// 连接成功，跳出重试循环
-		break
-	}
 }
 
 // isPushDuplicate 检查消息是否已推送给用户（防重复推送）
@@ -877,31 +853,6 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 		return fmt.Errorf("MessageID不能为0")
 	}
 
-	// 通过双向流发送ACK请求给Message服务
-	if s.msgStream != nil {
-		ackReq := &rest.MessageStreamRequest{
-			RequestType: &rest.MessageStreamRequest_Ack{
-				Ack: &rest.MessageAckRequest{
-					AckId:     wsMsg.AckId,
-					MessageId: messageID,
-					UserId:    userID,
-					Timestamp: time.Now().Unix(),
-				},
-			},
-		}
-
-		err := s.msgStream.Send(ackReq)
-		if err != nil {
-			log.Printf("发送消息ACK失败: %v", err)
-			return err
-		} else {
-			log.Printf("已发送消息ACK: MessageID=%d, UserID=%d", messageID, userID)
-		}
-	} else {
-		log.Printf("双向流连接不可用，无法发送ACK")
-		return fmt.Errorf("双向流连接不可用")
-	}
-
 	return nil
 }
 
@@ -912,29 +863,33 @@ func (s *Service) notifyMessageFailure(originalSender int64, failureReason strin
 	log.Printf("通知用户 %d 消息发送失败: %s", originalSender, failureReason)
 }
 
-// SendMessageViaStream 通过双向流发送消息
-func (s *Service) SendMessageViaStream(ctx context.Context, wsMsg *rest.WSMessage) error {
-	if s.msgStream == nil {
-		return fmt.Errorf("消息流连接未建立")
+// sendMessageViaUnaryCall 通过Logic服务单向调用发送消息
+func (s *Service) sendMessageViaUnaryCall(ctx context.Context, wsMsg *rest.WSMessage) error {
+	if s.chatClient == nil {
+		return fmt.Errorf("Logic服务客户端未初始化")
 	}
 
-	// 通过双向流发送消息
-	log.Printf("通过双向流发送消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
+	log.Printf("通过Logic服务单向调用发送消息: From=%d, To=%d, GroupID=%d, Content=%s",
+		wsMsg.From, wsMsg.To, wsMsg.GroupId, wsMsg.Content)
 
-	err := s.msgStream.Send(&rest.MessageStreamRequest{
-		RequestType: &rest.MessageStreamRequest_SendMessage{
-			SendMessage: &rest.SendWSMessageRequest{
-				Msg: wsMsg,
-			},
-		},
-	})
+	// 调用Logic服务的SendMessage方法
+	req := &rest.SendChatMessageRequest{
+		Msg: wsMsg,
+	}
 
+	resp, err := s.chatClient.SendMessage(ctx, req)
 	if err != nil {
-		log.Printf("双向流发送消息失败: %v", err)
+		log.Printf("Logic服务单向调用发送消息失败: %v", err)
 		return err
 	}
 
-	log.Printf("双向流发送消息成功")
+	if !resp.Success {
+		log.Printf("Logic服务处理消息失败: %s", resp.Message)
+		return fmt.Errorf("Logic服务处理消息失败: %s", resp.Message)
+	}
+
+	log.Printf("Logic服务单向调用发送消息成功: MessageID=%d, SuccessCount=%d",
+		resp.MessageId, resp.SuccessCount)
 	return nil
 }
 

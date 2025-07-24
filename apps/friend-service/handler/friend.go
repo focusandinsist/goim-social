@@ -71,7 +71,7 @@ func (h *HTTPHandler) ListFriends(c *gin.Context) {
 					UserId:    friend.UserID,
 					FriendId:  friend.FriendID,
 					Remark:    friend.Remark,
-					CreatedAt: friend.CreatedAt,
+					CreatedAt: friend.CreatedAt.Unix(),
 				})
 			}
 			return pbFriends
@@ -177,7 +177,7 @@ func (h *HTTPHandler) ListFriendApply(c *gin.Context) {
 			pbApplies = append(pbApplies, &rest.FriendApplyInfo{
 				ApplicantId: a.ApplicantID,
 				Remark:      a.Remark,
-				Timestamp:   a.Timestamp,
+				Timestamp:   a.CreatedAt.Unix(),
 				Status:      a.Status,
 			})
 		}

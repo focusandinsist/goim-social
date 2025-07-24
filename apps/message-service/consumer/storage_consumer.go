@@ -44,7 +44,7 @@ func (s *StorageConsumer) Start(ctx context.Context, brokers []string) error {
 	cfg := kafka.KafkaConfig{
 		Brokers: brokers,
 		GroupID: "storage-consumer-group",
-		Topics:  []string{"message-events"},
+		Topics:  []string{"uplink_messages"},
 	}
 
 	consumer, err := kafka.InitConsumer(cfg, s)
@@ -53,7 +53,7 @@ func (s *StorageConsumer) Start(ctx context.Context, brokers []string) error {
 	}
 
 	s.consumer = consumer
-	log.Printf("存储消费者启动成功，监听topic: message-events")
+	log.Printf("存储消费者启动成功，监听topic: uplink_messages")
 
 	return s.consumer.StartConsuming(ctx)
 }
@@ -133,15 +133,16 @@ func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	// 转换为Message模型并设置状态
 	message := &model.Message{
 		// 不设置ID，让MongoDB自动生成_id
-		MessageID: msg.MessageId, // 直接使用Kafka消息中的MessageID
-		From:      msg.From,
-		To:        msg.To,
-		GroupID:   msg.GroupId,
-		Content:   msg.Content,
-		MsgType:   msg.MessageType,
-		Status:    0, // 0:未读
-		CreatedAt: time.Unix(msg.Timestamp, 0),
-		UpdatedAt: time.Now(),
+		MessageID:   msg.MessageId, // 直接使用Kafka消息中的MessageID
+		From:        msg.From,
+		To:          msg.To,
+		GroupID:     msg.GroupId,
+		Content:     msg.Content,
+		MessageType: int(msg.MessageType),
+		Timestamp:   msg.Timestamp,
+		Status:      model.MessageStatusSent,
+		CreatedAt:   time.Unix(msg.Timestamp, 0),
+		UpdatedAt:   time.Now(),
 	}
 
 	// 先尝试简单的插入操作，如果重复则忽略

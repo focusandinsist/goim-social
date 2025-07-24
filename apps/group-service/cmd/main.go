@@ -2,7 +2,9 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc"
 
+	"websocket-server/api/rest"
 	"websocket-server/apps/group-service/dao"
 	"websocket-server/apps/group-service/handler"
 	"websocket-server/apps/group-service/model"
@@ -14,8 +16,9 @@ func main() {
 	// 创建应用程序
 	app := server.NewApplication("group-service")
 
-	// 启用HTTP服务器
+	// 启用HTTP和gRPC服务器
 	app.EnableHTTP()
+	app.EnableGRPC()
 
 	// 初始化PostgreSQL连接
 	postgreSQL := app.GetPostgreSQL()
@@ -39,10 +42,16 @@ func main() {
 
 	// 初始化Handler
 	httpHandler := handler.NewHTTPHandler(svc, app.GetLogger())
+	grpcHandler := handler.NewGRPCHandler(svc, app.GetLogger())
 
 	// 注册HTTP路由
 	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
 		httpHandler.RegisterRoutes(engine)
+	})
+
+	// 注册gRPC服务
+	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
+		rest.RegisterGroupServiceServer(grpcSrv, grpcHandler)
 	})
 
 	// 运行应用程序

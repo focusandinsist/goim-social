@@ -21,7 +21,6 @@ const _ = grpc.SupportPackageIsVersion7
 const (
 	MessageService_SendWSMessage_FullMethodName      = "/rest.MessageService/SendWSMessage"
 	MessageService_GetHistoryMessages_FullMethodName = "/rest.MessageService/GetHistoryMessages"
-	MessageService_MessageStream_FullMethodName      = "/rest.MessageService/MessageStream"
 )
 
 // MessageServiceClient is the client API for MessageService service.
@@ -31,8 +30,6 @@ type MessageServiceClient interface {
 	SendWSMessage(ctx context.Context, in *SendWSMessageRequest, opts ...grpc.CallOption) (*SendWSMessageResponse, error)
 	// 获取历史消息
 	GetHistoryMessages(ctx context.Context, in *GetHistoryRequest, opts ...grpc.CallOption) (*GetHistoryResponse, error)
-	// 双向流：Connect服务与Message服务的消息通道
-	MessageStream(ctx context.Context, opts ...grpc.CallOption) (MessageService_MessageStreamClient, error)
 }
 
 type messageServiceClient struct {
@@ -61,37 +58,6 @@ func (c *messageServiceClient) GetHistoryMessages(ctx context.Context, in *GetHi
 	return out, nil
 }
 
-func (c *messageServiceClient) MessageStream(ctx context.Context, opts ...grpc.CallOption) (MessageService_MessageStreamClient, error) {
-	stream, err := c.cc.NewStream(ctx, &MessageService_ServiceDesc.Streams[0], MessageService_MessageStream_FullMethodName, opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &messageServiceMessageStreamClient{stream}
-	return x, nil
-}
-
-type MessageService_MessageStreamClient interface {
-	Send(*MessageStreamRequest) error
-	Recv() (*MessageStreamResponse, error)
-	grpc.ClientStream
-}
-
-type messageServiceMessageStreamClient struct {
-	grpc.ClientStream
-}
-
-func (x *messageServiceMessageStreamClient) Send(m *MessageStreamRequest) error {
-	return x.ClientStream.SendMsg(m)
-}
-
-func (x *messageServiceMessageStreamClient) Recv() (*MessageStreamResponse, error) {
-	m := new(MessageStreamResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 // MessageServiceServer is the server API for MessageService service.
 // All implementations must embed UnimplementedMessageServiceServer
 // for forward compatibility
@@ -99,8 +65,6 @@ type MessageServiceServer interface {
 	SendWSMessage(context.Context, *SendWSMessageRequest) (*SendWSMessageResponse, error)
 	// 获取历史消息
 	GetHistoryMessages(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error)
-	// 双向流：Connect服务与Message服务的消息通道
-	MessageStream(MessageService_MessageStreamServer) error
 	mustEmbedUnimplementedMessageServiceServer()
 }
 
@@ -113,9 +77,6 @@ func (UnimplementedMessageServiceServer) SendWSMessage(context.Context, *SendWSM
 }
 func (UnimplementedMessageServiceServer) GetHistoryMessages(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetHistoryMessages not implemented")
-}
-func (UnimplementedMessageServiceServer) MessageStream(MessageService_MessageStreamServer) error {
-	return status.Errorf(codes.Unimplemented, "method MessageStream not implemented")
 }
 func (UnimplementedMessageServiceServer) mustEmbedUnimplementedMessageServiceServer() {}
 
@@ -166,32 +127,6 @@ func _MessageService_GetHistoryMessages_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MessageService_MessageStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(MessageServiceServer).MessageStream(&messageServiceMessageStreamServer{stream})
-}
-
-type MessageService_MessageStreamServer interface {
-	Send(*MessageStreamResponse) error
-	Recv() (*MessageStreamRequest, error)
-	grpc.ServerStream
-}
-
-type messageServiceMessageStreamServer struct {
-	grpc.ServerStream
-}
-
-func (x *messageServiceMessageStreamServer) Send(m *MessageStreamResponse) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func (x *messageServiceMessageStreamServer) Recv() (*MessageStreamRequest, error) {
-	m := new(MessageStreamRequest)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 // MessageService_ServiceDesc is the grpc.ServiceDesc for MessageService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -208,13 +143,6 @@ var MessageService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MessageService_GetHistoryMessages_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "MessageStream",
-			Handler:       _MessageService_MessageStream_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "message.grpc.proto",
 }

@@ -7,7 +7,6 @@ import (
 )
 
 // FriendDAO 好友数据访问接口
-// TODO: 临时mongodb实现，考虑关系型db
 type FriendDAO interface {
 	// 好友关系管理
 	CreateFriend(ctx context.Context, friend *model.Friend) error

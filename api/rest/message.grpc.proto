@@ -74,7 +74,4 @@ service MessageService {
 
   // 获取历史消息
   rpc GetHistoryMessages(GetHistoryRequest) returns (GetHistoryResponse);
-
-  // 双向流：Connect服务与Message服务的消息通道
-  rpc MessageStream(stream MessageStreamRequest) returns (stream MessageStreamResponse);
 }

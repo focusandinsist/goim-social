@@ -49,14 +49,14 @@ func main() {
 
 	// 注册HTTP路由
 	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
-		httpHandler := handler.NewHandler(svc, app.GetLogger())
+		httpHandler := handler.NewHTTPHandler(svc, app.GetLogger())
 		httpHandler.RegisterRoutes(engine)
 	})
 
 	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
-		grpcService := svc.NewGRPCService(svc)
-		rest.RegisterMessageServiceServer(grpcSrv, grpcService)
+		grpcHandler := handler.NewGRPCHandler(svc)
+		rest.RegisterMessageServiceServer(grpcSrv, grpcHandler)
 	})
 
 	// 运行应用程序

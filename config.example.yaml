@@ -7,10 +7,11 @@
 #
 # 服务启动顺序（按依赖关系）：
 # 1. User Service    - HTTP:21001, gRPC:22001 (基础服务)
-# 2. Group Service   - HTTP:21002, gRPC:22002 (基础服务)
-# 3. Friend Service  - HTTP:21003, gRPC:22003 (依赖User)
-# 4. Message Service - HTTP:21004, gRPC:22004 (依赖User、Group)
-# 5. Connect Service - HTTP:21005, gRPC:22005 (依赖Message)
+# 2. Group Service   - HTTP:21002, gRPC:22002 (基础服务，PostgreSQL)
+# 3. Friend Service  - HTTP:21003, gRPC:22003 (依赖User，MongoDB)
+# 4. Message Service - HTTP:21004, gRPC:22004 (依赖User、Group，MongoDB)
+# 5. Logic Service   - HTTP:21005, gRPC:22005 (依赖Group、Message)
+# 6. Connect Service - HTTP:21006, gRPC:22006 (依赖Message、Logic，MongoDB)
 
 server:
   http:
@@ -27,7 +28,7 @@ database:
     uri: mongodb://localhost:27017
     db_name: serviceDB
   postgresql:
-    dsn: "host=localhost user=postgres password=postgres dbname=serviceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+    dsn: "host=localhost user=postgres password=123456 dbname=serviceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai"
     db_name: serviceDB
 
 redis:
@@ -39,3 +40,28 @@ kafka:
   brokers:
     - localhost:9092
   group_id: service-group
+
+connect:
+  message_service:
+    host: localhost
+    port: 22004
+  logic_service:
+    host: localhost
+    port: 22005
+  instance:
+    host: localhost
+    port: 21006
+  heartbeat:
+    interval: 10
+    timeout: 30
+  connection:
+    expire_time: 2
+    client_type: web
+
+logic:
+  group_service:
+    host: localhost
+    port: 22002
+  message_service:
+    host: localhost
+    port: 22004

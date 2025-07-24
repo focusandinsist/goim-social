@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${fileDirname}",
+            "env": {},
+            // go run main.go -user=1001 -target=1002 -skip
+            "args": ["-user=1001", "-target=1002", "-skip"]
+        }
+    ]
+}

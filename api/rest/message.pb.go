@@ -468,6 +468,246 @@ func (x *GetHistoryResponse) GetSize() int32 {
 	return 0
 }
 
+// 获取未读消息请求
+type GetUnreadMessagesRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	UserId int64 `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+}
+
+func (x *GetUnreadMessagesRequest) Reset() {
+	*x = GetUnreadMessagesRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_message_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetUnreadMessagesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUnreadMessagesRequest) ProtoMessage() {}
+
+func (x *GetUnreadMessagesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUnreadMessagesRequest.ProtoReflect.Descriptor instead.
+func (*GetUnreadMessagesRequest) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GetUnreadMessagesRequest) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+// 获取未读消息响应
+type GetUnreadMessagesResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Success  bool         `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message  string       `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Messages []*WSMessage `protobuf:"bytes,3,rep,name=messages,proto3" json:"messages,omitempty"`
+	Total    int32        `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`
+}
+
+func (x *GetUnreadMessagesResponse) Reset() {
+	*x = GetUnreadMessagesResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_message_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetUnreadMessagesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUnreadMessagesResponse) ProtoMessage() {}
+
+func (x *GetUnreadMessagesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUnreadMessagesResponse.ProtoReflect.Descriptor instead.
+func (*GetUnreadMessagesResponse) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetUnreadMessagesResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *GetUnreadMessagesResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *GetUnreadMessagesResponse) GetMessages() []*WSMessage {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *GetUnreadMessagesResponse) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+// 标记消息已读请求
+type MarkMessagesReadRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	UserId     int64   `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	MessageIds []int64 `protobuf:"varint,2,rep,packed,name=message_ids,json=messageIds,proto3" json:"message_ids,omitempty"`
+}
+
+func (x *MarkMessagesReadRequest) Reset() {
+	*x = MarkMessagesReadRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_message_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MarkMessagesReadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkMessagesReadRequest) ProtoMessage() {}
+
+func (x *MarkMessagesReadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkMessagesReadRequest.ProtoReflect.Descriptor instead.
+func (*MarkMessagesReadRequest) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MarkMessagesReadRequest) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *MarkMessagesReadRequest) GetMessageIds() []int64 {
+	if x != nil {
+		return x.MessageIds
+	}
+	return nil
+}
+
+// 标记消息已读响应
+type MarkMessagesReadResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Success   bool    `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message   string  `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	FailedIds []int64 `protobuf:"varint,3,rep,packed,name=failed_ids,json=failedIds,proto3" json:"failed_ids,omitempty"`
+}
+
+func (x *MarkMessagesReadResponse) Reset() {
+	*x = MarkMessagesReadResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_message_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MarkMessagesReadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkMessagesReadResponse) ProtoMessage() {}
+
+func (x *MarkMessagesReadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkMessagesReadResponse.ProtoReflect.Descriptor instead.
+func (*MarkMessagesReadResponse) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MarkMessagesReadResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *MarkMessagesReadResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *MarkMessagesReadResponse) GetFailedIds() []int64 {
+	if x != nil {
+		return x.FailedIds
+	}
+	return nil
+}
+
 var File_message_proto protoreflect.FileDescriptor
 
 var file_message_proto_rawDesc = []byte{
@@ -521,8 +761,33 @@ var file_message_proto_rawDesc = []byte{
 	0x05, 0x74, 0x6f, 0x74, 0x61, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x05, 0x74, 0x6f,
 	0x74, 0x61, 0x6c, 0x12, 0x12, 0x0a, 0x04, 0x70, 0x61, 0x67, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28,
 	0x05, 0x52, 0x04, 0x70, 0x61, 0x67, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x73, 0x69, 0x7a, 0x65, 0x18,
-	0x04, 0x20, 0x01, 0x28, 0x05, 0x52, 0x04, 0x73, 0x69, 0x7a, 0x65, 0x42, 0x08, 0x5a, 0x06, 0x2e,
-	0x3b, 0x72, 0x65, 0x73, 0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x04, 0x20, 0x01, 0x28, 0x05, 0x52, 0x04, 0x73, 0x69, 0x7a, 0x65, 0x22, 0x33, 0x0a, 0x18, 0x47,
+	0x65, 0x74, 0x55, 0x6e, 0x72, 0x65, 0x61, 0x64, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x17, 0x0a, 0x07, 0x75, 0x73, 0x65, 0x72, 0x5f,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x75, 0x73, 0x65, 0x72, 0x49, 0x64,
+	0x22, 0x92, 0x01, 0x0a, 0x19, 0x47, 0x65, 0x74, 0x55, 0x6e, 0x72, 0x65, 0x61, 0x64, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x18,
+	0x0a, 0x07, 0x73, 0x75, 0x63, 0x63, 0x65, 0x73, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52,
+	0x07, 0x73, 0x75, 0x63, 0x63, 0x65, 0x73, 0x73, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x12, 0x2b, 0x0a, 0x08, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x18, 0x03,
+	0x20, 0x03, 0x28, 0x0b, 0x32, 0x0f, 0x2e, 0x72, 0x65, 0x73, 0x74, 0x2e, 0x57, 0x53, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x52, 0x08, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x12,
+	0x14, 0x0a, 0x05, 0x74, 0x6f, 0x74, 0x61, 0x6c, 0x18, 0x04, 0x20, 0x01, 0x28, 0x05, 0x52, 0x05,
+	0x74, 0x6f, 0x74, 0x61, 0x6c, 0x22, 0x53, 0x0a, 0x17, 0x4d, 0x61, 0x72, 0x6b, 0x4d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x73, 0x52, 0x65, 0x61, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x12, 0x17, 0x0a, 0x07, 0x75, 0x73, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x03, 0x52, 0x06, 0x75, 0x73, 0x65, 0x72, 0x49, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x6d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x5f, 0x69, 0x64, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x03, 0x52, 0x0a,
+	0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x49, 0x64, 0x73, 0x22, 0x6d, 0x0a, 0x18, 0x4d, 0x61,
+	0x72, 0x6b, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x73, 0x52, 0x65, 0x61, 0x64, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x73, 0x75, 0x63, 0x63, 0x65, 0x73,
+	0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x73, 0x75, 0x63, 0x63, 0x65, 0x73, 0x73,
+	0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x66, 0x61,
+	0x69, 0x6c, 0x65, 0x64, 0x5f, 0x69, 0x64, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x03, 0x52, 0x09,
+	0x66, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x49, 0x64, 0x73, 0x42, 0x08, 0x5a, 0x06, 0x2e, 0x3b, 0x72,
+	0x65, 0x73, 0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -537,22 +802,27 @@ func file_message_proto_rawDescGZIP() []byte {
 	return file_message_proto_rawDescData
 }
 
-var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_message_proto_goTypes = []interface{}{
-	(*WSMessage)(nil),           // 0: rest.WSMessage
-	(*SendMessageRequest)(nil),  // 1: rest.SendMessageRequest
-	(*SendMessageResponse)(nil), // 2: rest.SendMessageResponse
-	(*MessageAck)(nil),          // 3: rest.MessageAck
-	(*GetHistoryRequest)(nil),   // 4: rest.GetHistoryRequest
-	(*GetHistoryResponse)(nil),  // 5: rest.GetHistoryResponse
+	(*WSMessage)(nil),                 // 0: rest.WSMessage
+	(*SendMessageRequest)(nil),        // 1: rest.SendMessageRequest
+	(*SendMessageResponse)(nil),       // 2: rest.SendMessageResponse
+	(*MessageAck)(nil),                // 3: rest.MessageAck
+	(*GetHistoryRequest)(nil),         // 4: rest.GetHistoryRequest
+	(*GetHistoryResponse)(nil),        // 5: rest.GetHistoryResponse
+	(*GetUnreadMessagesRequest)(nil),  // 6: rest.GetUnreadMessagesRequest
+	(*GetUnreadMessagesResponse)(nil), // 7: rest.GetUnreadMessagesResponse
+	(*MarkMessagesReadRequest)(nil),   // 8: rest.MarkMessagesReadRequest
+	(*MarkMessagesReadResponse)(nil),  // 9: rest.MarkMessagesReadResponse
 }
 var file_message_proto_depIdxs = []int32{
 	0, // 0: rest.GetHistoryResponse.messages:type_name -> rest.WSMessage
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // 1: rest.GetUnreadMessagesResponse.messages:type_name -> rest.WSMessage
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_message_proto_init() }
@@ -633,6 +903,54 @@ func file_message_proto_init() {
 				return nil
 			}
 		}
+		file_message_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetUnreadMessagesRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_message_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetUnreadMessagesResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_message_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MarkMessagesReadRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_message_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MarkMessagesReadResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -640,7 +958,7 @@ func file_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_message_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -10,22 +10,22 @@ import (
 	"websocket-server/pkg/logger"
 )
 
-// Handler 用户处理器
-type Handler struct {
+// HTTPHandler HTTP处理器
+type HTTPHandler struct {
 	service *service.Service
 	logger  logger.Logger
 }
 
-// NewHandler 创建用户处理器
-func NewHandler(service *service.Service, logger logger.Logger) *Handler {
-	return &Handler{
+// NewHTTPHandler 创建HTTP处理器
+func NewHTTPHandler(service *service.Service, logger logger.Logger) *HTTPHandler {
+	return &HTTPHandler{
 		service: service,
 		logger:  logger,
 	}
 }
 
 // RegisterRoutes 注册路由
-func (h *Handler) RegisterRoutes(r *gin.Engine) {
+func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 	api := r.Group("/api/v1/users")
 	{
 		api.POST("/register", h.Register)
@@ -35,7 +35,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 }
 
 // Register 用户注册
-func (h *Handler) Register(c *gin.Context) {
+func (h *HTTPHandler) Register(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var req rest.RegisterRequest
@@ -62,7 +62,7 @@ func (h *Handler) Register(c *gin.Context) {
 }
 
 // Login 用户登录
-func (h *Handler) Login(c *gin.Context) {
+func (h *HTTPHandler) Login(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var req rest.LoginRequest
@@ -89,7 +89,7 @@ func (h *Handler) Login(c *gin.Context) {
 }
 
 // GetUserByID 根据ID获取用户
-func (h *Handler) GetUserByID(c *gin.Context) {
+func (h *HTTPHandler) GetUserByID(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var req struct {

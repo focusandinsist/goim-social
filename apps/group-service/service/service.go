@@ -392,3 +392,56 @@ func (s *Service) PublishAnnouncement(ctx context.Context, groupID, userID int64
 
 	return s.dao.UpdateGroup(ctx, group)
 }
+
+// GetGroupMemberIDs 获取群组成员ID列表（用于群消息推送）
+func (s *Service) GetGroupMemberIDs(ctx context.Context, groupID int64) ([]int64, error) {
+	if groupID <= 0 {
+		return nil, fmt.Errorf("群组ID无效")
+	}
+
+	// 获取群成员列表
+	members, err := s.dao.GetGroupMembers(ctx, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("获取群成员失败: %v", err)
+	}
+
+	// 提取成员ID列表
+	var memberIDs []int64
+	for _, member := range members {
+		memberIDs = append(memberIDs, member.UserID)
+	}
+
+	s.logger.Info(ctx, "获取群成员ID列表成功",
+		logger.F("groupID", groupID),
+		logger.F("memberCount", len(memberIDs)),
+		logger.F("memberIDs", memberIDs))
+
+	return memberIDs, nil
+}
+
+// ValidateGroupMember 验证用户是否为群成员（用于群消息发送权限验证）
+func (s *Service) ValidateGroupMember(ctx context.Context, groupID, userID int64) error {
+	if groupID <= 0 {
+		return fmt.Errorf("群组ID无效")
+	}
+	if userID <= 0 {
+		return fmt.Errorf("用户ID无效")
+	}
+
+	// 检查群组是否存在
+	_, err := s.dao.GetGroup(ctx, groupID)
+	if err != nil {
+		return fmt.Errorf("群组不存在: %v", err)
+	}
+
+	// 检查用户是否是群成员
+	isMember, err := s.dao.IsMember(ctx, groupID, userID)
+	if err != nil {
+		return fmt.Errorf("检查成员身份失败: %v", err)
+	}
+	if !isMember {
+		return fmt.Errorf("用户不是群成员")
+	}
+
+	return nil
+}

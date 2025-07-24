@@ -5,7 +5,9 @@ import (
 	"google.golang.org/grpc"
 
 	"websocket-server/api/rest"
+	"websocket-server/apps/user-service/dao"
 	"websocket-server/apps/user-service/handler"
+	"websocket-server/apps/user-service/model"
 	"websocket-server/apps/user-service/service"
 	"websocket-server/pkg/server"
 )
@@ -18,19 +20,34 @@ func main() {
 	app.EnableHTTP()
 	app.EnableGRPC()
 
+	// 初始化PostgreSQL连接
+	postgreSQL := app.GetPostgreSQL()
+
+	// 自动迁移数据库表结构
+	if err := postgreSQL.AutoMigrate(
+		&model.User{},
+	); err != nil {
+		panic("Failed to migrate database: " + err.Error())
+	}
+
+	// 初始化DAO层
+	userDAO := dao.NewUserDAO(postgreSQL)
+
 	// 初始化Service层
-	svc := service.NewService(app.GetMongoDB(), app.GetRedisClient(), app.GetKafkaProducer())
+	svc := service.NewService(userDAO, app.GetRedisClient(), app.GetKafkaProducer())
+
+	// 初始化Handler
+	httpHandler := handler.NewHTTPHandler(svc, app.GetLogger())
+	grpcHandler := handler.NewGRPCHandler(svc, app.GetLogger())
 
 	// 注册HTTP路由
 	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
-		httpHandler := handler.NewHandler(svc, app.GetLogger())
 		httpHandler.RegisterRoutes(engine)
 	})
 
 	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
-		grpcService := svc.NewGRPCService(svc)
-		rest.RegisterUserServiceServer(grpcSrv, grpcService)
+		rest.RegisterUserServiceServer(grpcSrv, grpcHandler)
 	})
 
 	// 运行应用程序

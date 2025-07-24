@@ -5,27 +5,25 @@ import (
 	"errors"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-
 	"websocket-server/api/rest"
+	"websocket-server/apps/user-service/dao"
 	"websocket-server/apps/user-service/model"
 	"websocket-server/pkg/auth"
-	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
 )
 
 // Service 用户服务
 type Service struct {
-	db    *database.MongoDB
+	dao   dao.UserDAO
 	redis *redis.RedisClient
 	kafka *kafka.Producer
 }
 
 // NewService 创建用户服务
-func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer) *Service {
+func NewService(userDAO dao.UserDAO, redis *redis.RedisClient, kafka *kafka.Producer) *Service {
 	return &Service{
-		db:    db,
+		dao:   userDAO,
 		redis: redis,
 		kafka: kafka,
 	}
@@ -34,30 +32,33 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 // Register 用户注册
 func (s *Service) Register(ctx context.Context, req *rest.RegisterRequest) (*rest.RegisterResponse, error) {
 	// 检查用户名是否已存在
-	exists, err := s.db.GetCollection("users").CountDocuments(ctx, bson.M{"username": req.Username})
+	exists, err := s.dao.CheckUsernameExists(ctx, req.Username)
 	if err != nil {
 		return nil, err
 	}
-	if exists > 0 {
+	if exists {
 		return nil, errors.New("username already exists")
 	}
 
-	// 生成唯一用户ID（使用时间戳 + 随机数确保唯一性）
-	userID := time.Now().Unix()*1000 + int64(time.Now().Nanosecond()%1000)
+	// 检查邮箱是否已存在
+	emailExists, err := s.dao.CheckEmailExists(ctx, req.Email)
+	if err != nil {
+		return nil, err
+	}
+	if emailExists {
+		return nil, errors.New("email already exists")
+	}
 
 	// 创建用户
 	user := &model.User{
-		ID:        userID,
-		Username:  req.Username,
-		Password:  req.Password, // TODO: 加密
-		Email:     req.Email,
-		Nickname:  req.Nickname,
-		Status:    0, // 正常状态
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Username: req.Username,
+		Password: req.Password, // TODO: 加密
+		Email:    req.Email,
+		Nickname: req.Nickname,
+		Status:   0, // 正常状态
 	}
 
-	_, err = s.db.GetCollection("users").InsertOne(ctx, user)
+	err = s.dao.CreateUser(ctx, user)
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +76,7 @@ func (s *Service) Register(ctx context.Context, req *rest.RegisterRequest) (*res
 
 // Login 用户登录
 func (s *Service) Login(ctx context.Context, req *rest.LoginRequest) (*rest.LoginResponse, error) {
-	var user model.User
-	err := s.db.GetCollection("users").FindOne(ctx, bson.M{"username": req.Username}).Decode(&user)
+	user, err := s.dao.GetUserByUsername(ctx, req.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +114,7 @@ func (s *Service) Login(ctx context.Context, req *rest.LoginRequest) (*rest.Logi
 
 // GetUserByID 根据ID获取用户
 func (s *Service) GetUserByID(ctx context.Context, userID int64) (*rest.UserResponse, error) {
-	var user model.User
-	err := s.db.GetCollection("users").FindOne(ctx, bson.M{"_id": userID}).Decode(&user)
+	user, err := s.dao.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,48 +125,5 @@ func (s *Service) GetUserByID(ctx context.Context, userID int64) (*rest.UserResp
 		Email:    user.Email,
 		Nickname: user.Nickname,
 		Avatar:   user.Avatar,
-	}, nil
-}
-
-// GRPCService gRPC服务实现
-type GRPCService struct {
-	rest.UnimplementedUserServiceServer
-	svc *Service
-}
-
-// NewGRPCService 构造函数
-func (s *Service) NewGRPCService(svc *Service) *GRPCService {
-	return &GRPCService{svc: svc}
-}
-
-// Login gRPC接口实现
-func (g *GRPCService) Login(ctx context.Context, req *rest.LoginRequest) (*rest.LoginResponse, error) {
-	return g.svc.Login(ctx, req)
-}
-
-// Register gRPC接口实现
-func (g *GRPCService) Register(ctx context.Context, req *rest.RegisterRequest) (*rest.RegisterResponse, error) {
-	return g.svc.Register(ctx, req)
-}
-
-// GetUser gRPC接口实现
-func (g *GRPCService) GetUser(ctx context.Context, req *rest.GetUserRequest) (*rest.GetUserResponse, error) {
-	// 这里需要将string类型的user_id转换为int64
-	// 简化处理，实际应该做更严格的转换
-	userID := int64(1) // 临时处理
-
-	user, err := g.svc.GetUserByID(ctx, userID)
-	if err != nil {
-		return &rest.GetUserResponse{
-			Success: false,
-			Message: err.Error(),
-			User:    nil,
-		}, nil
-	}
-
-	return &rest.GetUserResponse{
-		Success: true,
-		Message: "获取用户信息成功",
-		User:    user,
 	}, nil
 }
