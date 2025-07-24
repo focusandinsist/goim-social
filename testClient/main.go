@@ -62,10 +62,11 @@ type LoginData struct {
 
 func main() {
 	// 命令行参数
+	fmt.Println("Args:", os.Args)
 	var (
 		userID     = flag.Int64("user", 1001, "调试模式下的用户ID")
 		targetID   = flag.Int64("target", 1002, "目标用户ID")
-		wsURL      = flag.String("wsurl", "ws://localhost:21005/api/v1/connect/ws", "WebSocket服务地址")
+		wsURL      = flag.String("wsurl", "ws://localhost:21006/api/v1/connect/ws", "WebSocket服务地址")
 		userAPIURL = flag.String("userapi", "http://localhost:21001/api/v1/users", "用户服务API地址")
 		autoMode   = flag.Bool("auto", false, "自动模式，自动发送消息")
 		skipAuth   = flag.Bool("skip", false, "跳过认证，使用调试token")
@@ -229,7 +230,7 @@ type UnreadMessage struct {
 
 // fetchUnreadMessages 通过HTTP POST接口获取未读消息
 func fetchUnreadMessages(userID int64) {
-	fmt.Printf("\n� 正在获取未读消息...\n")
+	fmt.Printf("\n 正在获取未读消息...\n")
 
 	// 构造POST请求体
 	reqBody := UnreadRequest{
@@ -244,7 +245,16 @@ func fetchUnreadMessages(userID int64) {
 
 	// 发送POST请求
 	url := "http://localhost:21004/api/v1/messages/unread"
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Printf("❌ 创建请求失败: %v\n", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "auth-debug")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("❌ 获取未读消息失败: %v\n", err)
 		return
@@ -267,14 +277,14 @@ func fetchUnreadMessages(userID int64) {
 		return
 	}
 
-	fmt.Printf("� 收到 %d 条未读消息:\n", len(unreadResp.Messages))
+	fmt.Printf(" 收到 %d 条未读消息:\n", len(unreadResp.Messages))
 	for _, msg := range unreadResp.Messages {
 		// 解析时间
 		createdAt, _ := time.Parse(time.RFC3339, msg.CreatedAt)
 		timestamp := createdAt.Format("2006-01-02 15:04:05")
 
 		// 显示消息
-		fmt.Printf("[%s] � [未读消息] 来自用户%d: %s\n", timestamp, msg.From, msg.Content)
+		fmt.Printf("[%s] [未读消息] 来自用户%d: %s\n", timestamp, msg.From, msg.Content)
 	}
 
 	// 标记消息为已读
