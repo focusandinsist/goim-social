@@ -104,6 +104,22 @@
             }
         },
         {
+            "name": "7. Content Service (HTTP:21007, gRPC:22007)",
+            "type": "go",
+            "request": "launch",
+            "program": "./apps/content-service/cmd/main.go",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_NAME": "content-service",
+                "HTTP_PORT": "21007",
+                "GRPC_PORT": "22007",
+                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=contentServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
+                "POSTGRESQL_DB": "contentServiceDB",
+                "REDIS_ADDR": "localhost:6379",
+                "KAFKA_BROKERS": "localhost:9092"
+            }
+        },
+        {
             "name": "Recommend Service",
             "type": "go",
             "request": "launch",

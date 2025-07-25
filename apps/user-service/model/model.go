@@ -17,7 +17,7 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
-// TableName 指定表名
+// TableName .
 func (User) TableName() string {
 	return "users"
 }

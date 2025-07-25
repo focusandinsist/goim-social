@@ -13,7 +13,7 @@ type Friend struct {
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"` // 添加时间
 }
 
-// TableName 指定表名
+// TableName .
 func (Friend) TableName() string {
 	return "friends"
 }
@@ -33,7 +33,7 @@ type FriendApply struct {
 	RejectReason string     `json:"reject_reason,omitempty" gorm:"type:varchar(200)"` // 拒绝原因
 }
 
-// TableName 指定表名
+// TableName .
 func (FriendApply) TableName() string {
 	return "friend_applies"
 }

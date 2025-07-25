@@ -145,8 +145,11 @@ func LoadConfig(serviceName string) *Config {
 	case "connect-service":
 		defaultHTTPPort = "21006"
 		defaultGRPCPort = "22006"
+	case "content-service":
+		defaultHTTPPort = "21007"
+		defaultGRPCPort = "22007"
 	default:
-		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, logic-service, connect-service", serviceName))
+		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, logic-service, connect-service, content-service", serviceName))
 	}
 
 	httpPort := getEnvOrDefault("HTTP_PORT", defaultHTTPPort)
