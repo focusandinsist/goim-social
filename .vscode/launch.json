@@ -120,6 +120,22 @@
             }
         },
         {
+            "name": "8. Interaction Service (HTTP:21008, gRPC:22008)",
+            "type": "go",
+            "request": "launch",
+            "program": "./apps/interaction-service/cmd/main.go",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_NAME": "interaction-service",
+                "HTTP_PORT": "21008",
+                "GRPC_PORT": "22008",
+                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=interactionServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
+                "POSTGRESQL_DB": "interactionServiceDB",
+                "REDIS_ADDR": "localhost:6379",
+                "KAFKA_BROKERS": "localhost:9092"
+            }
+        },
+        {
             "name": "Recommend Service",
             "type": "go",
             "request": "launch",

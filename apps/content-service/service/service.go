@@ -31,8 +31,9 @@ func NewService(contentDAO dao.ContentDAO, redis *redis.RedisClient, kafka *kafk
 }
 
 // CreateContent 创建内容
-func (s *Service) CreateContent(ctx context.Context, authorID int64, title, content, contentType string,
-	mediaFiles []model.ContentMediaFile, tagIDs, topicIDs []int64, templateData string, saveAsDraft bool) (*model.Content, error) {
+func (s *Service) CreateContent(ctx context.Context, authorID int64,
+	title, content, contentType string, mediaFiles []model.ContentMediaFile,
+	tagIDs, topicIDs []int64, templateData string, saveAsDraft bool) (*model.Content, error) {
 
 	if authorID <= 0 {
 		return nil, fmt.Errorf("作者ID无效")
@@ -68,7 +69,6 @@ func (s *Service) CreateContent(ctx context.Context, authorID int64, title, cont
 		newContent.PublishedAt = &now
 	}
 
-	// 创建内容
 	if err := s.dao.CreateContent(ctx, newContent); err != nil {
 		return nil, fmt.Errorf("创建内容失败: %v", err)
 	}
@@ -549,61 +549,4 @@ func (s *Service) GetTopics(ctx context.Context, keyword string, hotOnly bool, p
 	}
 
 	return s.dao.GetTopics(ctx, keyword, hotOnly, page, pageSize)
-}
-
-// IncrementLikeCount 增加点赞数
-func (s *Service) IncrementLikeCount(ctx context.Context, contentID int64) error {
-	if contentID <= 0 {
-		return fmt.Errorf("内容ID无效")
-	}
-
-	// 验证内容是否存在且已发布
-	content, err := s.dao.GetContent(ctx, contentID)
-	if err != nil {
-		return fmt.Errorf("内容不存在: %v", err)
-	}
-
-	if content.Status != model.ContentStatusPublished {
-		return fmt.Errorf("只能对已发布的内容点赞")
-	}
-
-	return s.dao.IncrementLikeCount(ctx, contentID)
-}
-
-// IncrementCommentCount 增加评论数
-func (s *Service) IncrementCommentCount(ctx context.Context, contentID int64) error {
-	if contentID <= 0 {
-		return fmt.Errorf("内容ID无效")
-	}
-
-	// 验证内容是否存在且已发布
-	content, err := s.dao.GetContent(ctx, contentID)
-	if err != nil {
-		return fmt.Errorf("内容不存在: %v", err)
-	}
-
-	if content.Status != model.ContentStatusPublished {
-		return fmt.Errorf("只能对已发布的内容评论")
-	}
-
-	return s.dao.IncrementCommentCount(ctx, contentID)
-}
-
-// IncrementShareCount 增加分享数
-func (s *Service) IncrementShareCount(ctx context.Context, contentID int64) error {
-	if contentID <= 0 {
-		return fmt.Errorf("内容ID无效")
-	}
-
-	// 验证内容是否存在且已发布
-	content, err := s.dao.GetContent(ctx, contentID)
-	if err != nil {
-		return fmt.Errorf("内容不存在: %v", err)
-	}
-
-	if content.Status != model.ContentStatusPublished {
-		return fmt.Errorf("只能分享已发布的内容")
-	}
-
-	return s.dao.IncrementShareCount(ctx, contentID)
 }

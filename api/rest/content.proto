@@ -67,12 +67,9 @@ message Content {
   repeated ContentTopic topics = 9; // 话题列表
   string template_data = 10; // 模板数据(JSON格式)
   int64 view_count = 11; // 浏览次数
-  int64 like_count = 12; // 点赞次数
-  int64 comment_count = 13; // 评论次数
-  int64 share_count = 14; // 分享次数
-  string created_at = 15;
-  string updated_at = 16;
-  string published_at = 17; // 发布时间
+  string created_at = 12;
+  string updated_at = 13;
+  string published_at = 14; // 发布时间
 }
 
 // 创建内容请求

@@ -41,11 +41,6 @@ func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 		api.POST("/user_content", h.GetUserContent) // 获取用户内容列表
 		api.POST("/stats", h.GetContentStats)       // 获取内容统计
 
-		// 互动操作
-		api.POST("/like", h.IncrementLikeCount)       // 点赞
-		api.POST("/comment", h.IncrementCommentCount) // 评论计数
-		api.POST("/share", h.IncrementShareCount)     // 分享计数
-
 		// 标签管理
 		api.POST("/tag/create", h.CreateTag) // 创建标签
 		api.POST("/tag/list", h.GetTags)     // 获取标签列表
@@ -446,98 +441,6 @@ func (h *HTTPHandler) GetContentStats(c *gin.Context) {
 		"success": true,
 		"message": "获取成功",
 		"data":    stats,
-	})
-}
-
-// IncrementCountRequest 增加计数请求
-type IncrementCountRequest struct {
-	ContentID int64 `json:"content_id" binding:"required"`
-}
-
-// IncrementLikeCount 增加点赞数
-func (h *HTTPHandler) IncrementLikeCount(c *gin.Context) {
-	var req IncrementCountRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
-		return
-	}
-
-	err := h.svc.IncrementLikeCount(c.Request.Context(), req.ContentID)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to increment like count",
-			logger.F("error", err.Error()),
-			logger.F("contentID", req.ContentID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "点赞成功",
-	})
-}
-
-// IncrementCommentCount 增加评论数
-func (h *HTTPHandler) IncrementCommentCount(c *gin.Context) {
-	var req IncrementCountRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
-		return
-	}
-
-	err := h.svc.IncrementCommentCount(c.Request.Context(), req.ContentID)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to increment comment count",
-			logger.F("error", err.Error()),
-			logger.F("contentID", req.ContentID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "评论计数成功",
-	})
-}
-
-// IncrementShareCount 增加分享数
-func (h *HTTPHandler) IncrementShareCount(c *gin.Context) {
-	var req IncrementCountRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
-		return
-	}
-
-	err := h.svc.IncrementShareCount(c.Request.Context(), req.ContentID)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to increment share count",
-			logger.F("error", err.Error()),
-			logger.F("contentID", req.ContentID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "分享计数成功",
 	})
 }
 

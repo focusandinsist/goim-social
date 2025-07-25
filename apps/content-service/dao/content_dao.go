@@ -264,27 +264,6 @@ func (d *contentDAO) IncrementViewCount(ctx context.Context, contentID int64) er
 		UpdateColumn("view_count", gorm.Expr("view_count + 1")).Error
 }
 
-// IncrementLikeCount 增加点赞次数
-func (d *contentDAO) IncrementLikeCount(ctx context.Context, contentID int64) error {
-	return d.db.WithContext(ctx).Model(&model.Content{}).
-		Where("id = ?", contentID).
-		UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error
-}
-
-// IncrementCommentCount 增加评论次数
-func (d *contentDAO) IncrementCommentCount(ctx context.Context, contentID int64) error {
-	return d.db.WithContext(ctx).Model(&model.Content{}).
-		Where("id = ?", contentID).
-		UpdateColumn("comment_count", gorm.Expr("comment_count + 1")).Error
-}
-
-// IncrementShareCount 增加分享次数
-func (d *contentDAO) IncrementShareCount(ctx context.Context, contentID int64) error {
-	return d.db.WithContext(ctx).Model(&model.Content{}).
-		Where("id = ?", contentID).
-		UpdateColumn("share_count", gorm.Expr("share_count + 1")).Error
-}
-
 // CreateMediaFile 创建媒体文件
 func (d *contentDAO) CreateMediaFile(ctx context.Context, mediaFile *model.ContentMediaFile) error {
 	return d.db.WithContext(ctx).Create(mediaFile).Error

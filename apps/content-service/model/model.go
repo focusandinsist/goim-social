@@ -14,9 +14,6 @@ type Content struct {
 	Status       string     `json:"status" gorm:"type:varchar(20);not null;index;default:'draft'"`
 	TemplateData string     `json:"template_data" gorm:"type:text"` // JSON格式的模板数据
 	ViewCount    int64      `json:"view_count" gorm:"default:0"`
-	LikeCount    int64      `json:"like_count" gorm:"default:0"`
-	CommentCount int64      `json:"comment_count" gorm:"default:0"`
-	ShareCount   int64      `json:"share_count" gorm:"default:0"`
 	CreatedAt    time.Time  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt    time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 	PublishedAt  *time.Time `json:"published_at" gorm:"index"`
