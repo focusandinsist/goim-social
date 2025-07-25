@@ -8,15 +8,16 @@ import (
 	"gorm.io/gorm"
 
 	"websocket-server/apps/comment-service/model"
+	"websocket-server/pkg/database"
 )
 
 // commentDAO 评论数据访问实现
 type commentDAO struct {
-	db *gorm.DB
+	db *database.PostgreSQL
 }
 
 // NewCommentDAO 创建评论DAO实例
-func NewCommentDAO(db *gorm.DB) CommentDAO {
+func NewCommentDAO(db *database.PostgreSQL) CommentDAO {
 	return &commentDAO{
 		db: db,
 	}

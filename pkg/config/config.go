@@ -151,8 +151,14 @@ func LoadConfig(serviceName string) *Config {
 	case "interaction-service":
 		defaultHTTPPort = "21008"
 		defaultGRPCPort = "22008"
+	case "comment-service":
+		defaultHTTPPort = "21009"
+		defaultGRPCPort = "22009"
+	case "history-service":
+		defaultHTTPPort = "21010"
+		defaultGRPCPort = "22010"
 	default:
-		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, logic-service, connect-service, content-service, interaction-service", serviceName))
+		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, logic-service, connect-service, content-service, interaction-service, comment-service, history-service", serviceName))
 	}
 
 	httpPort := getEnvOrDefault("HTTP_PORT", defaultHTTPPort)

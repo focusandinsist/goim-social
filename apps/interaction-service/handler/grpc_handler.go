@@ -27,7 +27,7 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 
 // DoInteraction 执行互动
 func (h *GRPCHandler) DoInteraction(ctx context.Context, req *rest.DoInteractionRequest) (*rest.DoInteractionResponse, error) {
-	objectType := convertObjectTypeFromProto(req.ObjectType)
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
 	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	interaction, err := h.svc.DoInteraction(
@@ -58,7 +58,7 @@ func (h *GRPCHandler) DoInteraction(ctx context.Context, req *rest.DoInteraction
 
 // UndoInteraction 取消互动
 func (h *GRPCHandler) UndoInteraction(ctx context.Context, req *rest.UndoInteractionRequest) (*rest.UndoInteractionResponse, error) {
-	objectType := convertObjectTypeFromProto(req.ObjectType)
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
 	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	err := h.svc.UndoInteraction(
@@ -87,7 +87,7 @@ func (h *GRPCHandler) UndoInteraction(ctx context.Context, req *rest.UndoInterac
 
 // CheckInteraction 检查互动状态
 func (h *GRPCHandler) CheckInteraction(ctx context.Context, req *rest.CheckInteractionRequest) (*rest.CheckInteractionResponse, error) {
-	objectType := convertObjectTypeFromProto(req.ObjectType)
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
 	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	hasInteraction, interaction, err := h.svc.CheckInteraction(
@@ -123,7 +123,7 @@ func (h *GRPCHandler) CheckInteraction(ctx context.Context, req *rest.CheckInter
 
 // BatchCheckInteraction 批量检查互动状态
 func (h *GRPCHandler) BatchCheckInteraction(ctx context.Context, req *rest.BatchCheckInteractionRequest) (*rest.BatchCheckInteractionResponse, error) {
-	objectType := convertObjectTypeFromProto(req.ObjectType)
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
 	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	interactions, err := h.svc.BatchCheckInteraction(
@@ -153,7 +153,7 @@ func (h *GRPCHandler) BatchCheckInteraction(ctx context.Context, req *rest.Batch
 
 // GetObjectStats 获取对象统计
 func (h *GRPCHandler) GetObjectStats(ctx context.Context, req *rest.GetObjectStatsRequest) (*rest.GetObjectStatsResponse, error) {
-	objectType := convertObjectTypeFromProto(req.ObjectType)
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
 
 	stats, err := h.svc.GetObjectStats(ctx, req.ObjectId, objectType)
 	if err != nil {
@@ -175,7 +175,7 @@ func (h *GRPCHandler) GetObjectStats(ctx context.Context, req *rest.GetObjectSta
 
 // GetBatchObjectStats 批量获取对象统计
 func (h *GRPCHandler) GetBatchObjectStats(ctx context.Context, req *rest.GetBatchObjectStatsRequest) (*rest.GetBatchObjectStatsResponse, error) {
-	objectType := convertObjectTypeFromProto(req.ObjectType)
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
 
 	statsList, err := h.svc.GetBatchObjectStats(ctx, req.ObjectIds, objectType)
 	if err != nil {
@@ -202,7 +202,7 @@ func (h *GRPCHandler) GetBatchObjectStats(ctx context.Context, req *rest.GetBatc
 
 // GetUserInteractions 获取用户互动列表
 func (h *GRPCHandler) GetUserInteractions(ctx context.Context, req *rest.GetUserInteractionsRequest) (*rest.GetUserInteractionsResponse, error) {
-	objectType := convertObjectTypeFromProto(req.ObjectType)
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
 	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	interactions, total, err := h.svc.GetUserInteractions(
@@ -240,7 +240,7 @@ func (h *GRPCHandler) GetUserInteractions(ctx context.Context, req *rest.GetUser
 
 // GetObjectInteractions 获取对象互动列表
 func (h *GRPCHandler) GetObjectInteractions(ctx context.Context, req *rest.GetObjectInteractionsRequest) (*rest.GetObjectInteractionsResponse, error) {
-	objectType := convertObjectTypeFromProto(req.ObjectType)
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
 	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	interactions, total, err := h.svc.GetObjectInteractions(
@@ -285,13 +285,13 @@ func convertInteractionToProto(interaction *model.Interaction) *rest.Interaction
 	}
 
 	return &rest.Interaction{
-		Id:              interaction.ID,
-		UserId:          interaction.UserID,
-		ObjectId:        interaction.ObjectID,
-		ObjectType:      convertObjectTypeToProto(interaction.ObjectType),
-		InteractionType: convertInteractionTypeToProto(interaction.InteractionType),
-		Metadata:        interaction.Metadata,
-		CreatedAt:       interaction.CreatedAt.Format(time.RFC3339),
+		Id:                    interaction.ID,
+		UserId:                interaction.UserID,
+		ObjectId:              interaction.ObjectID,
+		InteractionObjectType: convertObjectTypeToProto(interaction.ObjectType),
+		InteractionType:       convertInteractionTypeToProto(interaction.InteractionType),
+		Metadata:              interaction.Metadata,
+		CreatedAt:             interaction.CreatedAt.Format(time.RFC3339),
 	}
 }
 
@@ -302,37 +302,37 @@ func convertStatsToProto(stats *model.InteractionStats) *rest.InteractionStats {
 	}
 
 	return &rest.InteractionStats{
-		ObjectId:      stats.ObjectID,
-		ObjectType:    convertObjectTypeToProto(stats.ObjectType),
-		LikeCount:     stats.LikeCount,
-		FavoriteCount: stats.FavoriteCount,
-		ShareCount:    stats.ShareCount,
-		RepostCount:   stats.RepostCount,
+		ObjectId:              stats.ObjectID,
+		InteractionObjectType: convertObjectTypeToProto(stats.ObjectType),
+		LikeCount:             stats.LikeCount,
+		FavoriteCount:         stats.FavoriteCount,
+		ShareCount:            stats.ShareCount,
+		RepostCount:           stats.RepostCount,
 	}
 }
 
 // convertObjectTypeToProto 将对象类型转换为protobuf枚举
-func convertObjectTypeToProto(objectType string) rest.ObjectType {
+func convertObjectTypeToProto(objectType string) rest.InteractionObjectType {
 	switch objectType {
 	case model.ObjectTypePost:
-		return rest.ObjectType_OBJECT_TYPE_POST
+		return rest.InteractionObjectType_OBJECT_TYPE_POST
 	case model.ObjectTypeComment:
-		return rest.ObjectType_OBJECT_TYPE_COMMENT
+		return rest.InteractionObjectType_OBJECT_TYPE_COMMENT
 	case model.ObjectTypeUser:
-		return rest.ObjectType_OBJECT_TYPE_USER
+		return rest.InteractionObjectType_OBJECT_TYPE_USER
 	default:
-		return rest.ObjectType_OBJECT_TYPE_UNSPECIFIED
+		return rest.InteractionObjectType_OBJECT_TYPE_UNSPECIFIED
 	}
 }
 
 // convertObjectTypeFromProto 将protobuf枚举转换为对象类型
-func convertObjectTypeFromProto(objectType rest.ObjectType) string {
+func convertObjectTypeFromProto(objectType rest.InteractionObjectType) string {
 	switch objectType {
-	case rest.ObjectType_OBJECT_TYPE_POST:
+	case rest.InteractionObjectType_OBJECT_TYPE_POST:
 		return model.ObjectTypePost
-	case rest.ObjectType_OBJECT_TYPE_COMMENT:
+	case rest.InteractionObjectType_OBJECT_TYPE_COMMENT:
 		return model.ObjectTypeComment
-	case rest.ObjectType_OBJECT_TYPE_USER:
+	case rest.InteractionObjectType_OBJECT_TYPE_USER:
 		return model.ObjectTypeUser
 	default:
 		return ""

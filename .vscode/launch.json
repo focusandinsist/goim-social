@@ -136,6 +136,38 @@
             }
         },
         {
+            "name": "9. Comment Service (HTTP:21009, gRPC:22009)",
+            "type": "go",
+            "request": "launch",
+            "program": "./apps/comment-service/cmd/main.go",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_NAME": "comment-service",
+                "HTTP_PORT": "21009",
+                "GRPC_PORT": "22009",
+                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=commentServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
+                "POSTGRESQL_DB": "commentServiceDB",
+                "REDIS_ADDR": "localhost:6379",
+                "KAFKA_BROKERS": "localhost:9092"
+            }
+        },
+        {
+            "name": "10. History Service (HTTP:21010, gRPC:22010)",
+            "type": "go",
+            "request": "launch",
+            "program": "./apps/history-service/cmd/main.go",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_NAME": "history-service",
+                "HTTP_PORT": "21010",
+                "GRPC_PORT": "22010",
+                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=historyServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
+                "POSTGRESQL_DB": "historyServiceDB",
+                "REDIS_ADDR": "localhost:6379",
+                "KAFKA_BROKERS": "localhost:9092"
+            }
+        },
+        {
             "name": "Recommend Service",
             "type": "go",
             "request": "launch",

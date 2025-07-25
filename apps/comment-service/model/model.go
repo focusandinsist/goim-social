@@ -6,32 +6,32 @@ import (
 
 // Comment 评论模型
 type Comment struct {
-	ID               int64     `json:"id" gorm:"primaryKey;autoIncrement"`
-	ObjectID         int64     `json:"object_id" gorm:"not null;index:idx_object"`                    // 被评论的对象ID
-	ObjectType       string    `json:"object_type" gorm:"type:varchar(20);not null;index:idx_object"` // 被评论的对象类型
-	UserID           int64     `json:"user_id" gorm:"not null;index"`                                 // 评论用户ID
-	UserName         string    `json:"user_name" gorm:"type:varchar(100);not null"`                   // 评论用户名（冗余字段）
-	UserAvatar       string    `json:"user_avatar" gorm:"type:varchar(500)"`                          // 评论用户头像（冗余字段）
-	Content          string    `json:"content" gorm:"type:text;not null"`                             // 评论内容
-	ParentID         int64     `json:"parent_id" gorm:"default:0;index"`                              // 父评论ID（0表示顶级评论）
-	RootID           int64     `json:"root_id" gorm:"default:0;index"`                                // 根评论ID（用于快速定位评论树）
-	ReplyToUserID    int64     `json:"reply_to_user_id" gorm:"default:0"`                             // 回复的用户ID
-	ReplyToUserName  string    `json:"reply_to_user_name" gorm:"type:varchar(100)"`                   // 回复的用户名
-	Status           string    `json:"status" gorm:"type:varchar(20);not null;index;default:'pending'"` // 评论状态
-	LikeCount        int32     `json:"like_count" gorm:"default:0"`                                   // 点赞数
-	ReplyCount       int32     `json:"reply_count" gorm:"default:0"`                                  // 回复数
-	IsPinned         bool      `json:"is_pinned" gorm:"default:false;index"`                          // 是否置顶
-	IsHot            bool      `json:"is_hot" gorm:"default:false;index"`                             // 是否热门
-	IPAddress        string    `json:"ip_address" gorm:"type:varchar(45)"`                            // IP地址
-	UserAgent        string    `json:"user_agent" gorm:"type:text"`                                   // 用户代理
-	CreatedAt        time.Time `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt        time.Time `json:"updated_at" gorm:"autoUpdateTime"`
-	
+	ID              int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	ObjectID        int64     `json:"object_id" gorm:"not null;index:idx_object"`                      // 被评论的对象ID
+	ObjectType      string    `json:"object_type" gorm:"type:varchar(20);not null;index:idx_object"`   // 被评论的对象类型
+	UserID          int64     `json:"user_id" gorm:"not null;index"`                                   // 评论用户ID
+	UserName        string    `json:"user_name" gorm:"type:varchar(100);not null"`                     // 评论用户名（冗余字段）
+	UserAvatar      string    `json:"user_avatar" gorm:"type:varchar(500)"`                            // 评论用户头像（冗余字段）
+	Content         string    `json:"content" gorm:"type:text;not null"`                               // 评论内容
+	ParentID        int64     `json:"parent_id" gorm:"default:0;index"`                                // 父评论ID（0表示顶级评论）
+	RootID          int64     `json:"root_id" gorm:"default:0;index"`                                  // 根评论ID（用于快速定位评论树）
+	ReplyToUserID   int64     `json:"reply_to_user_id" gorm:"default:0"`                               // 回复的用户ID
+	ReplyToUserName string    `json:"reply_to_user_name" gorm:"type:varchar(100)"`                     // 回复的用户名
+	Status          string    `json:"status" gorm:"type:varchar(20);not null;index;default:'pending'"` // 评论状态
+	LikeCount       int32     `json:"like_count" gorm:"default:0"`                                     // 点赞数
+	ReplyCount      int32     `json:"reply_count" gorm:"default:0"`                                    // 回复数
+	IsPinned        bool      `json:"is_pinned" gorm:"default:false;index"`                            // 是否置顶
+	IsHot           bool      `json:"is_hot" gorm:"default:false;index"`                               // 是否热门
+	IPAddress       string    `json:"ip_address" gorm:"type:varchar(45)"`                              // IP地址
+	UserAgent       string    `json:"user_agent" gorm:"type:text"`                                     // 用户代理
+	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+
 	// 关联字段（不存储到数据库）
 	Replies []*Comment `json:"replies,omitempty" gorm:"-"` // 回复列表
 }
 
-// TableName 指定表名
+// TableName .
 func (Comment) TableName() string {
 	return "comments"
 }
@@ -49,7 +49,7 @@ type CommentStats struct {
 	UpdatedAt     time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
-// TableName 指定表名
+// TableName .
 func (CommentStats) TableName() string {
 	return "comment_stats"
 }
@@ -65,7 +65,7 @@ type CommentModerationLog struct {
 	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
 
-// TableName 指定表名
+// TableName .
 func (CommentModerationLog) TableName() string {
 	return "comment_moderation_logs"
 }
@@ -78,7 +78,7 @@ type CommentLike struct {
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
 
-// TableName 指定表名
+// TableName .
 func (CommentLike) TableName() string {
 	return "comment_likes"
 }
@@ -87,16 +87,16 @@ func (CommentLike) TableName() string {
 
 // GetCommentsParams 获取评论列表参数
 type GetCommentsParams struct {
-	ObjectID        int64  `json:"object_id"`
-	ObjectType      string `json:"object_type"`
-	ParentID        int64  `json:"parent_id"`
-	Status          string `json:"status"`
-	SortBy          string `json:"sort_by"`
-	SortOrder       string `json:"sort_order"`
-	Page            int32  `json:"page"`
-	PageSize        int32  `json:"page_size"`
-	IncludeReplies  bool   `json:"include_replies"`
-	MaxReplyCount   int32  `json:"max_reply_count"`
+	ObjectID       int64  `json:"object_id"`
+	ObjectType     string `json:"object_type"`
+	ParentID       int64  `json:"parent_id"`
+	Status         string `json:"status"`
+	SortBy         string `json:"sort_by"`
+	SortOrder      string `json:"sort_order"`
+	Page           int32  `json:"page"`
+	PageSize       int32  `json:"page_size"`
+	IncludeReplies bool   `json:"include_replies"`
+	MaxReplyCount  int32  `json:"max_reply_count"`
 }
 
 // GetUserCommentsParams 获取用户评论参数
@@ -109,17 +109,17 @@ type GetUserCommentsParams struct {
 
 // CreateCommentParams 创建评论参数
 type CreateCommentParams struct {
-	ObjectID         int64  `json:"object_id"`
-	ObjectType       string `json:"object_type"`
-	UserID           int64  `json:"user_id"`
-	UserName         string `json:"user_name"`
-	UserAvatar       string `json:"user_avatar"`
-	Content          string `json:"content"`
-	ParentID         int64  `json:"parent_id"`
-	ReplyToUserID    int64  `json:"reply_to_user_id"`
-	ReplyToUserName  string `json:"reply_to_user_name"`
-	IPAddress        string `json:"ip_address"`
-	UserAgent        string `json:"user_agent"`
+	ObjectID        int64  `json:"object_id"`
+	ObjectType      string `json:"object_type"`
+	UserID          int64  `json:"user_id"`
+	UserName        string `json:"user_name"`
+	UserAvatar      string `json:"user_avatar"`
+	Content         string `json:"content"`
+	ParentID        int64  `json:"parent_id"`
+	ReplyToUserID   int64  `json:"reply_to_user_id"`
+	ReplyToUserName string `json:"reply_to_user_name"`
+	IPAddress       string `json:"ip_address"`
+	UserAgent       string `json:"user_agent"`
 }
 
 // UpdateCommentParams 更新评论参数

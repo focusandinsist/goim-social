@@ -17,7 +17,7 @@ type Interaction struct {
 	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
-// TableName 指定表名
+// TableName .
 func (Interaction) TableName() string {
 	return "interactions"
 }
@@ -34,7 +34,7 @@ type InteractionStats struct {
 	UpdatedAt     time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
-// TableName 指定表名
+// TableName .
 func (InteractionStats) TableName() string {
 	return "interaction_stats"
 }

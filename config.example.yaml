@@ -14,6 +14,8 @@
 # 6. Connect Service - HTTP:21006, gRPC:22006 (依赖Message、Logic，MongoDB)
 # 7. Content Service - HTTP:21007, gRPC:22007 (内容服务，PostgreSQL)
 # 8. Interaction Service - HTTP:21008, gRPC:22008 (互动服务，PostgreSQL)
+# 9. Comment Service - HTTP:21009, gRPC:22009 (评论服务，PostgreSQL)
+# 10. History Service - HTTP:21010, gRPC:22010 (历史记录服务，PostgreSQL)
 
 server:
   http:
