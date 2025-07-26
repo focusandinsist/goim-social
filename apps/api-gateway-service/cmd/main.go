@@ -7,6 +7,7 @@ import (
 	"websocket-server/api/rest"
 	"websocket-server/apps/api-gateway-service/handler"
 	"websocket-server/apps/api-gateway-service/service"
+	"websocket-server/pkg/middleware"
 	"websocket-server/pkg/server"
 )
 
@@ -27,26 +28,13 @@ func main() {
 
 	// 注册HTTP路由
 	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
-		engine.Use(gin.Logger())   // 请求日志
-		engine.Use(gin.Recovery()) // 恢复中间件
+		// 创建API网关中间件
+		apiGatewayMW := middleware.NewAPIGatewayMiddleware(app.GetLogger(), "focusandinsist")
 
-		// TODO:认证中间件移到pkg里
-		engine.Use(func(c *gin.Context) {
-			// 跳过API网关管理接口的认证
-			if c.Request.URL.Path == "/api/v1/api-gateway/health" ||
-				c.Request.URL.Path == "/api/v1/api-gateway/services" ||
-				c.Request.URL.Path == "/api/v1/api-gateway/online_status" {
-				c.Next()
-				return
-			}
-			authHeader := c.GetHeader("Authorization")
-			if authHeader == "" {
-				c.JSON(401, map[string]interface{}{"error": "Missing authorization header"})
-				c.Abort()
-				return
-			}
-			c.Next()
-		})
+		// 注册中间件
+		engine.Use(apiGatewayMW.GinLogging())  // 请求日志
+		engine.Use(apiGatewayMW.GinRecovery()) // 恢复中间件
+		engine.Use(apiGatewayMW.GinAuth())     // 认证中间件
 
 		httpHandler.RegisterRoutes(engine)
 	})

@@ -98,9 +98,8 @@ func (ws *WSHandler) HandleConnection(c *gin.Context) {
 	conn.SetPingHandler(func(appData string) error {
 		// 更新Redis中的心跳时间
 		go func() {
-			timestamp := time.Now().Unix()
 			// 通过service更新心跳时间
-			if err := ws.svc.UpdateHeartbeat(context.Background(), userID, connID, timestamp); err != nil {
+			if err := ws.svc.Heartbeat(context.Background(), userID, connID); err != nil {
 				ws.log.Error(context.Background(), "更新心跳时间失败",
 					logger.F("userID", userID),
 					logger.F("error", err.Error()))
@@ -162,17 +161,15 @@ func (ws *WSHandler) routeWebSocketMessage(c *gin.Context, conn *websocket.Conn,
 			ws.log.Error(c.Request.Context(), "HandleHeartbeat failed", logger.F("error", err.Error()))
 		}
 	case 3: // 连接管理
-		if err := ws.svc.HandleConnectionManage(c.Request.Context(), wsMsg, conn); err != nil {
-			ws.log.Error(c.Request.Context(), "HandleConnectionManage failed", logger.F("error", err.Error()))
-		}
+		// 连接管理功能已简化，暂时跳过
+		ws.log.Info(c.Request.Context(), "Connection management message received", logger.F("userID", wsMsg.From))
 	case 4: // 消息ACK确认
 		if err := ws.svc.HandleMessageACK(c.Request.Context(), wsMsg); err != nil {
 			ws.log.Error(c.Request.Context(), "HandleMessageACK failed", logger.F("error", err.Error()))
 		}
 	case 10: // 在线状态事件推送
-		if err := ws.svc.HandleOnlineStatusEvent(c.Request.Context(), wsMsg, conn); err != nil {
-			ws.log.Error(c.Request.Context(), "HandleOnlineStatusEvent failed", logger.F("error", err.Error()))
-		}
+		// 在线状态事件推送功能暂未实现
+		ws.log.Info(c.Request.Context(), "Online status event received", logger.F("userID", wsMsg.From))
 	default:
 		// 未知类型
 		ws.log.Warn(c.Request.Context(), "Unknown message type", logger.F("type", wsMsg.MessageType))

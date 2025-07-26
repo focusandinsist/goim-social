@@ -526,33 +526,6 @@ func (s *Service) HandleHeartbeat(ctx context.Context, wsMsg *rest.WSMessage, co
 	return s.Heartbeat(ctx, wsMsg.From, connID)
 }
 
-// HandleConnectionManage 处理连接管理包
-func (s *Service) HandleConnectionManage(ctx context.Context, wsMsg *rest.WSMessage, conn interface{}) error {
-	// 这里假设 Content 字段为 JSON 字符串或直接传递参数
-	// 需根据实际协议解析 wsMsg 内容
-	// 示例：直接用 wsMsg.From、wsMsg.Content、wsMsg.GroupId 等
-	_, err := s.Connect(ctx, wsMsg.From, wsMsg.Content, fmt.Sprintf("%d", wsMsg.GroupId), "")
-	return err
-}
-
-// HandleOnlineStatusEvent 处理在线状态事件推送
-func (s *Service) HandleOnlineStatusEvent(ctx context.Context, wsMsg *rest.WSMessage, conn interface{}) error {
-	// 这里 wsMsg.Content 应包含 userId、status（online/offline）、timestamp 等
-	// 伪代码：将事件推送给所有相关好友
-	// 实际场景下应维护好友连接映射
-	// 示例：
-	// event := map[string]interface{}{
-	//     "type": "online_status",
-	//     "user_id": wsMsg.Content["user_id"],
-	//     "status": wsMsg.Content["status"],
-	//     "timestamp": wsMsg.Content["timestamp"],
-	// }
-	// for _, friendConn := range 好友连接 {
-	//     friendConn.WriteJSON(event)
-	// }
-	return nil // 具体推送逻辑根据实际业务补充
-}
-
 // ValidateToken 校验 JWT token
 func (s *Service) ValidateToken(token string) bool {
 	return auth.ValidateToken(token)
@@ -687,82 +660,4 @@ func (s *Service) RemoveWebSocketConnection(userID int64) {
 	if err := s.connMgr.RemoveConnection(ctx, userID, ""); err != nil {
 		log.Printf("移除WebSocket连接失败: %v", err)
 	}
-}
-
-// CleanupInvalidConnections 清理所有失效的连接（被动清理，在推送失败时调用）
-func (s *Service) CleanupInvalidConnections() {
-	// 这个方法现在主要用于日志记录，实际清理在推送失败时进行
-	stats := s.connMgr.GetStats()
-	log.Printf("🧹 当前活跃连接数: %d", stats["local_connections"])
-}
-
-// UpdateHeartbeat 更新连接的心跳时间
-func (s *Service) UpdateHeartbeat(ctx context.Context, userID int64, connID string, timestamp int64) error {
-	connKey := fmt.Sprintf("conn:%d:%s", userID, connID)
-
-	// 更新Redis中的lastHeartbeat字段
-	err := s.redis.HSet(ctx, connKey, "lastHeartbeat", timestamp)
-	if err != nil {
-		log.Printf("更新用户 %d 心跳时间失败: %v", userID, err)
-		return err
-	}
-
-	return nil
-}
-
-// CleanupAllConnections 清理Redis连接记录，服务关闭时调用
-func (s *Service) CleanupAllConnections() {
-	ctx := context.Background()
-
-	log.Printf("开始清理Redis中的连接记录和实例信息...")
-
-	// 清理实例注册信息
-	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
-	if err := s.redis.Del(ctx, instanceKey); err != nil {
-		log.Printf("清理实例信息失败: %v", err)
-	} else {
-		log.Printf("已清理实例信息: %s", s.instanceID)
-	}
-
-	// 2. 清理本实例的连接记录
-	connKeys, err := s.redis.Keys(ctx, "conn:*")
-	if err != nil {
-		log.Printf("获取连接记录失败: %v", err)
-	} else {
-		cleanedConnections := 0
-		cleanedUsers := make(map[string]bool)
-
-		for _, key := range connKeys {
-			// 获取连接信息
-			connInfo, err := s.redis.HGetAll(ctx, key)
-			if err != nil {
-				continue
-			}
-
-			// 检查是否是本实例的连接
-			if serverID, exists := connInfo["serverID"]; exists && serverID == s.instanceID {
-				// 删除连接信息
-				if err := s.redis.Del(ctx, key); err == nil {
-					cleanedConnections++
-				}
-
-				// 记录需要从在线用户集合中移除的用户
-				if userIDStr, exists := connInfo["userID"]; exists {
-					cleanedUsers[userIDStr] = true
-				}
-			}
-		}
-
-		// 从在线用户集合中移除用户
-		for userID := range cleanedUsers {
-			s.redis.SRem(ctx, "online_users", userID)
-		}
-
-		log.Printf("已清理 %d 个本实例连接记录, %d 个用户下线", cleanedConnections, len(cleanedUsers))
-	}
-
-	// 3. 清理本地连接管理器
-	s.connMgr.CleanupAll()
-
-	log.Printf("Redis连接记录和实例信息清理完成")
 }
