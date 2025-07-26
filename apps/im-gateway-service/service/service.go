@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/connect-service/model"
+	"websocket-server/apps/im-gateway-service/model"
 	"websocket-server/pkg/auth"
 	"websocket-server/pkg/config"
 	"websocket-server/pkg/database"
@@ -216,8 +216,8 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		redis:      redis,
 		kafka:      kafka,
 		config:     cfg,
-		instanceID: fmt.Sprintf("connect-%d", time.Now().UnixNano()), // 生成唯一实例ID
-		connMgr:    NewConnectionManager(redis, cfg),                 // 初始化连接管理器
+		instanceID: fmt.Sprintf("im-gateway-%d", time.Now().UnixNano()), // 生成唯一实例ID
+		connMgr:    NewConnectionManager(redis, cfg),                    // 初始化连接管理器
 	}
 
 	// 初始化Logic服务客户端
@@ -744,34 +744,6 @@ func (s *Service) markPushSent(ctx context.Context, userID int64, messageID int6
 	return s.redis.Set(ctx, key, "pushed", 10*time.Minute) // 10分钟过期
 }
 
-// pushToLocalConnection 推送消息给用户，支持跨节点路由
-func (s *Service) pushToLocalConnection(targetUserID int64, message *rest.WSMessage) error {
-	log.Printf("开始推送消息给用户 %d, 消息内容: %s", targetUserID, message.Content)
-
-	// 幂等性检查：检查消息是否已推送
-	ctx := context.Background()
-	if s.isPushDuplicate(ctx, targetUserID, message.MessageId) {
-		log.Printf("消息已推送，跳过: UserID=%d, MessageID=%d", targetUserID, message.MessageId)
-		return nil
-	}
-
-	// 查找用户所在的Connect实例
-	targetInstance, err := s.findUserInstance(ctx, targetUserID)
-	if err != nil {
-		log.Printf("用户 %d 不在线或查找实例失败: %v", targetUserID, err)
-		return err
-	}
-
-	// 判断是本地连接还是跨节点连接
-	if targetInstance == s.instanceID {
-		// 本地连接，直接推送
-		return s.pushToLocalUser(ctx, targetUserID, message)
-	} else {
-		// 跨节点连接，通过Redis发布订阅转发
-		return s.forwardToRemoteInstance(ctx, targetInstance, targetUserID, message)
-	}
-}
-
 // pushToLocalUser 推送消息给本地用户
 func (s *Service) pushToLocalUser(ctx context.Context, targetUserID int64, message *rest.WSMessage) error {
 	// 先检查Redis中用户是否在线
@@ -854,13 +826,6 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 	}
 
 	return nil
-}
-
-// notifyMessageFailure 通知消息发送失败
-func (s *Service) notifyMessageFailure(originalSender int64, failureReason string) {
-	// TODO: 实现失败通知逻辑
-	// 这里应该通知原发送者消息发送失败
-	log.Printf("通知用户 %d 消息发送失败: %s", originalSender, failureReason)
 }
 
 // sendMessageViaUnaryCall 通过Logic服务单向调用发送消息

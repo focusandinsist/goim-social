@@ -84,13 +84,13 @@
             }
         },
         {
-            "name": "6. Connect Service (HTTP:21006, gRPC:22006)",
+            "name": "6. IM Gateway Service (HTTP:21006, gRPC:22006)",
             "type": "go",
             "request": "launch",
-            "program": "./apps/connect-service/cmd/main.go",
+            "program": "./apps/im-gateway-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
-                "SERVICE_NAME": "connect-service",
+                "SERVICE_NAME": "im-gateway-service",
                 "HTTP_PORT": "21006",
                 "GRPC_PORT": "22006",
                 "MESSAGE_SERVICE_HOST": "localhost",
@@ -98,21 +98,37 @@
                 "LOGIC_SERVICE_HOST": "localhost",
                 "LOGIC_SERVICE_PORT": "22005",
                 "MONGODB_URI": "mongodb://localhost:27017",
-                "MONGODB_DB": "connectDB",
+                "MONGODB_DB": "imGatewayDB",
                 "REDIS_ADDR": "localhost:6379",
                 "KAFKA_BROKERS": "localhost:9092"
             }
         },
         {
-            "name": "7. Content Service (HTTP:21007, gRPC:22007)",
+            "name": "7. API Gateway Service (HTTP:21007, gRPC:22007)",
+            "type": "go",
+            "request": "launch",
+            "program": "./apps/api-gateway-service/cmd/main.go",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_NAME": "api-gateway-service",
+                "HTTP_PORT": "21007",
+                "GRPC_PORT": "22007",
+                "MONGODB_URI": "mongodb://localhost:27017",
+                "MONGODB_DB": "apiGatewayDB",
+                "REDIS_ADDR": "localhost:6379",
+                "KAFKA_BROKERS": "localhost:9092"
+            }
+        },
+        {
+            "name": "8. Content Service (HTTP:21008, gRPC:22008)",
             "type": "go",
             "request": "launch",
             "program": "./apps/content-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "content-service",
-                "HTTP_PORT": "21007",
-                "GRPC_PORT": "22007",
+                "HTTP_PORT": "21008",
+                "GRPC_PORT": "22008",
                 "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=contentServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
                 "POSTGRESQL_DB": "contentServiceDB",
                 "REDIS_ADDR": "localhost:6379",
@@ -120,15 +136,15 @@
             }
         },
         {
-            "name": "8. Interaction Service (HTTP:21008, gRPC:22008)",
+            "name": "9. Interaction Service (HTTP:21009, gRPC:22009)",
             "type": "go",
             "request": "launch",
             "program": "./apps/interaction-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "interaction-service",
-                "HTTP_PORT": "21008",
-                "GRPC_PORT": "22008",
+                "HTTP_PORT": "21009",
+                "GRPC_PORT": "22009",
                 "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=interactionServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
                 "POSTGRESQL_DB": "interactionServiceDB",
                 "REDIS_ADDR": "localhost:6379",
@@ -136,15 +152,15 @@
             }
         },
         {
-            "name": "9. Comment Service (HTTP:21009, gRPC:22009)",
+            "name": "10. Comment Service (HTTP:21010, gRPC:22010)",
             "type": "go",
             "request": "launch",
             "program": "./apps/comment-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "comment-service",
-                "HTTP_PORT": "21009",
-                "GRPC_PORT": "22009",
+                "HTTP_PORT": "21010",
+                "GRPC_PORT": "22010",
                 "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=commentServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
                 "POSTGRESQL_DB": "commentServiceDB",
                 "REDIS_ADDR": "localhost:6379",
@@ -152,15 +168,15 @@
             }
         },
         {
-            "name": "10. History Service (HTTP:21010, gRPC:22010)",
+            "name": "11. History Service (HTTP:21011, gRPC:22011)",
             "type": "go",
             "request": "launch",
             "program": "./apps/history-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "history-service",
-                "HTTP_PORT": "21010",
-                "GRPC_PORT": "22010",
+                "HTTP_PORT": "21011",
+                "GRPC_PORT": "22011",
                 "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=historyServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
                 "POSTGRESQL_DB": "historyServiceDB",
                 "REDIS_ADDR": "localhost:6379",
@@ -196,7 +212,8 @@
                 "3. Friend Service (HTTP:21003, gRPC:22003)",
                 "4. Message Service (HTTP:21004, gRPC:22004)",
                 "5. Logic Service (HTTP:21005, gRPC:22005)",
-                "6. Connect Service (HTTP:21006, gRPC:22006)"
+                "6. IM Gateway Service (HTTP:21006, gRPC:22006)",
+                "7. API Gateway Service (HTTP:21007, gRPC:22007)"
             ],
             "stopAll": true
         },

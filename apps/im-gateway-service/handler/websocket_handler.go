@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/connect-service/service"
+	"websocket-server/apps/im-gateway-service/service"
 	"websocket-server/pkg/logger"
 )
 
@@ -174,7 +174,7 @@ func (ws *WSHandler) routeWebSocketMessage(c *gin.Context, conn *websocket.Conn,
 			ws.log.Error(c.Request.Context(), "HandleOnlineStatusEvent failed", logger.F("error", err.Error()))
 		}
 	default:
-		// 未知类型，可记录日志或忽略
+		// 未知类型
 		ws.log.Warn(c.Request.Context(), "Unknown message type", logger.F("type", wsMsg.MessageType))
 	}
 }

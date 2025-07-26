@@ -5,14 +5,14 @@ import (
 	"google.golang.org/grpc"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/connect-service/handler"
-	"websocket-server/apps/connect-service/service"
+	"websocket-server/apps/im-gateway-service/handler"
+	"websocket-server/apps/im-gateway-service/service"
 	"websocket-server/pkg/server"
 )
 
 func main() {
 	// 创建应用程序
-	app := server.NewApplication("connect-service")
+	app := server.NewApplication("im-gateway-service")
 
 	// 启用HTTP和gRPC服务器
 	app.EnableHTTP()
