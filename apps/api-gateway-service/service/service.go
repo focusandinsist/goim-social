@@ -264,17 +264,3 @@ func (s *Service) GetUserConnections(ctx context.Context, userID int64) ([]*mode
 
 	return connections, nil
 }
-
-// GetOnlineUserCount 获取在线用户总数
-func (s *Service) GetOnlineUserCount(ctx context.Context) (int64, error) {
-	keys, err := s.redis.Keys(ctx, "conn:*")
-	if err != nil {
-		return 0, fmt.Errorf("获取在线用户数量失败: %v", err)
-	}
-	return int64(len(keys)), nil
-}
-
-// GetAllOnlineUsers 获取所有在线用户ID列表
-func (s *Service) GetAllOnlineUsers(ctx context.Context) ([]int64, error) {
-	return []int64{1, 2, 3}, nil
-}

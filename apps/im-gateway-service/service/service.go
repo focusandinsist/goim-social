@@ -13,7 +13,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
 	"websocket-server/apps/im-gateway-service/model"
@@ -253,17 +252,7 @@ func (s *Service) initLogicClient() error {
 	return nil
 }
 
-// StartLogicConnection 初始化与Logic服务的连接
-func (s *Service) StartLogicConnection() {
-	log.Printf("初始化Logic服务连接...")
 
-	if s.chatClient == nil {
-		log.Printf("Logic服务客户端未初始化")
-		return
-	}
-
-	log.Printf("Logic服务连接已就绪")
-}
 
 // cleanupOnStartup 启动时清理本实例的旧连接数据
 func (s *Service) cleanupOnStartup() {
@@ -529,69 +518,6 @@ func (s *Service) HandleHeartbeat(ctx context.Context, wsMsg *rest.WSMessage, co
 // ValidateToken 校验 JWT token
 func (s *Service) ValidateToken(token string) bool {
 	return auth.ValidateToken(token)
-}
-
-// pushToLocalUser 推送消息给本地用户
-func (s *Service) pushToLocalUser(ctx context.Context, targetUserID int64, message *rest.WSMessage) error {
-	// 先检查Redis中用户是否在线
-	isOnline, err := s.connMgr.IsUserOnline(ctx, targetUserID)
-	if err != nil {
-		log.Printf("Redis查询失败，用户 %d: %v", targetUserID, err)
-		return err
-	}
-
-	// 调试：显示所有在线用户
-	allOnlineUsers, _ := s.connMgr.GetOnlineUsers(ctx)
-	log.Printf("当前Redis中的在线用户: %v", allOnlineUsers)
-
-	if !isOnline {
-		log.Printf("用户 %d 在Redis中显示不在线", targetUserID)
-		return fmt.Errorf("用户 %d 不在线", targetUserID)
-	}
-	log.Printf("用户 %d 在Redis中显示在线", targetUserID)
-
-	// 2. 将消息序列化为二进制（在获取连接前先序列化）
-	msgBytes, err := proto.Marshal(message)
-	if err != nil {
-		log.Printf("消息序列化失败: %v", err)
-		return err
-	}
-
-	// 3. 获取连接
-	conn, exists := s.connMgr.GetConnection(targetUserID)
-	stats := s.connMgr.GetStats()
-
-	log.Printf("本地连接状态: 总连接数=%d, 用户%d连接存在=%v", stats["local_connections"], targetUserID, exists)
-
-	if !exists {
-		log.Printf("用户 %d 没有本地WebSocket连接，可能在其他Connect服务实例上", targetUserID)
-		log.Printf("当前本地连接列表: %v", stats["connection_list"])
-		return fmt.Errorf("用户 %d 没有本地WebSocket连接", targetUserID)
-	}
-
-	// 4. 推送消息
-	log.Printf("尝试通过WebSocket推送消息给用户 %d，消息长度: %d bytes", targetUserID, len(msgBytes))
-
-	// 添加连接状态检查
-	if conn == nil {
-		log.Printf("用户 %d 的WebSocket连接为nil", targetUserID)
-		s.connMgr.RemoveConnection(context.Background(), targetUserID, "")
-		return fmt.Errorf("用户 %d 的WebSocket连接为nil", targetUserID)
-	}
-
-	err = conn.WriteMessage(websocket.BinaryMessage, msgBytes)
-
-	// 5. 处理推送结果
-	if err != nil {
-		log.Printf("推送消息给用户 %d 失败: %v", targetUserID, err)
-		log.Printf("错误类型: %T", err)
-		// 如果推送失败，可能连接已断开，移除连接
-		s.connMgr.RemoveConnection(context.Background(), targetUserID, "")
-	} else {
-		log.Printf("成功推送消息给用户 %d，消息内容: %s", targetUserID, message.Content)
-		// 注意：这里不自动ACK，等待客户端主动确认已读
-	}
-	return nil
 }
 
 // HandleMessageACK 处理客户端的消息ACK确认

@@ -1,0 +1,206 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: im-config
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: im-config
+    app.kubernetes.io/component: configuration
+    app.kubernetes.io/part-of: instant-messaging
+data:
+  # 数据库配置
+  POSTGRESQL_HOST: "postgresql.im-system.svc.cluster.local"
+  POSTGRESQL_PORT: "5432"
+  POSTGRESQL_DB: "imdb"
+  MONGODB_HOST: "mongodb.im-system.svc.cluster.local"
+  MONGODB_PORT: "27017"
+  MONGODB_DB: "imdb"
+  
+  # Redis配置
+  REDIS_ADDR: "redis.im-system.svc.cluster.local:6379"
+  REDIS_DB: "0"
+  
+  # Kafka配置
+  KAFKA_BROKERS: "kafka.im-system.svc.cluster.local:9092"
+  
+  # 服务端口配置
+  USER_SERVICE_HTTP_PORT: "21001"
+  USER_SERVICE_GRPC_PORT: "22001"
+  GROUP_SERVICE_HTTP_PORT: "21002"
+  GROUP_SERVICE_GRPC_PORT: "22002"
+  FRIEND_SERVICE_HTTP_PORT: "21003"
+  FRIEND_SERVICE_GRPC_PORT: "22003"
+  MESSAGE_SERVICE_HTTP_PORT: "21004"
+  MESSAGE_SERVICE_GRPC_PORT: "22004"
+  LOGIC_SERVICE_HTTP_PORT: "21005"
+  LOGIC_SERVICE_GRPC_PORT: "22005"
+  IM_GATEWAY_SERVICE_HTTP_PORT: "21006"
+  IM_GATEWAY_SERVICE_GRPC_PORT: "22006"
+  API_GATEWAY_SERVICE_HTTP_PORT: "21007"
+  API_GATEWAY_SERVICE_GRPC_PORT: "22007"
+  CONTENT_SERVICE_HTTP_PORT: "21008"
+  CONTENT_SERVICE_GRPC_PORT: "22008"
+  INTERACTION_SERVICE_HTTP_PORT: "21009"
+  INTERACTION_SERVICE_GRPC_PORT: "22009"
+  COMMENT_SERVICE_HTTP_PORT: "21010"
+  COMMENT_SERVICE_GRPC_PORT: "22010"
+  HISTORY_SERVICE_HTTP_PORT: "21011"
+  HISTORY_SERVICE_GRPC_PORT: "22011"
+  
+  # 服务发现配置
+  USER_SERVICE_HOST: "user-service.im-system.svc.cluster.local"
+  GROUP_SERVICE_HOST: "group-service.im-system.svc.cluster.local"
+  FRIEND_SERVICE_HOST: "friend-service.im-system.svc.cluster.local"
+  MESSAGE_SERVICE_HOST: "message-service.im-system.svc.cluster.local"
+  LOGIC_SERVICE_HOST: "logic-service.im-system.svc.cluster.local"
+  IM_GATEWAY_SERVICE_HOST: "im-gateway-service.im-system.svc.cluster.local"
+  API_GATEWAY_SERVICE_HOST: "api-gateway-service.im-system.svc.cluster.local"
+  CONTENT_SERVICE_HOST: "content-service.im-system.svc.cluster.local"
+  INTERACTION_SERVICE_HOST: "interaction-service.im-system.svc.cluster.local"
+  COMMENT_SERVICE_HOST: "comment-service.im-system.svc.cluster.local"
+  HISTORY_SERVICE_HOST: "history-service.im-system.svc.cluster.local"
+  
+  # 日志配置
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  
+  # 监控配置
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "9090"
+  HEALTH_CHECK_ENABLED: "true"
+  
+  # 应用配置
+  APP_ENV: "production"
+  APP_DEBUG: "false"
+  
+  # 连接池配置
+  DB_MAX_OPEN_CONNS: "25"
+  DB_MAX_IDLE_CONNS: "5"
+  DB_CONN_MAX_LIFETIME: "300s"
+  
+  # Redis连接池配置
+  REDIS_POOL_SIZE: "10"
+  REDIS_MIN_IDLE_CONNS: "5"
+  REDIS_POOL_TIMEOUT: "4s"
+  REDIS_IDLE_TIMEOUT: "300s"
+  
+  # Kafka配置
+  KAFKA_GROUP_ID: "im-system"
+  KAFKA_AUTO_OFFSET_RESET: "latest"
+  KAFKA_ENABLE_AUTO_COMMIT: "true"
+  KAFKA_SESSION_TIMEOUT: "30s"
+  
+  # 限流配置
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_RPS: "1000"
+  RATE_LIMIT_BURST: "2000"
+  
+  # 超时配置
+  HTTP_READ_TIMEOUT: "30s"
+  HTTP_WRITE_TIMEOUT: "30s"
+  HTTP_IDLE_TIMEOUT: "120s"
+  GRPC_TIMEOUT: "30s"
+  
+  # 重试配置
+  RETRY_MAX_ATTEMPTS: "3"
+  RETRY_INITIAL_INTERVAL: "1s"
+  RETRY_MAX_INTERVAL: "30s"
+  RETRY_MULTIPLIER: "2.0"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: redis-config
+    app.kubernetes.io/component: configuration
+    app.kubernetes.io/part-of: instant-messaging
+data:
+  redis.conf: |
+    # Redis配置文件
+    bind 0.0.0.0
+    port 6379
+    
+    # 持久化配置
+    save 900 1
+    save 300 10
+    save 60 10000
+    
+    # 内存配置
+    maxmemory 512mb
+    maxmemory-policy allkeys-lru
+    
+    # 网络配置
+    tcp-keepalive 300
+    timeout 0
+    
+    # 日志配置
+    loglevel notice
+    
+    # 安全配置
+    protected-mode yes
+    
+    # AOF配置
+    appendonly yes
+    appendfsync everysec
+    
+    # 慢查询配置
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: kafka-config
+    app.kubernetes.io/component: configuration
+    app.kubernetes.io/part-of: instant-messaging
+data:
+  server.properties: |
+    # Kafka服务器配置
+    broker.id=1
+    listeners=PLAINTEXT://0.0.0.0:9092
+    advertised.listeners=PLAINTEXT://kafka.im-system.svc.cluster.local:9092
+    
+    # Zookeeper配置
+    zookeeper.connect=zookeeper.im-system.svc.cluster.local:2181
+    
+    # 日志配置
+    log.dirs=/var/lib/kafka/data
+    num.network.threads=3
+    num.io.threads=8
+    socket.send.buffer.bytes=102400
+    socket.receive.buffer.bytes=102400
+    socket.request.max.bytes=104857600
+    
+    # 分区配置
+    num.partitions=3
+    num.recovery.threads.per.data.dir=1
+    
+    # 副本配置
+    default.replication.factor=1
+    min.insync.replicas=1
+    
+    # 日志保留配置
+    log.retention.hours=168
+    log.segment.bytes=1073741824
+    log.retention.check.interval.ms=300000
+    
+    # 压缩配置
+    compression.type=producer
+    
+    # 事务配置
+    transaction.state.log.replication.factor=1
+    transaction.state.log.min.isr=1
+    
+    # 自动创建Topic
+    auto.create.topics.enable=true
+    delete.topic.enable=true
+    
+    # 组协调器配置
+    group.initial.rebalance.delay.ms=0

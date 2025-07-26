@@ -1,0 +1,76 @@
+# 多阶段构建Dockerfile模板
+# 使用方法: 复制此文件到各个服务目录，修改SERVICE_NAME
+
+# 构建阶段
+FROM golang:1.21-alpine AS builder
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装必要的包
+RUN apk add --no-cache git ca-certificates tzdata
+
+# 复制go mod文件
+COPY go.mod go.sum ./
+
+# 下载依赖
+RUN go mod download
+
+# 复制源代码
+COPY . .
+
+# 构建应用 (需要根据具体服务修改路径)
+# 示例: USER_SERVICE
+ARG SERVICE_NAME=user-service
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./apps/${SERVICE_NAME}/cmd/main.go
+
+# 运行阶段
+FROM alpine:latest
+
+# 安装ca-certificates和tzdata
+RUN apk --no-cache add ca-certificates tzdata
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+
+# 创建非root用户
+RUN addgroup -g 1001 appgroup && \
+    adduser -D -s /bin/sh -u 1001 -G appgroup appuser
+
+# 设置工作目录
+WORKDIR /app
+
+# 从构建阶段复制二进制文件
+COPY --from=builder /app/main .
+
+# 复制配置文件 (如果有)
+COPY --from=builder /app/configs ./configs
+
+# 更改文件所有者
+RUN chown -R appuser:appgroup /app
+
+# 切换到非root用户
+USER appuser
+
+# 暴露端口 (需要根据服务修改)
+EXPOSE 8080 9090
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+# 启动应用
+CMD ["./main"]
+
+# 构建示例:
+# docker build --build-arg SERVICE_NAME=user-service -t user-service:latest .
+# docker build --build-arg SERVICE_NAME=group-service -t group-service:latest .
+# docker build --build-arg SERVICE_NAME=friend-service -t friend-service:latest .
+# docker build --build-arg SERVICE_NAME=message-service -t message-service:latest .
+# docker build --build-arg SERVICE_NAME=logic-service -t logic-service:latest .
+# docker build --build-arg SERVICE_NAME=im-gateway-service -t im-gateway-service:latest .
+# docker build --build-arg SERVICE_NAME=api-gateway-service -t api-gateway-service:latest .
+# docker build --build-arg SERVICE_NAME=content-service -t content-service:latest .
+# docker build --build-arg SERVICE_NAME=interaction-service -t interaction-service:latest .
+# docker build --build-arg SERVICE_NAME=comment-service -t comment-service:latest .
+# docker build --build-arg SERVICE_NAME=history-service -t history-service:latest .
