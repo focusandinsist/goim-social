@@ -6,9 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"websocket-server/api/rest"
 	"websocket-server/apps/history-service/model"
 	"websocket-server/apps/history-service/service"
 	"websocket-server/pkg/logger"
+	"websocket-server/pkg/utils"
 )
 
 // HTTPHandler HTTP处理器
@@ -44,38 +46,31 @@ func (h *HTTPHandler) RegisterRoutes(engine *gin.Engine) {
 	}
 }
 
-// CreateHistoryRequest 创建历史记录请求
-type CreateHistoryRequest struct {
-	UserID      int64  `json:"user_id" binding:"required"`
-	ActionType  string `json:"action_type" binding:"required"`
-	ObjectType  string `json:"object_type" binding:"required"`
-	ObjectID    int64  `json:"object_id" binding:"required"`
-	ObjectTitle string `json:"object_title"`
-	ObjectURL   string `json:"object_url"`
-	Metadata    string `json:"metadata"`
-	DeviceInfo  string `json:"device_info"`
-	Location    string `json:"location"`
-	Duration    int64  `json:"duration"`
-}
-
 // CreateHistory 创建历史记录
 func (h *HTTPHandler) CreateHistory(c *gin.Context) {
-	var req CreateHistoryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.CreateHistoryRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid create history request", logger.F("error", err.Error()))
+		res := &rest.CreateHistoryResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
+	// 转换枚举类型
+	actionType := convertActionTypeFromProto(req.ActionType)
+	objectType := convertHistoryObjectTypeFromProto(req.HistoryObjectType)
+
 	params := &model.CreateHistoryParams{
-		UserID:      req.UserID,
-		ActionType:  req.ActionType,
-		ObjectType:  req.ObjectType,
-		ObjectID:    req.ObjectID,
+		UserID:      req.UserId,
+		ActionType:  actionType,
+		ObjectType:  objectType,
+		ObjectID:    req.ObjectId,
 		ObjectTitle: req.ObjectTitle,
-		ObjectURL:   req.ObjectURL,
+		ObjectURL:   req.ObjectUrl,
 		Metadata:    req.Metadata,
 		IPAddress:   c.ClientIP(),
 		UserAgent:   c.GetHeader("User-Agent"),
@@ -84,28 +79,31 @@ func (h *HTTPHandler) CreateHistory(c *gin.Context) {
 		Duration:    req.Duration,
 	}
 
-	record, err := h.svc.CreateHistory(c.Request.Context(), params)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to create history",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	record, err := h.svc.CreateHistory(ctx, params)
+	res := &rest.CreateHistoryResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "历史记录创建成功"
+		}(),
+		Record: func() *rest.HistoryRecord {
+			if err != nil {
+				return nil
+			}
+			return convertHistoryRecordToProto(record)
+		}(),
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "历史记录创建成功",
-		"data":    record,
-	})
+	if err != nil {
+		h.logger.Error(ctx, "Create history failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // BatchCreateHistoryRequest 批量创建历史记录请求
 type BatchCreateHistoryRequest struct {
-	Records []CreateHistoryRequest `json:"records" binding:"required"`
+	Records []rest.CreateHistoryRequest `json:"records" binding:"required"`
 }
 
 // BatchCreateHistory 批量创建历史记录
@@ -120,14 +118,19 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 	}
 
 	var paramsList []*model.CreateHistoryParams
-	for _, r := range req.Records {
+	for i := range req.Records {
+		r := req.Records[i] // 避免range var copies lock问题
+		// 转换枚举类型
+		actionType := convertActionTypeFromProto(r.ActionType)
+		objectType := convertHistoryObjectTypeFromProto(r.HistoryObjectType)
+
 		params := &model.CreateHistoryParams{
-			UserID:      r.UserID,
-			ActionType:  r.ActionType,
-			ObjectType:  r.ObjectType,
-			ObjectID:    r.ObjectID,
+			UserID:      r.UserId,
+			ActionType:  actionType,
+			ObjectType:  objectType,
+			ObjectID:    r.ObjectId,
 			ObjectTitle: r.ObjectTitle,
-			ObjectURL:   r.ObjectURL,
+			ObjectURL:   r.ObjectUrl,
 			Metadata:    r.Metadata,
 			IPAddress:   c.ClientIP(),
 			UserAgent:   c.GetHeader("User-Agent"),
@@ -158,32 +161,28 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 	})
 }
 
-// GetUserHistoryRequest 获取用户历史记录请求
-type GetUserHistoryRequest struct {
-	UserID     int64  `json:"user_id" binding:"required"`
-	ActionType string `json:"action_type"`
-	ObjectType string `json:"object_type"`
-	StartTime  string `json:"start_time"`
-	EndTime    string `json:"end_time"`
-	Page       int32  `json:"page"`
-	PageSize   int32  `json:"page_size"`
-}
-
 // GetUserHistory 获取用户历史记录
 func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
-	var req GetUserHistoryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.GetUserHistoryRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid get user history request", logger.F("error", err.Error()))
+		res := &rest.GetUserHistoryResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
+	// 转换枚举类型
+	actionType := convertActionTypeFromProto(req.ActionType)
+	objectType := convertHistoryObjectTypeFromProto(req.HistoryObjectType)
+
 	params := &model.GetUserHistoryParams{
-		UserID:     req.UserID,
-		ActionType: req.ActionType,
-		ObjectType: req.ObjectType,
+		UserID:     req.UserId,
+		ActionType: actionType,
+		ObjectType: objectType,
 		Page:       req.Page,
 		PageSize:   req.PageSize,
 	}
@@ -200,28 +199,33 @@ func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
 		}
 	}
 
-	records, total, err := h.svc.GetUserHistory(c.Request.Context(), params)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to get user history",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	records, total, err := h.svc.GetUserHistory(ctx, params)
+
+	// 转换历史记录列表
+	var protoRecords []*rest.HistoryRecord
+	if err == nil {
+		for _, record := range records {
+			protoRecords = append(protoRecords, convertHistoryRecordToProto(record))
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "获取成功",
-		"data": gin.H{
-			"records":   records,
-			"total":     total,
-			"page":      req.Page,
-			"page_size": req.PageSize,
-		},
-	})
+	res := &rest.GetUserHistoryResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "获取成功"
+		}(),
+		Records:  protoRecords,
+		Total:    total,
+		Page:     req.Page,
+		PageSize: req.PageSize,
+	}
+	if err != nil {
+		h.logger.Error(ctx, "Get user history failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // GetObjectHistoryRequest 获取对象历史记录请求
@@ -291,70 +295,69 @@ func (h *HTTPHandler) GetObjectHistory(c *gin.Context) {
 	})
 }
 
-// DeleteHistoryRequest 删除历史记录请求
-type DeleteHistoryRequest struct {
-	UserID    int64   `json:"user_id" binding:"required"`
-	RecordIDs []int64 `json:"record_ids" binding:"required"`
-}
-
 // DeleteHistory 删除历史记录
 func (h *HTTPHandler) DeleteHistory(c *gin.Context) {
-	var req DeleteHistoryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.DeleteHistoryRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid delete history request", logger.F("error", err.Error()))
+		res := &rest.DeleteHistoryResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
 	params := &model.DeleteHistoryParams{
-		UserID:    req.UserID,
-		RecordIDs: req.RecordIDs,
+		UserID:    req.UserId,
+		RecordIDs: req.RecordIds,
 	}
 
-	deletedCount, err := h.svc.DeleteHistory(c.Request.Context(), params)
+	deletedCount, err := h.svc.DeleteHistory(ctx, params)
+	res := &rest.DeleteHistoryResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "删除成功"
+		}(),
+		DeletedCount: func() int32 {
+			if err != nil {
+				return 0
+			}
+			return deletedCount
+		}(),
+	}
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to delete history",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+		h.logger.Error(ctx, "Delete history failed", logger.F("error", err.Error()))
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":       true,
-		"message":       "删除成功",
-		"deleted_count": deletedCount,
-	})
-}
-
-// ClearUserHistoryRequest 清空用户历史记录请求
-type ClearUserHistoryRequest struct {
-	UserID     int64  `json:"user_id" binding:"required"`
-	ActionType string `json:"action_type"`
-	ObjectType string `json:"object_type"`
-	BeforeTime string `json:"before_time"`
+	utils.WriteObject(c, res, err)
 }
 
 // ClearUserHistory 清空用户历史记录
 func (h *HTTPHandler) ClearUserHistory(c *gin.Context) {
-	var req ClearUserHistoryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.ClearUserHistoryRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid clear user history request", logger.F("error", err.Error()))
+		res := &rest.ClearUserHistoryResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
+	// 转换枚举类型
+	actionType := convertActionTypeFromProto(req.ActionType)
+	objectType := convertHistoryObjectTypeFromProto(req.HistoryObjectType)
+
 	params := &model.ClearUserHistoryParams{
-		UserID:     req.UserID,
-		ActionType: req.ActionType,
-		ObjectType: req.ObjectType,
+		UserID:     req.UserId,
+		ActionType: actionType,
+		ObjectType: objectType,
 	}
 
 	// 解析时间参数
@@ -364,23 +367,26 @@ func (h *HTTPHandler) ClearUserHistory(c *gin.Context) {
 		}
 	}
 
-	deletedCount, err := h.svc.ClearUserHistory(c.Request.Context(), params)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to clear user history",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	deletedCount, err := h.svc.ClearUserHistory(ctx, params)
+	res := &rest.ClearUserHistoryResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "清空成功"
+		}(),
+		DeletedCount: func() int32 {
+			if err != nil {
+				return 0
+			}
+			return deletedCount
+		}(),
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":       true,
-		"message":       "清空成功",
-		"deleted_count": deletedCount,
-	})
+	if err != nil {
+		h.logger.Error(ctx, "Clear user history failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // GetUserActionStatsRequest 获取用户行为统计请求
@@ -513,4 +519,24 @@ func (h *HTTPHandler) GetUserActivityStats(c *gin.Context) {
 		"message": "获取成功",
 		"data":    stats,
 	})
+}
+
+// convertHistoryObjectTypeFromProto 将protobuf枚举转换为对象类型
+func convertHistoryObjectTypeFromProto(objectType rest.HistoryObjectType) string {
+	switch objectType {
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_POST:
+		return "post"
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_ARTICLE:
+		return "article"
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_VIDEO:
+		return "video"
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_USER:
+		return "user"
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_PRODUCT:
+		return "product"
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_GROUP:
+		return "group"
+	default:
+		return "post"
+	}
 }
