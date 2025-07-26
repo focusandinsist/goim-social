@@ -10,11 +10,15 @@ import (
 	"strings"
 	"sync"
 
+	"websocket-server/api/rest"
 	"websocket-server/apps/api-gateway-service/model"
 	"websocket-server/pkg/config"
 	"websocket-server/pkg/database"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // ServiceInstance 服务实例信息
@@ -34,11 +38,13 @@ type ServiceRegistry struct {
 
 // Service API网关服务
 type Service struct {
-	db       *database.MongoDB
-	redis    *redis.RedisClient
-	kafka    *kafka.Producer
-	config   *config.Config
-	registry *ServiceRegistry
+	db              *database.MongoDB
+	redis           *redis.RedisClient
+	kafka           *kafka.Producer
+	config          *config.Config
+	registry        *ServiceRegistry
+	imGatewayConn   *grpc.ClientConn
+	imGatewayClient rest.ConnectServiceClient
 }
 
 // NewService 创建API网关服务实例
@@ -47,12 +53,22 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		services: make(map[string][]*ServiceInstance),
 	}
 
+	// 初始化IM Gateway gRPC客户端
+	imGatewayAddr := "localhost:22006" // IM Gateway的gRPC端口
+	conn, err := grpc.Dial(imGatewayAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("Failed to connect to IM Gateway: %v", err)
+		// 在实际项目中，这里可能需要重试机制
+	}
+
 	service := &Service{
-		db:       db,
-		redis:    redis,
-		kafka:    kafka,
-		config:   cfg,
-		registry: registry,
+		db:              db,
+		redis:           redis,
+		kafka:           kafka,
+		config:          cfg,
+		registry:        registry,
+		imGatewayConn:   conn,
+		imGatewayClient: rest.NewConnectServiceClient(conn),
 	}
 
 	// 启动服务发现
@@ -177,6 +193,24 @@ func (s *Service) GetAllServices() map[string][]*ServiceInstance {
 	}
 
 	return result
+}
+
+// GetOnlineStatusFromIMGateway 通过gRPC调用IM Gateway获取在线状态
+func (s *Service) GetOnlineStatusFromIMGateway(ctx context.Context, userIDs []int64) (map[int64]bool, error) {
+	if s.imGatewayClient == nil {
+		return nil, fmt.Errorf("IM Gateway client not initialized")
+	}
+
+	req := &rest.OnlineStatusRequest{
+		UserIds: userIDs,
+	}
+
+	resp, err := s.imGatewayClient.OnlineStatus(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call IM Gateway: %v", err)
+	}
+
+	return resp.Status, nil
 }
 
 // OnlineStatus 查询用户在线状态

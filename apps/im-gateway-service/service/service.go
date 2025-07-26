@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -409,9 +408,6 @@ func (s *Service) registerInstance() error {
 	// 启动心跳
 	go s.startHeartbeat()
 
-	// 启动跨节点消息订阅
-	go s.startCrossNodeSubscription()
-
 	// 启动优雅退出监听
 	go s.setupGracefulShutdown()
 
@@ -441,171 +437,6 @@ func (s *Service) startHeartbeat() {
 			log.Printf("续期失败: %v", err)
 		}
 	}
-}
-
-// findUserInstance 查找用户所在的Connect实例
-func (s *Service) findUserInstance(ctx context.Context, userID int64) (string, error) {
-	// 查询用户连接信息
-	pattern := fmt.Sprintf("conn:%d:*", userID)
-	keys, err := s.redis.Keys(ctx, pattern)
-	if err != nil {
-		return "", fmt.Errorf("查询用户连接失败: %v", err)
-	}
-
-	if len(keys) == 0 {
-		return "", fmt.Errorf("用户不在线")
-	}
-
-	// 获取连接信息
-	connInfo, err := s.redis.HGetAll(ctx, keys[0])
-	if err != nil {
-		return "", fmt.Errorf("获取连接信息失败: %v", err)
-	}
-
-	serverID, exists := connInfo["serverID"]
-	if !exists {
-		return "", fmt.Errorf("连接信息中缺少serverID")
-	}
-
-	return serverID, nil
-}
-
-// forwardToRemoteInstance 转发消息到远程Connect实例
-func (s *Service) forwardToRemoteInstance(ctx context.Context, targetInstance string, userID int64, message *rest.WSMessage) error {
-	// 构造跨节点消息
-	crossNodeMsg := map[string]interface{}{
-		"type":          "forward_message",
-		"from_instance": s.instanceID,
-		"to_instance":   targetInstance,
-		"user_id":       userID,
-		"message":       message,
-		"timestamp":     time.Now().Unix(),
-	}
-
-	// 序列化消息
-	msgBytes, err := json.Marshal(crossNodeMsg)
-	if err != nil {
-		return fmt.Errorf("序列化跨节点消息失败: %v", err)
-	}
-
-	// 通过Redis发布到目标实例的频道
-	channel := fmt.Sprintf("connect_forward:%s", targetInstance)
-	if err := s.redis.Publish(ctx, channel, string(msgBytes)); err != nil {
-		return fmt.Errorf("发布跨节点消息失败: %v", err)
-	}
-
-	log.Printf("已转发消息到远程实例: %s, UserID=%d, MessageID=%d", targetInstance, userID, message.MessageId)
-	return nil
-}
-
-// startCrossNodeSubscription 启动跨节点消息订阅
-func (s *Service) startCrossNodeSubscription() {
-	ctx := context.Background()
-	channel := fmt.Sprintf("connect_forward:%s", s.instanceID)
-
-	// 订阅自己的转发频道
-	pubsub := s.redis.Subscribe(ctx, channel)
-	defer pubsub.Close()
-
-	log.Printf("开始监听跨节点消息频道: %s", channel)
-
-	// 接收消息
-	ch := pubsub.Channel()
-	for msg := range ch {
-		if err := s.handleCrossNodeMessage(ctx, msg.Payload); err != nil {
-			log.Printf("处理跨节点消息失败: %v", err)
-		}
-	}
-}
-
-// handleCrossNodeMessage 处理跨节点消息
-func (s *Service) handleCrossNodeMessage(ctx context.Context, payload string) error {
-	// 解析跨节点消息
-	var crossNodeMsg map[string]interface{}
-	if err := json.Unmarshal([]byte(payload), &crossNodeMsg); err != nil {
-		return fmt.Errorf("解析跨节点消息失败: %v", err)
-	}
-
-	msgType, ok := crossNodeMsg["type"].(string)
-	if !ok {
-		return fmt.Errorf("跨节点消息类型无效")
-	}
-
-	switch msgType {
-	case "forward_message":
-		return s.handleForwardMessage(ctx, crossNodeMsg)
-	case "push_message":
-		return s.handlePushMessage(ctx, crossNodeMsg)
-	default:
-		log.Printf("未知的跨节点消息类型: %s", msgType)
-	}
-
-	return nil
-}
-
-// handleForwardMessage 处理转发的消息
-func (s *Service) handleForwardMessage(ctx context.Context, crossNodeMsg map[string]interface{}) error {
-	// 提取用户ID
-	userIDFloat, ok := crossNodeMsg["user_id"].(float64)
-	if !ok {
-		return fmt.Errorf("用户ID无效")
-	}
-	userID := int64(userIDFloat)
-
-	// 提取消息内容
-	messageData, ok := crossNodeMsg["message"]
-	if !ok {
-		return fmt.Errorf("消息内容无效")
-	}
-
-	// 重新序列化消息
-	msgBytes, err := json.Marshal(messageData)
-	if err != nil {
-		return fmt.Errorf("序列化消息失败: %v", err)
-	}
-
-	// 反序列化为WSMessage
-	var message rest.WSMessage
-	if err := json.Unmarshal(msgBytes, &message); err != nil {
-		return fmt.Errorf("反序列化WSMessage失败: %v", err)
-	}
-
-	// 推送给本地用户
-	return s.pushToLocalUser(ctx, userID, &message)
-}
-
-// handlePushMessage 处理推送消息
-func (s *Service) handlePushMessage(ctx context.Context, crossNodeMsg map[string]interface{}) error {
-	// 提取目标用户ID
-	targetUserFloat, ok := crossNodeMsg["target_user"].(float64)
-	if !ok {
-		return fmt.Errorf("目标用户ID无效")
-	}
-	targetUserID := int64(targetUserFloat)
-
-	// 提取消息内容
-	messageData, ok := crossNodeMsg["message"]
-	if !ok {
-		return fmt.Errorf("消息内容无效")
-	}
-
-	// 重新序列化消息
-	msgBytes, err := json.Marshal(messageData)
-	if err != nil {
-		return fmt.Errorf("序列化消息失败: %v", err)
-	}
-
-	// 反序列化为WSMessage
-	var message rest.WSMessage
-	if err := json.Unmarshal(msgBytes, &message); err != nil {
-		return fmt.Errorf("反序列化WSMessage失败: %v", err)
-	}
-
-	log.Printf("Connect服务收到推送消息: UserID=%d, MessageID=%d, Content=%s",
-		targetUserID, message.MessageId, message.Content)
-
-	// 推送给本地用户
-	return s.pushToLocalUser(ctx, targetUserID, &message)
 }
 
 // Connect 处理连接，写入 redis hash，并维护在线用户 set
@@ -727,23 +558,6 @@ func (s *Service) ValidateToken(token string) bool {
 	return auth.ValidateToken(token)
 }
 
-// isPushDuplicate 检查消息是否已推送给用户（防重复推送）
-func (s *Service) isPushDuplicate(ctx context.Context, userID int64, messageID int64) bool {
-	key := fmt.Sprintf("push:%d:%d", userID, messageID)
-	exists, err := s.redis.Exists(ctx, key)
-	if err != nil {
-		log.Printf("检查推送重复状态失败: %v", err)
-		return false // 出错时假设未推送，允许推送
-	}
-	return exists > 0
-}
-
-// markPushSent 标记消息已推送给用户
-func (s *Service) markPushSent(ctx context.Context, userID int64, messageID int64) error {
-	key := fmt.Sprintf("push:%d:%d", userID, messageID)
-	return s.redis.Set(ctx, key, "pushed", 10*time.Minute) // 10分钟过期
-}
-
 // pushToLocalUser 推送消息给本地用户
 func (s *Service) pushToLocalUser(ctx context.Context, targetUserID int64, message *rest.WSMessage) error {
 	// 先检查Redis中用户是否在线
@@ -802,10 +616,6 @@ func (s *Service) pushToLocalUser(ctx context.Context, targetUserID int64, messa
 		s.connMgr.RemoveConnection(context.Background(), targetUserID, "")
 	} else {
 		log.Printf("成功推送消息给用户 %d，消息内容: %s", targetUserID, message.Content)
-		// 标记消息已推送
-		if err := s.markPushSent(ctx, targetUserID, message.MessageId); err != nil {
-			log.Printf("标记消息已推送失败: %v", err)
-		}
 		// 注意：这里不自动ACK，等待客户端主动确认已读
 	}
 	return nil

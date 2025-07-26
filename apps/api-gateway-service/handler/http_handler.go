@@ -26,17 +26,14 @@ func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 // RegisterRoutes 注册HTTP路由
 func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 	// 网关管理API
-	gateway := r.Group("/api/v1/gateway")
+	gateway := r.Group("/api/v1/api-gateway")
 	{
-		gateway.POST("/online_status", h.OnlineStatus)       // 查询在线状态
-		gateway.POST("/online_count", h.OnlineCount)         // 获取在线用户数量
-		gateway.POST("/online_users", h.OnlineUsers)         // 获取在线用户列表
-		gateway.POST("/user_connections", h.UserConnections) // 获取用户连接信息
-		gateway.POST("/services", h.GetServices)             // 获取所有注册的服务
-		gateway.POST("/health", h.HealthCheck)               // 健康检查
+		gateway.POST("/online_status", h.OnlineStatus) // 查询在线状态(通过gRPC调用IM Gateway)
+		gateway.POST("/services", h.GetServices)       // 获取所有注册的服务
+		gateway.POST("/health", h.HealthCheck)         // 健康检查
 	}
 
-	// 动态路由 - 这是核心功能！
+	// 动态路由 [这是核心功能！]
 	// 所有符合 /api/v1/{service-name}/* 格式的请求都会被动态路由
 	api := r.Group("/api/v1")
 	{
@@ -44,7 +41,7 @@ func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 	}
 }
 
-// OnlineStatus 查询在线状态
+// OnlineStatus 查询在线状态 - 通过gRPC调用IM Gateway
 func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req rest.OnlineStatusRequest
@@ -57,7 +54,8 @@ func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 		return
 	}
 
-	status, err := h.svc.OnlineStatus(ctx, req.UserIds)
+	// 通过gRPC调用IM Gateway服务
+	status, err := h.svc.GetOnlineStatusFromIMGateway(ctx, req.UserIds)
 	res := &rest.OnlineStatusResponse{
 		Status: status,
 	}
@@ -65,25 +63,6 @@ func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 		h.log.Error(ctx, "Online status failed", logger.F("error", err.Error()))
 	}
 	utils.WriteObject(c, res, err)
-}
-
-// OnlineCount 获取在线用户数量
-func (h *HTTPHandler) OnlineCount(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	count, err := h.svc.GetOnlineUserCount(ctx)
-
-	// 创建响应结构（这里简化处理，实际应该定义专门的protobuf消息）
-	res := map[string]interface{}{
-		"count": count,
-	}
-
-	if err != nil {
-		h.log.Error(ctx, "Get online count failed", logger.F("error", err.Error()))
-		res["error"] = err.Error()
-	}
-
-	c.JSON(200, res) // 临时使用JSON，后续可以改为protobuf
 }
 
 // DynamicRoute 动态路由处理器 - 核心功能！

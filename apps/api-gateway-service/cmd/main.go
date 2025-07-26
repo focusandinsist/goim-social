@@ -32,13 +32,10 @@ func main() {
 
 		// TODO:认证中间件移到pkg里
 		engine.Use(func(c *gin.Context) {
-			// 跳过认证
-			if c.Request.URL.Path == "/api/v1/gateway/health" ||
-				c.Request.URL.Path == "/api/v1/gateway/services" ||
-				c.Request.URL.Path == "/api/v1/gateway/online_status" ||
-				c.Request.URL.Path == "/api/v1/gateway/online_count" ||
-				c.Request.URL.Path == "/api/v1/gateway/online_users" ||
-				c.Request.URL.Path == "/api/v1/gateway/user_connections" {
+			// 跳过API网关管理接口的认证
+			if c.Request.URL.Path == "/api/v1/api-gateway/health" ||
+				c.Request.URL.Path == "/api/v1/api-gateway/services" ||
+				c.Request.URL.Path == "/api/v1/api-gateway/online_status" {
 				c.Next()
 				return
 			}

@@ -101,19 +101,17 @@ func (h *HTTPHandler) CreateHistory(c *gin.Context) {
 	utils.WriteObject(c, res, err)
 }
 
-// BatchCreateHistoryRequest 批量创建历史记录请求
-type BatchCreateHistoryRequest struct {
-	Records []rest.CreateHistoryRequest `json:"records" binding:"required"`
-}
-
 // BatchCreateHistory 批量创建历史记录
 func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
-	var req BatchCreateHistoryRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.BatchCreateHistoryRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid batch create history request", logger.F("error", err.Error()))
+		res := &rest.BatchCreateHistoryResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
@@ -141,24 +139,32 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 		paramsList = append(paramsList, params)
 	}
 
-	records, err := h.svc.BatchCreateHistory(c.Request.Context(), paramsList)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to batch create history",
-			logger.F("error", err.Error()),
-			logger.F("count", len(req.Records)))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
+	records, err := h.svc.BatchCreateHistory(ctx, paramsList)
 
-	c.JSON(http.StatusOK, gin.H{
-		"success":       true,
-		"message":       "批量创建成功",
-		"created_count": len(records),
-		"data":          records,
-	})
+	res := &rest.BatchCreateHistoryResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "批量创建成功"
+		}(),
+		CreatedCount: int32(len(records)),
+		Records: func() []*rest.HistoryRecord {
+			if err != nil {
+				return nil
+			}
+			var protoRecords []*rest.HistoryRecord
+			for _, record := range records {
+				protoRecords = append(protoRecords, convertHistoryRecordToProto(record))
+			}
+			return protoRecords
+		}(),
+	}
+	if err != nil {
+		h.logger.Error(ctx, "Batch create history failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // GetUserHistory 获取用户历史记录
