@@ -497,36 +497,36 @@ func convertActionTypeFromProto(actionType rest.ActionType) string {
 func convertObjectTypeToProto(objectType string) rest.HistoryObjectType {
 	switch objectType {
 	case model.ObjectTypePost:
-		return rest.HistoryObjectType_OBJECT_TYPE_POST
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_POST
 	case model.ObjectTypeArticle:
-		return rest.HistoryObjectType_OBJECT_TYPE_ARTICLE
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_ARTICLE
 	case model.ObjectTypeVideo:
-		return rest.HistoryObjectType_OBJECT_TYPE_VIDEO
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_VIDEO
 	case model.ObjectTypeUser:
-		return rest.HistoryObjectType_OBJECT_TYPE_USER
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_USER
 	case model.ObjectTypeProduct:
-		return rest.HistoryObjectType_OBJECT_TYPE_PRODUCT
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_PRODUCT
 	case model.ObjectTypeGroup:
-		return rest.HistoryObjectType_OBJECT_TYPE_GROUP
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_GROUP
 	default:
-		return rest.HistoryObjectType_OBJECT_TYPE_UNSPECIFIED
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_UNSPECIFIED
 	}
 }
 
 // convertObjectTypeFromProto 将protobuf枚举转换为对象类型
 func convertObjectTypeFromProto(objectType rest.HistoryObjectType) string {
 	switch objectType {
-	case rest.HistoryObjectType_OBJECT_TYPE_POST:
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_POST:
 		return model.ObjectTypePost
-	case rest.HistoryObjectType_OBJECT_TYPE_ARTICLE:
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_ARTICLE:
 		return model.ObjectTypeArticle
-	case rest.HistoryObjectType_OBJECT_TYPE_VIDEO:
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_VIDEO:
 		return model.ObjectTypeVideo
-	case rest.HistoryObjectType_OBJECT_TYPE_USER:
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_USER:
 		return model.ObjectTypeUser
-	case rest.HistoryObjectType_OBJECT_TYPE_PRODUCT:
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_PRODUCT:
 		return model.ObjectTypeProduct
-	case rest.HistoryObjectType_OBJECT_TYPE_GROUP:
+	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_GROUP:
 		return model.ObjectTypeGroup
 	default:
 		return ""

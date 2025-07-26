@@ -21,13 +21,13 @@ enum ActionType {
 
 // 对象类型枚举
 enum HistoryObjectType {
-  OBJECT_TYPE_UNSPECIFIED = 0;
-  OBJECT_TYPE_POST = 1;           // 帖子
-  OBJECT_TYPE_ARTICLE = 2;        // 文章
-  OBJECT_TYPE_VIDEO = 3;          // 视频
-  OBJECT_TYPE_USER = 4;           // 用户
-  OBJECT_TYPE_PRODUCT = 5;        // 商品
-  OBJECT_TYPE_GROUP = 6;          // 群组
+  HISTORY_OBJECT_TYPE_UNSPECIFIED = 0;
+  HISTORY_OBJECT_TYPE_POST = 1;           // 帖子
+  HISTORY_OBJECT_TYPE_ARTICLE = 2;        // 文章
+  HISTORY_OBJECT_TYPE_VIDEO = 3;          // 视频
+  HISTORY_OBJECT_TYPE_USER = 4;           // 用户
+  HISTORY_OBJECT_TYPE_PRODUCT = 5;        // 商品
+  HISTORY_OBJECT_TYPE_GROUP = 6;          // 群组
 }
 
 // 历史记录信息
