@@ -3,8 +3,10 @@ package handler
 import (
 	"net/http"
 
+	"websocket-server/api/rest"
 	"websocket-server/apps/interaction-service/service"
 	"websocket-server/pkg/logger"
+	"websocket-server/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,222 +48,218 @@ func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 	}
 }
 
-// DoInteractionRequest 执行互动请求
-type DoInteractionRequest struct {
-	UserID          int64  `json:"user_id" binding:"required"`
-	ObjectID        int64  `json:"object_id" binding:"required"`
-	ObjectType      string `json:"object_type" binding:"required"`
-	InteractionType string `json:"interaction_type" binding:"required"`
-	Metadata        string `json:"metadata"`
-}
-
 // DoInteraction 执行互动
 func (h *HTTPHandler) DoInteraction(c *gin.Context) {
-	var req DoInteractionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.DoInteractionRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid do interaction request", logger.F("error", err.Error()))
+		res := &rest.DoInteractionResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
+
+	// 转换枚举类型
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	interaction, err := h.svc.DoInteraction(
-		c.Request.Context(),
-		req.UserID,
-		req.ObjectID,
-		req.ObjectType,
-		req.InteractionType,
+		ctx,
+		req.UserId,
+		req.ObjectId,
+		objectType,
+		interactionType,
 		req.Metadata,
 	)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to do interaction",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID),
-			logger.F("objectID", req.ObjectID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+
+	res := &rest.DoInteractionResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "操作成功"
+		}(),
+		Interaction: func() *rest.Interaction {
+			if err != nil || interaction == nil {
+				return nil
+			}
+			return convertInteractionToProto(interaction)
+		}(),
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "操作成功",
-		"data":    interaction,
-	})
-}
-
-// UndoInteractionRequest 取消互动请求
-type UndoInteractionRequest struct {
-	UserID          int64  `json:"user_id" binding:"required"`
-	ObjectID        int64  `json:"object_id" binding:"required"`
-	ObjectType      string `json:"object_type" binding:"required"`
-	InteractionType string `json:"interaction_type" binding:"required"`
+	if err != nil {
+		h.logger.Error(ctx, "Do interaction failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // UndoInteraction 取消互动
 func (h *HTTPHandler) UndoInteraction(c *gin.Context) {
-	var req UndoInteractionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.UndoInteractionRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid undo interaction request", logger.F("error", err.Error()))
+		res := &rest.UndoInteractionResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
+
+	// 转换枚举类型
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	err := h.svc.UndoInteraction(
-		c.Request.Context(),
-		req.UserID,
-		req.ObjectID,
-		req.ObjectType,
-		req.InteractionType,
+		ctx,
+		req.UserId,
+		req.ObjectId,
+		objectType,
+		interactionType,
 	)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to undo interaction",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID),
-			logger.F("objectID", req.ObjectID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+
+	res := &rest.UndoInteractionResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "取消成功"
+		}(),
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "取消成功",
-	})
-}
-
-// CheckInteractionRequest 检查互动请求
-type CheckInteractionRequest struct {
-	UserID          int64  `json:"user_id" binding:"required"`
-	ObjectID        int64  `json:"object_id" binding:"required"`
-	ObjectType      string `json:"object_type" binding:"required"`
-	InteractionType string `json:"interaction_type" binding:"required"`
+	if err != nil {
+		h.logger.Error(ctx, "Undo interaction failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // CheckInteraction 检查互动状态
 func (h *HTTPHandler) CheckInteraction(c *gin.Context) {
-	var req CheckInteractionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.CheckInteractionRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid check interaction request", logger.F("error", err.Error()))
+		res := &rest.CheckInteractionResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
+
+	// 转换枚举类型
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	hasInteraction, interaction, err := h.svc.CheckInteraction(
-		c.Request.Context(),
-		req.UserID,
-		req.ObjectID,
-		req.ObjectType,
-		req.InteractionType,
+		ctx,
+		req.UserId,
+		req.ObjectId,
+		objectType,
+		interactionType,
 	)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to check interaction",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID),
-			logger.F("objectID", req.ObjectID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+
+	res := &rest.CheckInteractionResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "查询成功"
+		}(),
+		HasInteraction: hasInteraction,
+		Interaction:    convertInteractionToProto(interaction),
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":         true,
-		"message":         "查询成功",
-		"has_interaction": hasInteraction,
-		"interaction":     interaction,
-	})
-}
-
-// BatchCheckInteractionRequest 批量检查互动请求
-type BatchCheckInteractionRequest struct {
-	UserID          int64   `json:"user_id" binding:"required"`
-	ObjectIDs       []int64 `json:"object_ids" binding:"required"`
-	ObjectType      string  `json:"object_type" binding:"required"`
-	InteractionType string  `json:"interaction_type" binding:"required"`
+	if err != nil {
+		h.logger.Error(ctx, "Check interaction failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // BatchCheckInteraction 批量检查互动状态
 func (h *HTTPHandler) BatchCheckInteraction(c *gin.Context) {
-	var req BatchCheckInteractionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.BatchCheckInteractionRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid batch check interaction request", logger.F("error", err.Error()))
+		res := &rest.BatchCheckInteractionResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
+
+	// 转换枚举类型
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := convertInteractionTypeFromProto(req.InteractionType)
 
 	interactions, err := h.svc.BatchCheckInteraction(
-		c.Request.Context(),
-		req.UserID,
-		req.ObjectIDs,
-		req.ObjectType,
-		req.InteractionType,
+		ctx,
+		req.UserId,
+		req.ObjectIds,
+		objectType,
+		interactionType,
 	)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to batch check interaction",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID),
-			logger.F("objectIDs", req.ObjectIDs))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+
+	res := &rest.BatchCheckInteractionResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "查询成功"
+		}(),
+		Interactions: interactions,
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":      true,
-		"message":      "查询成功",
-		"interactions": interactions,
-	})
-}
-
-// GetObjectStatsRequest 获取对象统计请求
-type GetObjectStatsRequest struct {
-	ObjectID   int64  `json:"object_id" binding:"required"`
-	ObjectType string `json:"object_type" binding:"required"`
+	if err != nil {
+		h.logger.Error(ctx, "Batch check interaction failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // GetObjectStats 获取对象统计
 func (h *HTTPHandler) GetObjectStats(c *gin.Context) {
-	var req GetObjectStatsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.GetObjectStatsRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid get object stats request", logger.F("error", err.Error()))
+		res := &rest.GetObjectStatsResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
-	stats, err := h.svc.GetObjectStats(c.Request.Context(), req.ObjectID, req.ObjectType)
+	// 转换枚举类型
+	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
+
+	stats, err := h.svc.GetObjectStats(ctx, req.ObjectId, objectType)
+
+	res := &rest.GetObjectStatsResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "获取成功"
+		}(),
+		Stats: func() *rest.InteractionStats {
+			if err != nil || stats == nil {
+				return nil
+			}
+			return convertStatsToProto(stats)
+		}(),
+	}
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to get object stats",
-			logger.F("error", err.Error()),
-			logger.F("objectID", req.ObjectID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+		h.logger.Error(ctx, "Get object stats failed", logger.F("error", err.Error()))
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "获取成功",
-		"data":    stats,
-	})
+	utils.WriteObject(c, res, err)
 }
 
 // GetBatchObjectStatsRequest 批量获取对象统计请求

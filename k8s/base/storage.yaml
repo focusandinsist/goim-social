@@ -1,0 +1,205 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: im-ssd
+  labels:
+    app.kubernetes.io/name: im-ssd
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: instant-messaging
+provisioner: kubernetes.io/aws-ebs  # 根据云提供商调整
+parameters:
+  type: gp3
+  fsType: ext4
+  encrypted: "true"
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: im-hdd
+  labels:
+    app.kubernetes.io/name: im-hdd
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: instant-messaging
+provisioner: kubernetes.io/aws-ebs  # 根据云提供商调整
+parameters:
+  type: gp2
+  fsType: ext4
+  encrypted: "true"
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+
+---
+# PostgreSQL持久化存储
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-pvc
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: postgresql-pvc
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: im-ssd
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# MongoDB持久化存储
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: mongodb-pvc
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: im-ssd
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# Redis持久化存储
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: redis-pvc
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: im-ssd
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Kafka持久化存储
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kafka-pvc
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: kafka-pvc
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: im-ssd
+  resources:
+    requests:
+      storage: 30Gi
+
+---
+# Zookeeper持久化存储
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zookeeper-pvc
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: zookeeper-pvc
+    app.kubernetes.io/component: coordination
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: im-ssd
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Prometheus监控数据存储
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: im-monitoring
+  labels:
+    app.kubernetes.io/name: prometheus-pvc
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: im-ssd
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# Grafana数据存储
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: im-monitoring
+  labels:
+    app.kubernetes.io/name: grafana-pvc
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: im-ssd
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# 日志存储 (如果使用ELK)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: elasticsearch-pvc
+  namespace: im-monitoring
+  labels:
+    app.kubernetes.io/name: elasticsearch-pvc
+    app.kubernetes.io/component: logging
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: im-ssd
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# 备份存储
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: backup-pvc
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: instant-messaging
+spec:
+  accessModes:
+    - ReadWriteMany  # 支持多个Pod同时访问
+  storageClassName: im-hdd  # 使用较便宜的存储
+  resources:
+    requests:
+      storage: 100Gi

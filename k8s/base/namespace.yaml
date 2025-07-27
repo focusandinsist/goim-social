@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: im-system
+  labels:
+    name: im-system
+    app.kubernetes.io/name: im-system
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "Instant Messaging System Namespace"
+    contact: "devops@company.com"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: im-monitoring
+  labels:
+    name: im-monitoring
+    app.kubernetes.io/name: im-monitoring
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "Monitoring and Observability Namespace"
+    contact: "devops@company.com"

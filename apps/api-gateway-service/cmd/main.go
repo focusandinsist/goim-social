@@ -5,14 +5,15 @@ import (
 	"google.golang.org/grpc"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/connect-service/handler"
-	"websocket-server/apps/connect-service/service"
+	"websocket-server/apps/api-gateway-service/handler"
+	"websocket-server/apps/api-gateway-service/service"
+	"websocket-server/pkg/middleware"
 	"websocket-server/pkg/server"
 )
 
 func main() {
 	// 创建应用程序
-	app := server.NewApplication("connect-service")
+	app := server.NewApplication("api-gateway-service")
 
 	// 启用HTTP和gRPC服务器
 	app.EnableHTTP()
@@ -23,13 +24,19 @@ func main() {
 
 	// 创建各handler
 	httpHandler := handler.NewHTTPHandler(svc, app.GetLogger())
-	wsHandler := handler.NewWSHandler(svc, app.GetLogger())
 	grpcHandler := handler.NewGRPCHandler(svc, app.GetLogger())
 
 	// 注册HTTP路由
 	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
+		// 创建API网关中间件
+		apiGatewayMW := middleware.NewAPIGatewayMiddleware(app.GetLogger(), "focusandinsist")
+
+		// 注册中间件
+		engine.Use(apiGatewayMW.GinLogging())  // 请求日志
+		engine.Use(apiGatewayMW.GinRecovery()) // 恢复中间件
+		engine.Use(apiGatewayMW.GinAuth())     // 认证中间件
+
 		httpHandler.RegisterRoutes(engine)
-		wsHandler.RegisterRoutes(engine)
 	})
 
 	// 注册gRPC服务

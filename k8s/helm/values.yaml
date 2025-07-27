@@ -1,0 +1,348 @@
+# Default values for im-system
+# This is a YAML-formatted file.
+
+# Global configuration
+global:
+  imageRegistry: "localhost:5000"
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+  storageClass: "im-ssd"
+  
+# Environment configuration
+environment: "production"
+namespace: "im-system"
+
+# Image configuration
+image:
+  registry: "localhost:5000"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Service configuration
+services:
+  userService:
+    enabled: true
+    name: user-service
+    image: im-user-service
+    replicas: 2
+    httpPort: 21001
+    grpcPort: 22001
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+  groupService:
+    enabled: true
+    name: group-service
+    image: im-group-service
+    replicas: 2
+    httpPort: 21002
+    grpcPort: 22002
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  friendService:
+    enabled: true
+    name: friend-service
+    image: im-friend-service
+    replicas: 2
+    httpPort: 21003
+    grpcPort: 22003
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+  messageService:
+    enabled: true
+    name: message-service
+    image: im-message-service
+    replicas: 3
+    httpPort: 21004
+    grpcPort: 22004
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 70
+
+  logicService:
+    enabled: true
+    name: logic-service
+    image: im-logic-service
+    replicas: 3
+    httpPort: 21005
+    grpcPort: 22005
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 15
+      targetCPUUtilizationPercentage: 70
+
+  imGatewayService:
+    enabled: true
+    name: im-gateway-service
+    image: im-im-gateway-service
+    replicas: 3
+    httpPort: 21006
+    grpcPort: 22006
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 70
+
+  apiGatewayService:
+    enabled: true
+    name: api-gateway-service
+    image: im-api-gateway-service
+    replicas: 2
+    httpPort: 21007
+    grpcPort: 22007
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  contentService:
+    enabled: true
+    name: content-service
+    image: im-content-service
+    replicas: 2
+    httpPort: 21008
+    grpcPort: 22008
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+  interactionService:
+    enabled: true
+    name: interaction-service
+    image: im-interaction-service
+    replicas: 2
+    httpPort: 21009
+    grpcPort: 22009
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+  commentService:
+    enabled: true
+    name: comment-service
+    image: im-comment-service
+    replicas: 2
+    httpPort: 21010
+    grpcPort: 22010
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+  historyService:
+    enabled: true
+    name: history-service
+    image: im-history-service
+    replicas: 2
+    httpPort: 21011
+    grpcPort: 22011
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+# Infrastructure configuration
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "postgres123"
+    database: "imdb"
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: "im-ssd"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+
+mongodb:
+  enabled: true
+  auth:
+    rootPassword: "admin123"
+    database: "imdb"
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: "im-ssd"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+redis:
+  enabled: true
+  auth:
+    password: "redis123"
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: "im-ssd"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+
+kafka:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 30Gi
+    storageClass: "im-ssd"
+  zookeeper:
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: "im-ssd"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: api.im-system.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api-gateway-service
+          port: 80
+    - host: ws.im-system.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: im-gateway-service
+          port: 80
+  tls: []
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    retention: "15d"
+    storageSize: "20Gi"
+  grafana:
+    enabled: true
+    adminPassword: "admin123"
+    storageSize: "5Gi"
+  jaeger:
+    enabled: true
+
+# Security configuration
+security:
+  podSecurityPolicy:
+    enabled: false
+  networkPolicy:
+    enabled: false
+  rbac:
+    enabled: true
+
+# Configuration
+config:
+  logLevel: "info"
+  logFormat: "json"
+  metricsEnabled: true
+  healthCheckEnabled: true
+  
+# Secrets (base64 encoded)
+secrets:
+  jwtSecret: "Zm9jdXNhbmRpbnNpc3RfandUX3NlY3JldF9rZXlfMjAyNA=="
+  apiSecret: "Zm9jdXNhbmRpbnNpc3RfYXBpX3NlY3JldF9rZXlfMjAyNA=="
+  encryptionKey: "Zm9jdXNhbmRpbnNpc3RfZW5jcnlwdGlvbl9rZXlfMjAyNA=="

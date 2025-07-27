@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"websocket-server/apps/connect-service/service"
+	"websocket-server/apps/im-gateway-service/service"
 	"websocket-server/pkg/logger"
 
 	"github.com/gin-gonic/gin"

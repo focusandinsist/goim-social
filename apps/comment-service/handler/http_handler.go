@@ -5,9 +5,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"websocket-server/api/rest"
 	"websocket-server/apps/comment-service/model"
 	"websocket-server/apps/comment-service/service"
 	"websocket-server/pkg/logger"
+	"websocket-server/pkg/utils"
 )
 
 // HTTPHandler HTTP处理器
@@ -57,55 +59,57 @@ func (h *HTTPHandler) RegisterRoutes(engine *gin.Engine) {
 	}
 }
 
-// CreateCommentRequest 创建评论请求
-type CreateCommentRequest struct {
-	ObjectID        int64  `json:"object_id" binding:"required"`
-	ObjectType      string `json:"object_type" binding:"required"`
-	UserID          int64  `json:"user_id" binding:"required"`
-	UserName        string `json:"user_name" binding:"required"`
-	UserAvatar      string `json:"user_avatar"`
-	Content         string `json:"content" binding:"required"`
-	ParentID        int64  `json:"parent_id"`
-	ReplyToUserID   int64  `json:"reply_to_user_id"`
-	ReplyToUserName string `json:"reply_to_user_name"`
-}
-
 // CreateComment 创建评论
 func (h *HTTPHandler) CreateComment(c *gin.Context) {
-	var req CreateCommentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.CreateCommentRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid create comment request", logger.F("error", err.Error()))
+		res := &rest.CreateCommentResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
+	// 转换对象类型
+	objectType := convertCommentObjectTypeFromProto(req.ObjectType)
+
 	params := &model.CreateCommentParams{
-		ObjectID:        req.ObjectID,
-		ObjectType:      req.ObjectType,
-		UserID:          req.UserID,
+		ObjectID:        req.ObjectId,
+		ObjectType:      objectType,
+		UserID:          req.UserId,
 		UserName:        req.UserName,
 		UserAvatar:      req.UserAvatar,
 		Content:         req.Content,
-		ParentID:        req.ParentID,
-		ReplyToUserID:   req.ReplyToUserID,
+		ParentID:        req.ParentId,
+		ReplyToUserID:   req.ReplyToUserId,
 		ReplyToUserName: req.ReplyToUserName,
 		IPAddress:       c.ClientIP(),
 		UserAgent:       c.GetHeader("User-Agent"),
 	}
 
-	comment, err := h.svc.CreateComment(c.Request.Context(), params)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to create comment",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	comment, err := h.svc.CreateComment(ctx, params)
+	res := &rest.CreateCommentResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "创建成功"
+		}(),
+		Comment: func() *rest.Comment {
+			if err != nil {
+				return nil
+			}
+			return convertCommentToProto(comment)
+		}(),
 	}
+	if err != nil {
+		h.logger.Error(ctx, "Create comment failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -114,154 +118,141 @@ func (h *HTTPHandler) CreateComment(c *gin.Context) {
 	})
 }
 
-// UpdateCommentRequest 更新评论请求
-type UpdateCommentRequest struct {
-	CommentID int64  `json:"comment_id" binding:"required"`
-	UserID    int64  `json:"user_id" binding:"required"`
-	Content   string `json:"content" binding:"required"`
-}
-
 // UpdateComment 更新评论
 func (h *HTTPHandler) UpdateComment(c *gin.Context) {
-	var req UpdateCommentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.UpdateCommentRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid update comment request", logger.F("error", err.Error()))
+		res := &rest.UpdateCommentResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
 	params := &model.UpdateCommentParams{
-		CommentID: req.CommentID,
-		UserID:    req.UserID,
+		CommentID: req.CommentId,
+		UserID:    req.UserId,
 		Content:   req.Content,
 	}
 
-	comment, err := h.svc.UpdateComment(c.Request.Context(), params)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to update comment",
-			logger.F("error", err.Error()),
-			logger.F("commentID", req.CommentID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	comment, err := h.svc.UpdateComment(ctx, params)
+	res := &rest.UpdateCommentResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "评论更新成功"
+		}(),
+		Comment: func() *rest.Comment {
+			if err != nil {
+				return nil
+			}
+			return convertCommentToProto(comment)
+		}(),
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "评论更新成功",
-		"data":    comment,
-	})
-}
-
-// DeleteCommentRequest 删除评论请求
-type DeleteCommentRequest struct {
-	CommentID int64 `json:"comment_id" binding:"required"`
-	UserID    int64 `json:"user_id" binding:"required"`
-	IsAdmin   bool  `json:"is_admin"`
+	if err != nil {
+		h.logger.Error(ctx, "Update comment failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // DeleteComment 删除评论
 func (h *HTTPHandler) DeleteComment(c *gin.Context) {
-	var req DeleteCommentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.DeleteCommentRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid delete comment request", logger.F("error", err.Error()))
+		res := &rest.DeleteCommentResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
 	params := &model.DeleteCommentParams{
-		CommentID: req.CommentID,
-		UserID:    req.UserID,
+		CommentID: req.CommentId,
+		UserID:    req.UserId,
 		IsAdmin:   req.IsAdmin,
 	}
 
-	err := h.svc.DeleteComment(c.Request.Context(), params)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to delete comment",
-			logger.F("error", err.Error()),
-			logger.F("commentID", req.CommentID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	err := h.svc.DeleteComment(ctx, params)
+	res := &rest.DeleteCommentResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "评论删除成功"
+		}(),
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "评论删除成功",
-	})
-}
-
-// GetCommentRequest 获取评论请求
-type GetCommentRequest struct {
-	CommentID int64 `json:"comment_id" binding:"required"`
+	if err != nil {
+		h.logger.Error(ctx, "Delete comment failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // GetComment 获取评论
 func (h *HTTPHandler) GetComment(c *gin.Context) {
-	var req GetCommentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.GetCommentRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid get comment request", logger.F("error", err.Error()))
+		res := &rest.GetCommentResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
-	comment, err := h.svc.GetComment(c.Request.Context(), req.CommentID)
+	comment, err := h.svc.GetComment(ctx, req.CommentId)
+	res := &rest.GetCommentResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "获取成功"
+		}(),
+		Comment: func() *rest.Comment {
+			if err != nil {
+				return nil
+			}
+			return convertCommentToProto(comment)
+		}(),
+	}
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to get comment",
-			logger.F("error", err.Error()),
-			logger.F("commentID", req.CommentID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+		h.logger.Error(ctx, "Get comment failed", logger.F("error", err.Error()))
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "获取成功",
-		"data":    comment,
-	})
-}
-
-// GetCommentsRequest 获取评论列表请求
-type GetCommentsRequest struct {
-	ObjectID       int64  `json:"object_id" binding:"required"`
-	ObjectType     string `json:"object_type" binding:"required"`
-	ParentID       int64  `json:"parent_id"`
-	SortBy         string `json:"sort_by"`
-	SortOrder      string `json:"sort_order"`
-	Page           int32  `json:"page"`
-	PageSize       int32  `json:"page_size"`
-	IncludeReplies bool   `json:"include_replies"`
-	MaxReplyCount  int32  `json:"max_reply_count"`
+	utils.WriteObject(c, res, err)
 }
 
 // GetComments 获取评论列表
 func (h *HTTPHandler) GetComments(c *gin.Context) {
-	var req GetCommentsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.GetCommentsRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid get comments request", logger.F("error", err.Error()))
+		res := &rest.GetCommentsResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
+	// 转换对象类型
+	objectType := convertCommentObjectTypeFromProto(req.ObjectType)
+
 	params := &model.GetCommentsParams{
-		ObjectID:       req.ObjectID,
-		ObjectType:     req.ObjectType,
-		ParentID:       req.ParentID,
+		ObjectID:       req.ObjectId,
+		ObjectType:     objectType,
+		ParentID:       req.ParentId,
 		SortBy:         req.SortBy,
 		SortOrder:      req.SortOrder,
 		Page:           req.Page,
@@ -270,78 +261,86 @@ func (h *HTTPHandler) GetComments(c *gin.Context) {
 		MaxReplyCount:  req.MaxReplyCount,
 	}
 
-	comments, total, err := h.svc.GetComments(c.Request.Context(), params)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to get comments",
-			logger.F("error", err.Error()),
-			logger.F("objectID", req.ObjectID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	comments, total, err := h.svc.GetComments(ctx, params)
+
+	// 转换评论列表
+	var protoComments []*rest.Comment
+	if err == nil {
+		for _, comment := range comments {
+			protoComments = append(protoComments, convertCommentToProto(comment))
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "获取成功",
-		"data": gin.H{
-			"comments":  comments,
-			"total":     total,
-			"page":      req.Page,
-			"page_size": req.PageSize,
-		},
-	})
-}
-
-// GetUserCommentsRequest 获取用户评论请求
-type GetUserCommentsRequest struct {
-	UserID   int64  `json:"user_id" binding:"required"`
-	Status   string `json:"status"`
-	Page     int32  `json:"page"`
-	PageSize int32  `json:"page_size"`
+	res := &rest.GetCommentsResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "获取成功"
+		}(),
+		Comments: protoComments,
+		Total:    total,
+		Page:     req.Page,
+		PageSize: req.PageSize,
+	}
+	if err != nil {
+		h.logger.Error(ctx, "Get comments failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // GetUserComments 获取用户评论
 func (h *HTTPHandler) GetUserComments(c *gin.Context) {
-	var req GetUserCommentsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.GetUserCommentsRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid get user comments request", logger.F("error", err.Error()))
+		res := &rest.GetUserCommentsResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		utils.WriteObject(c, res, err)
 		return
 	}
 
+	// 转换状态枚举
+	status := convertCommentStatusFromProto(req.Status)
+
 	params := &model.GetUserCommentsParams{
-		UserID:   req.UserID,
-		Status:   req.Status,
+		UserID:   req.UserId,
+		Status:   status,
 		Page:     req.Page,
 		PageSize: req.PageSize,
 	}
 
-	comments, total, err := h.svc.GetUserComments(c.Request.Context(), params)
-	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to get user comments",
-			logger.F("error", err.Error()),
-			logger.F("userID", req.UserID))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+	comments, total, err := h.svc.GetUserComments(ctx, params)
+
+	// 转换评论列表
+	var protoComments []*rest.Comment
+	if err == nil {
+		for _, comment := range comments {
+			protoComments = append(protoComments, convertCommentToProto(comment))
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "获取成功",
-		"data": gin.H{
-			"comments":  comments,
-			"total":     total,
-			"page":      req.Page,
-			"page_size": req.PageSize,
-		},
-	})
+	res := &rest.GetUserCommentsResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "获取成功"
+		}(),
+		Comments: protoComments,
+		Total:    total,
+		Page:     req.Page,
+		PageSize: req.PageSize,
+	}
+	if err != nil {
+		h.logger.Error(ctx, "Get user comments failed", logger.F("error", err.Error()))
+	}
+	utils.WriteObject(c, res, err)
 }
 
 // ModerateCommentRequest 审核评论请求
@@ -498,4 +497,20 @@ func (h *HTTPHandler) UnlikeComment(c *gin.Context) {
 		"success": true,
 		"message": "取消点赞成功",
 	})
+}
+
+// convertCommentObjectTypeFromProto 将protobuf枚举转换为对象类型
+func convertCommentObjectTypeFromProto(objectType rest.CommentObjectType) string {
+	switch objectType {
+	case rest.CommentObjectType_COMMENT_OBJECT_TYPE_POST:
+		return "post"
+	case rest.CommentObjectType_COMMENT_OBJECT_TYPE_ARTICLE:
+		return "article"
+	case rest.CommentObjectType_COMMENT_OBJECT_TYPE_VIDEO:
+		return "video"
+	case rest.CommentObjectType_COMMENT_OBJECT_TYPE_PRODUCT:
+		return "product"
+	default:
+		return "post"
+	}
 }

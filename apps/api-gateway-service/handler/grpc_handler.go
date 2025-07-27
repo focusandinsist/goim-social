@@ -4,11 +4,11 @@ import (
 	"context"
 
 	"websocket-server/api/rest"
-	"websocket-server/apps/connect-service/service"
+	"websocket-server/apps/api-gateway-service/service"
 	"websocket-server/pkg/logger"
 )
 
-// GRPCHandler gRPC协议处理器
+// GRPCHandler gRPC处理器
 type GRPCHandler struct {
 	rest.UnimplementedConnectServiceServer
 	svc *service.Service
@@ -23,15 +23,18 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 	}
 }
 
-// OnlineStatus 查询在线状态
-func (g *GRPCHandler) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRequest) (*rest.OnlineStatusResponse, error) {
-	status, err := g.svc.OnlineStatus(ctx, req.UserIds)
+// OnlineStatus gRPC在线状态查询
+func (h *GRPCHandler) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRequest) (*rest.OnlineStatusResponse, error) {
+	h.log.Info(ctx, "gRPC OnlineStatus request", logger.F("userIDs", req.UserIds))
+	
+	status, err := h.svc.OnlineStatus(ctx, req.UserIds)
 	if err != nil {
-		g.log.Error(ctx, "gRPC OnlineStatus failed", logger.F("error", err.Error()))
+		h.log.Error(ctx, "gRPC OnlineStatus failed", logger.F("error", err.Error()))
 		return &rest.OnlineStatusResponse{
 			Status: make(map[int64]bool),
 		}, err
 	}
+	
 	return &rest.OnlineStatusResponse{
 		Status: status,
 	}, nil

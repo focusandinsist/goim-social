@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -17,24 +16,14 @@ import (
 
 // PushConsumer 推送消费者
 type PushConsumer struct {
-	consumer      *kafka.Consumer
-	streamManager *StreamManager
-	redis         *redis.RedisClient
+	consumer *kafka.Consumer
+	redis    *redis.RedisClient
 }
-
-// StreamManager 管理所有Connect服务的连接（已废弃双向流）
-type StreamManager struct {
-	// 保留结构体以避免编译错误，但不再使用双向流
-	mutex sync.RWMutex
-}
-
-var globalStreamManager = &StreamManager{}
 
 // NewPushConsumer 创建推送消费者
 func NewPushConsumer(redis *redis.RedisClient) *PushConsumer {
 	return &PushConsumer{
-		streamManager: globalStreamManager,
-		redis:         redis,
+		redis: redis,
 	}
 }
 
@@ -151,27 +140,6 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	return nil
 }
 
-// // AddStream 添加Connect服务流连接
-// func (sm *StreamManager) AddStream(serviceID string, stream rest.MessageService_MessageStreamServer) {
-// 	sm.mutex.Lock()
-// 	defer sm.mutex.Unlock()
-// 	sm.streams[serviceID] = &ConnectStream{
-// 		ServiceID: serviceID,
-// 		Stream:    stream,
-// 	}
-// 	log.Printf("添加Connect服务流连接: %s", serviceID)
-// }
-
-// RemoveStream 移除Connect服务连接（已废弃）
-func (sm *StreamManager) RemoveStream(serviceID string) {
-	log.Printf("RemoveStream已废弃，不再使用双向流: %s", serviceID)
-}
-
-// PushToAllStreams 推送消息到所有Connect服务（已废弃，改用消息队列）
-func (sm *StreamManager) PushToAllStreams(targetUserID int64, message *rest.WSMessage) {
-	log.Printf("PushToAllStreams已废弃，请使用消息队列进行消息推送: UserID=%d", targetUserID)
-}
-
 // pushToConnectService 通过Redis发布消息到Connect服务
 func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WSMessage) error {
 	ctx := context.Background()
@@ -222,11 +190,6 @@ func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WS
 	log.Printf("已发布推送消息到Connect服务: ServerID=%s, UserID=%d, MessageID=%d",
 		serverID, targetUserID, message.MessageId)
 	return nil
-}
-
-// GetStreamManager 获取全局流管理器
-func GetStreamManager() *StreamManager {
-	return globalStreamManager
 }
 
 // Stop 停止消费者
