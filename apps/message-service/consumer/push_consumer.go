@@ -84,6 +84,7 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 			log.Printf("标记推送已处理失败: %v", err)
 		}
 
+		log.Printf("处理新消息成功: %v", event.Message.Content)
 		return nil
 	default:
 		log.Printf("未知的消息事件类型: %s", event.Type)
@@ -135,6 +136,8 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 		} else {
 			log.Printf("群聊消息缺少目标用户ID，跳过推送: GroupID=%d, MessageID=%d", msg.GroupId, msg.MessageId)
 		}
+	} else {
+		log.Printf("推送群聊消息失败，没有发送给任何人: From=%d, To=%dGroupID=%d, Content=%s, MessageID=%d", msg.From, msg.To, msg.GroupId, msg.Content, msg.MessageId)
 	}
 
 	return nil
@@ -187,8 +190,8 @@ func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WS
 		return fmt.Errorf("发布推送消息失败: %v", err)
 	}
 
-	log.Printf("已发布推送消息到Connect服务: ServerID=%s, UserID=%d, MessageID=%d",
-		serverID, targetUserID, message.MessageId)
+	log.Printf("已发布推送消息到Connect服务: ServerID=%s, UserID=%d, MessageID=%d, Key=%s",
+		serverID, targetUserID, message.MessageId, channel)
 	return nil
 }
 

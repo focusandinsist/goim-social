@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
 	"websocket-server/apps/im-gateway-service/model"
@@ -231,6 +233,9 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 	// 启动时清理旧的连接数据
 	go service.cleanupOnStartup()
 
+	// 启动Redis订阅 connect_forward 频道
+	go service.subscribeConnectForward()
+
 	return service
 }
 
@@ -251,8 +256,6 @@ func (s *Service) initLogicClient() error {
 	log.Printf("Logic服务客户端初始化成功，地址: %s", logicAddr)
 	return nil
 }
-
-
 
 // cleanupOnStartup 启动时清理本实例的旧连接数据
 func (s *Service) cleanupOnStartup() {
@@ -585,5 +588,51 @@ func (s *Service) RemoveWebSocketConnection(userID int64) {
 	ctx := context.Background()
 	if err := s.connMgr.RemoveConnection(ctx, userID, ""); err != nil {
 		log.Printf("移除WebSocket连接失败: %v", err)
+	}
+}
+
+// 订阅 connect_forward 频道并分发消息到本地连接，在线才会这样推送，不在线就登陆时拉取未读消息
+func (s *Service) subscribeConnectForward() {
+	ctx := context.Background()
+	channel := "connect_forward:" + s.instanceID
+	log.Printf("订阅Redis频道: %s", channel)
+	pubsub := s.redis.Subscribe(ctx, channel)
+	ch := pubsub.Channel()
+	for msg := range ch {
+		log.Printf("收到推送消息: %s", msg.Payload)
+		// 解析消息
+		var pushMsg map[string]interface{}
+		if err := json.Unmarshal([]byte(msg.Payload), &pushMsg); err != nil {
+			log.Printf("推送消息解析失败: %v", err)
+			continue
+		}
+		// 获取目标用户ID和消息内容
+		targetUser, ok := pushMsg["target_user"].(float64)
+		if !ok {
+			log.Printf("推送消息缺少 target_user 字段")
+			continue
+		}
+		userID := int64(targetUser)
+		messageData, _ := json.Marshal(pushMsg["message"])
+		var wsMsg rest.WSMessage
+		if err := json.Unmarshal(messageData, &wsMsg); err != nil {
+			log.Printf("推送消息内容解析失败: %v", err)
+			continue
+		}
+		// 推送到本地WebSocket连接
+		if conn, exists := s.connMgr.GetConnection(userID); exists {
+			msgBytes, err := proto.Marshal(&wsMsg)
+			if err != nil {
+				log.Printf("WebSocket推送protobuf序列化失败: %v", err)
+				continue
+			}
+			if err := conn.WriteMessage(websocket.BinaryMessage, msgBytes); err != nil {
+				log.Printf("WebSocket推送失败: %v", err)
+			} else {
+				log.Printf("WebSocket推送成功: UserID=%d, MessageID=%d", userID, wsMsg.MessageId)
+			}
+		} else {
+			log.Printf("用户 %d 不在本地连接，无法推送", userID)
+		}
 	}
 }

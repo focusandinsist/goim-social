@@ -584,6 +584,7 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 			continue
 		case websocket.PongMessage:
 			continue
+		case websocket.TextMessage:
 		case websocket.BinaryMessage:
 			// 处理业务消息
 		default:

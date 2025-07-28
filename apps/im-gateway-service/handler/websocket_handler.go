@@ -168,7 +168,7 @@ func (ws *WSHandler) routeWebSocketMessage(c *gin.Context, conn *websocket.Conn,
 			ws.log.Error(c.Request.Context(), "HandleMessageACK failed", logger.F("error", err.Error()))
 		}
 	case 10: // 在线状态事件推送
-		// 在线状态事件推送功能暂未实现
+		// TODO:在线状态事件推送功能暂未实现(类似上线通知粉丝/订阅者)
 		ws.log.Info(c.Request.Context(), "Online status event received", logger.F("userID", wsMsg.From))
 	default:
 		// 未知类型

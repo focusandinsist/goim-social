@@ -211,7 +211,7 @@ func (s *Service) publishMessageToQueue(ctx context.Context, targetUserID int64,
 	targetMsg := &rest.WSMessage{
 		MessageId:   msg.MessageId,
 		From:        msg.From,
-		To:          targetUserID, // 设置目标用户ID
+		To:          targetUserID,
 		GroupId:     msg.GroupId,
 		Content:     msg.Content,
 		MessageType: msg.MessageType,
