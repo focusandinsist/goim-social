@@ -216,16 +216,15 @@ type UnreadResponse struct {
 }
 
 type UnreadMessage struct {
-	ID        string `json:"id"`
+	ID        int64  `json:"message_id"`
 	From      int64  `json:"from"`
 	To        int64  `json:"to"`
 	GroupID   int64  `json:"group_id"`
 	Content   string `json:"content"`
+	TimeStamp int64  `json:"timestamp"`
 	MsgType   int32  `json:"msg_type"`
 	AckID     string `json:"ack_id"`
-	Status    int32  `json:"status"`
 	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
 }
 
 // fetchUnreadMessages 通过HTTP POST接口获取未读消息
@@ -300,7 +299,7 @@ func markMessagesAsRead(userID int64, messages []UnreadMessage) {
 	}
 
 	// 提取消息ID
-	var messageIDs []string
+	var messageIDs []int64
 	for _, msg := range messages {
 		messageIDs = append(messageIDs, msg.ID)
 	}
@@ -319,15 +318,26 @@ func markMessagesAsRead(userID int64, messages []UnreadMessage) {
 
 	// 发送POST请求标记已读
 	url := "http://localhost:21004/api/v1/messages/mark-read"
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		fmt.Printf("❌ 标记消息已读失败: %v\n", err)
+		fmt.Printf("❌ 创建请求失败: %v\n", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "auth-debug")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("❌ 获取未读消息失败: %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
 		fmt.Printf("✅ 已标记 %d 条消息为已读\n", len(messageIDs))
+	} else {
+		fmt.Printf("❌ 标记%d条消息已读失败 errorCode:%d\n", len(messageIDs), resp.StatusCode)
 	}
 }
 
