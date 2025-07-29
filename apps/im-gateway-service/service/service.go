@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -640,39 +641,25 @@ func (s *Service) subscribeConnectForward() {
 		}
 		userID := int64(targetUser)
 
-		// TODO:这里是临时处理：直接从map中提取消息字段，避免JSON序列化导致的精度丢失
-		messageMap, ok := pushMsg["message"].(map[string]interface{})
+		// 直接从Redis消息中反序列化Protobuf二进制数据
+		messageBytes, ok := pushMsg["message_bytes"].(string)
 		if !ok {
-			log.Printf("推送消息格式错误: %v", pushMsg["message"])
+			log.Printf("推送消息格式错误，缺少message_bytes字段: %v", pushMsg)
 			continue
 		}
 
-		// 临时testCode：安全地提取各个字段，使用类型断言保护
-		wsMsg := rest.WSMessage{}
+		// 将base64编码的字节数据解码
+		msgData, err := base64.StdEncoding.DecodeString(messageBytes)
+		if err != nil {
+			log.Printf("解码消息字节数据失败: %v", err)
+			continue
+		}
 
-		if messageId, ok := messageMap["message_id"].(float64); ok {
-			wsMsg.MessageId = int64(messageId)
-		}
-		if from, ok := messageMap["from"].(float64); ok {
-			wsMsg.From = int64(from)
-		}
-		if to, ok := messageMap["to"].(float64); ok {
-			wsMsg.To = int64(to)
-		}
-		if groupId, ok := messageMap["group_id"].(float64); ok {
-			wsMsg.GroupId = int64(groupId)
-		}
-		if content, ok := messageMap["content"].(string); ok {
-			wsMsg.Content = content
-		}
-		if messageType, ok := messageMap["message_type"].(float64); ok {
-			wsMsg.MessageType = int32(messageType)
-		}
-		if timestamp, ok := messageMap["timestamp"].(float64); ok {
-			wsMsg.Timestamp = int64(timestamp)
-		}
-		if ackId, ok := messageMap["ack_id"].(string); ok {
-			wsMsg.AckId = ackId
+		// 反序列化Protobuf消息
+		var wsMsg rest.WSMessage
+		if err := proto.Unmarshal(msgData, &wsMsg); err != nil {
+			log.Printf("反序列化Protobuf消息失败: %v", err)
+			continue
 		}
 		// 推送到本地WebSocket连接
 		if conn, exists := s.connMgr.GetConnection(userID); exists {

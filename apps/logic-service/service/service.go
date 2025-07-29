@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -13,6 +12,7 @@ import (
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/logger"
 	"websocket-server/pkg/redis"
+	"websocket-server/pkg/snowflake"
 )
 
 // Service Logic服务 - 业务编排层
@@ -71,9 +71,9 @@ func NewService(redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logg
 
 // ProcessMessage 处理消息 - 核心业务编排逻辑
 func (s *Service) ProcessMessage(ctx context.Context, msg *rest.WSMessage) (*model.MessageResult, error) {
-	// 如果MessageID为0，生成新的MessageID
+	// 如果MessageID为0，使用Snowflake生成新的MessageID
 	if msg.MessageId == 0 {
-		msg.MessageId = time.Now().UnixNano()
+		msg.MessageId = snowflake.GenerateID()
 	}
 
 	s.logger.Info(ctx, "Logic服务开始处理消息",

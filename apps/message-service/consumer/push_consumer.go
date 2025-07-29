@@ -2,12 +2,14 @@ package consumer
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/IBM/sarama"
+	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
 	"websocket-server/pkg/kafka"
@@ -170,12 +172,20 @@ func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WS
 		return fmt.Errorf("连接信息中缺少serverID")
 	}
 
-	// 构造推送消息
+	// 序列化Protobuf消息为二进制数据，避免JSON精度丢失
+	messageBytes, err := proto.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("序列化Protobuf消息失败: %v", err)
+	}
+
+	// 使用base64编码二进制数据，便于在JSON中传输
+	messageBase64 := base64.StdEncoding.EncodeToString(messageBytes)
+
 	pushMsg := map[string]interface{}{
-		"type":        "push_message",
-		"target_user": targetUserID,
-		"message":     message,
-		"timestamp":   time.Now().Unix(),
+		"type":          "push_message",
+		"target_user":   targetUserID,
+		"message_bytes": messageBase64, // 使用Protobuf二进制数据
+		"timestamp":     time.Now().Unix(),
 	}
 
 	// 序列化消息
