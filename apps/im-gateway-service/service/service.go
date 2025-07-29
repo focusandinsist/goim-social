@@ -231,8 +231,9 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		log.Printf("服务实例注册失败: %v", err)
 	}
 
-	// 启动时清理旧的连接数据
+	// 启动时清理旧的连接数据和过期实例
 	go service.cleanupOnStartup()
+	go service.cleanupExpiredInstances()
 
 	// 启动Redis订阅 connect_forward 频道
 	go service.subscribeConnectForward()
@@ -295,6 +296,95 @@ func (s *Service) cleanupOnStartup() {
 	log.Printf("启动时清理完成: 清理了 %d 个旧连接", cleanedCount)
 }
 
+// cleanupExpiredInstances 清理过期的服务实例
+func (s *Service) cleanupExpiredInstances() {
+	ctx := context.Background()
+
+	log.Printf("开始清理过期的服务实例...")
+
+	// 获取所有实例ID
+	instanceIDs, err := s.redis.SMembers(ctx, "connect_instances_list")
+	if err != nil {
+		log.Printf("获取实例列表失败: %v", err)
+		return
+	}
+
+	cleanedInstances := 0
+	cleanedConnections := 0
+
+	for _, instanceID := range instanceIDs {
+		instanceKey := fmt.Sprintf("connect_instances:%s", instanceID)
+
+		// 检查实例是否存在
+		exists, err := s.redis.Exists(ctx, instanceKey)
+		if err != nil {
+			log.Printf("检查实例 %s 存在性失败: %v", instanceID, err)
+			continue
+		}
+
+		if exists == 0 {
+			// 实例已过期，从列表中移除
+			if err := s.redis.SRem(ctx, "connect_instances_list", instanceID); err != nil {
+				log.Printf("从实例列表移除 %s 失败: %v", instanceID, err)
+			} else {
+				cleanedInstances++
+				log.Printf("已清理过期实例: %s", instanceID)
+			}
+
+			// 清理该实例的所有连接
+			connectionsCleaned := s.cleanupInstanceConnections(ctx, instanceID)
+			cleanedConnections += connectionsCleaned
+		}
+	}
+
+	log.Printf("过期实例清理完成: 清理了 %d 个过期实例, %d 个孤儿连接", cleanedInstances, cleanedConnections)
+}
+
+// cleanupInstanceConnections 清理指定实例的所有连接
+func (s *Service) cleanupInstanceConnections(ctx context.Context, instanceID string) int {
+	pattern := "conn:*"
+	keys, err := s.redis.Keys(ctx, pattern)
+	if err != nil {
+		log.Printf("查询连接keys失败: %v", err)
+		return 0
+	}
+
+	cleanedCount := 0
+	cleanedUsers := make(map[string]bool)
+
+	for _, key := range keys {
+		// 获取连接信息
+		connInfo, err := s.redis.HGetAll(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		// 检查是否是指定实例的连接
+		if serverID, exists := connInfo["serverID"]; exists && serverID == instanceID {
+			// 删除连接信息
+			if err := s.redis.Del(ctx, key); err == nil {
+				cleanedCount++
+			}
+
+			// 记录需要从在线用户集合中移除的用户
+			if userIDStr, exists := connInfo["userID"]; exists {
+				cleanedUsers[userIDStr] = true
+			}
+		}
+	}
+
+	// 从在线用户集合中移除用户
+	for userID := range cleanedUsers {
+		s.redis.SRem(ctx, "online_users", userID)
+	}
+
+	if cleanedCount > 0 {
+		log.Printf("清理实例 %s 的连接: %d 个连接, %d 个用户下线", instanceID, cleanedCount, len(cleanedUsers))
+	}
+
+	return cleanedCount
+}
+
 // setupGracefulShutdown 设置优雅退出
 func (s *Service) setupGracefulShutdown() {
 	sigChan := make(chan os.Signal, 1)
@@ -317,6 +407,11 @@ func (s *Service) cleanup() {
 	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
 	if err := s.redis.Del(ctx, instanceKey); err != nil {
 		log.Printf("清理实例信息失败: %v", err)
+	}
+
+	// 从实例列表中移除
+	if err := s.redis.SRem(ctx, "connect_instances_list", s.instanceID); err != nil {
+		log.Printf("从实例列表移除失败: %v", err)
 	}
 
 	// 2. 清理本实例的所有连接
