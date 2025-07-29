@@ -24,4 +24,7 @@ service MessageService {
 
   // 获取历史消息
   rpc GetHistoryMessages(GetHistoryRequest) returns (GetHistoryResponse);
+
+  // 标记消息已读
+  rpc MarkMessagesAsRead(MarkMessagesReadRequest) returns (MarkMessagesReadResponse);
 }

@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	LogicService_SendMessage_FullMethodName = "/rest.LogicService/SendMessage"
+	LogicService_SendMessage_FullMethodName      = "/rest.LogicService/SendMessage"
+	LogicService_HandleMessageAck_FullMethodName = "/rest.LogicService/HandleMessageAck"
 )
 
 // LogicServiceClient is the client API for LogicService service.
@@ -28,6 +29,8 @@ const (
 type LogicServiceClient interface {
 	// 发送消息（支持单聊和群聊）
 	SendMessage(ctx context.Context, in *SendLogicMessageRequest, opts ...grpc.CallOption) (*SendLogicMessageResponse, error)
+	// 处理消息ACK
+	HandleMessageAck(ctx context.Context, in *MessageAckRequest, opts ...grpc.CallOption) (*MessageAckResponse, error)
 }
 
 type logicServiceClient struct {
@@ -47,12 +50,23 @@ func (c *logicServiceClient) SendMessage(ctx context.Context, in *SendLogicMessa
 	return out, nil
 }
 
+func (c *logicServiceClient) HandleMessageAck(ctx context.Context, in *MessageAckRequest, opts ...grpc.CallOption) (*MessageAckResponse, error) {
+	out := new(MessageAckResponse)
+	err := c.cc.Invoke(ctx, LogicService_HandleMessageAck_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LogicServiceServer is the server API for LogicService service.
 // All implementations must embed UnimplementedLogicServiceServer
 // for forward compatibility
 type LogicServiceServer interface {
 	// 发送消息（支持单聊和群聊）
 	SendMessage(context.Context, *SendLogicMessageRequest) (*SendLogicMessageResponse, error)
+	// 处理消息ACK
+	HandleMessageAck(context.Context, *MessageAckRequest) (*MessageAckResponse, error)
 	mustEmbedUnimplementedLogicServiceServer()
 }
 
@@ -62,6 +76,9 @@ type UnimplementedLogicServiceServer struct {
 
 func (UnimplementedLogicServiceServer) SendMessage(context.Context, *SendLogicMessageRequest) (*SendLogicMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
+}
+func (UnimplementedLogicServiceServer) HandleMessageAck(context.Context, *MessageAckRequest) (*MessageAckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleMessageAck not implemented")
 }
 func (UnimplementedLogicServiceServer) mustEmbedUnimplementedLogicServiceServer() {}
 
@@ -94,6 +111,24 @@ func _LogicService_SendMessage_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LogicService_HandleMessageAck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MessageAckRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogicServiceServer).HandleMessageAck(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogicService_HandleMessageAck_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogicServiceServer).HandleMessageAck(ctx, req.(*MessageAckRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LogicService_ServiceDesc is the grpc.ServiceDesc for LogicService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -104,6 +139,10 @@ var LogicService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendMessage",
 			Handler:    _LogicService_SendMessage_Handler,
+		},
+		{
+			MethodName: "HandleMessageAck",
+			Handler:    _LogicService_HandleMessageAck_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

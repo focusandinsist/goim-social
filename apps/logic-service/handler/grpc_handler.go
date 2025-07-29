@@ -55,3 +55,33 @@ func (h *GRPCHandler) SendMessage(ctx context.Context, req *rest.SendLogicMessag
 		FailedUsers:  result.FailedUsers,
 	}, nil
 }
+
+// HandleMessageAck 处理消息ACK确认gRPC接口
+func (h *GRPCHandler) HandleMessageAck(ctx context.Context, req *rest.MessageAckRequest) (*rest.MessageAckResponse, error) {
+	h.logger.Info(ctx, "收到gRPC消息ACK请求",
+		logger.F("userID", req.UserId),
+		logger.F("messageID", req.MessageId),
+		logger.F("ackID", req.AckId))
+
+	// 处理ACK
+	err := h.svc.HandleMessageAck(ctx, req.UserId, req.MessageId, req.AckId)
+	if err != nil {
+		h.logger.Error(ctx, "gRPC处理消息ACK失败",
+			logger.F("error", err.Error()),
+			logger.F("userID", req.UserId),
+			logger.F("messageID", req.MessageId))
+		return &rest.MessageAckResponse{
+			Success: false,
+			Message: err.Error(),
+		}, nil
+	}
+
+	h.logger.Info(ctx, "gRPC消息ACK处理成功",
+		logger.F("userID", req.UserId),
+		logger.F("messageID", req.MessageId))
+
+	return &rest.MessageAckResponse{
+		Success: true,
+		Message: "ACK处理成功",
+	}, nil
+}

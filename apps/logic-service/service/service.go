@@ -256,3 +256,76 @@ func (s *Service) GetMessageHistory(ctx context.Context, userID, targetID, group
 		Size:    size,
 	})
 }
+
+// HandleMessageAck 处理消息ACK确认
+func (s *Service) HandleMessageAck(ctx context.Context, userID, messageID int64, ackID string) error {
+	s.logger.Info(ctx, "Logic服务处理消息ACK",
+		logger.F("userID", userID),
+		logger.F("messageID", messageID),
+		logger.F("ackID", ackID))
+
+	// 1. 业务验证：检查用户是否有权限ACK这条消息
+	if err := s.validateAckPermission(ctx, userID, messageID); err != nil {
+		s.logger.Error(ctx, "ACK权限验证失败",
+			logger.F("error", err.Error()),
+			logger.F("userID", userID),
+			logger.F("messageID", messageID))
+		return fmt.Errorf("ACK权限验证失败: %v", err)
+	}
+
+	// 2. 调用Message服务标记消息已读
+	markReq := &rest.MarkMessagesReadRequest{
+		UserId:     userID,
+		MessageIds: []int64{messageID},
+	}
+
+	resp, err := s.messageClient.MarkMessagesAsRead(ctx, markReq)
+	if err != nil {
+		s.logger.Error(ctx, "调用Message服务标记已读失败",
+			logger.F("error", err.Error()),
+			logger.F("userID", userID),
+			logger.F("messageID", messageID))
+		return fmt.Errorf("标记消息已读失败: %v", err)
+	}
+
+	if !resp.Success {
+		s.logger.Error(ctx, "Message服务标记已读失败",
+			logger.F("message", resp.Message),
+			logger.F("userID", userID),
+			logger.F("messageID", messageID))
+		return fmt.Errorf("标记消息已读失败: %s", resp.Message)
+	}
+
+	// 3. 可能的扩展：发送已读回执通知给发送方
+	// TODO: 实现已读回执通知功能
+	// s.sendReadReceiptNotification(ctx, messageID, userID)
+
+	s.logger.Info(ctx, "消息ACK处理成功",
+		logger.F("userID", userID),
+		logger.F("messageID", messageID))
+
+	return nil
+}
+
+// validateAckPermission 验证用户是否有权限ACK指定消息
+func (s *Service) validateAckPermission(ctx context.Context, userID, messageID int64) error {
+	// TODO: 实现更完善的权限验证逻辑
+	// 1. 检查消息是否存在
+	// 2. 检查用户是否是消息的接收方（单聊）或群成员（群聊）
+	// 3. 检查消息是否已经被ACK过
+
+	// 目前简单验证参数有效性
+	if userID <= 0 {
+		return fmt.Errorf("无效的用户ID: %d", userID)
+	}
+
+	if messageID <= 0 {
+		return fmt.Errorf("无效的消息ID: %d", messageID)
+	}
+
+	s.logger.Debug(ctx, "ACK权限验证通过",
+		logger.F("userID", userID),
+		logger.F("messageID", messageID))
+
+	return nil
+}

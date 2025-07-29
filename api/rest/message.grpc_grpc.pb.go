@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion7
 const (
 	MessageService_SendWSMessage_FullMethodName      = "/rest.MessageService/SendWSMessage"
 	MessageService_GetHistoryMessages_FullMethodName = "/rest.MessageService/GetHistoryMessages"
+	MessageService_MarkMessagesAsRead_FullMethodName = "/rest.MessageService/MarkMessagesAsRead"
 )
 
 // MessageServiceClient is the client API for MessageService service.
@@ -30,6 +31,8 @@ type MessageServiceClient interface {
 	SendWSMessage(ctx context.Context, in *SendWSMessageRequest, opts ...grpc.CallOption) (*SendWSMessageResponse, error)
 	// 获取历史消息
 	GetHistoryMessages(ctx context.Context, in *GetHistoryRequest, opts ...grpc.CallOption) (*GetHistoryResponse, error)
+	// 标记消息已读
+	MarkMessagesAsRead(ctx context.Context, in *MarkMessagesReadRequest, opts ...grpc.CallOption) (*MarkMessagesReadResponse, error)
 }
 
 type messageServiceClient struct {
@@ -58,6 +61,15 @@ func (c *messageServiceClient) GetHistoryMessages(ctx context.Context, in *GetHi
 	return out, nil
 }
 
+func (c *messageServiceClient) MarkMessagesAsRead(ctx context.Context, in *MarkMessagesReadRequest, opts ...grpc.CallOption) (*MarkMessagesReadResponse, error) {
+	out := new(MarkMessagesReadResponse)
+	err := c.cc.Invoke(ctx, MessageService_MarkMessagesAsRead_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessageServiceServer is the server API for MessageService service.
 // All implementations must embed UnimplementedMessageServiceServer
 // for forward compatibility
@@ -65,6 +77,8 @@ type MessageServiceServer interface {
 	SendWSMessage(context.Context, *SendWSMessageRequest) (*SendWSMessageResponse, error)
 	// 获取历史消息
 	GetHistoryMessages(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error)
+	// 标记消息已读
+	MarkMessagesAsRead(context.Context, *MarkMessagesReadRequest) (*MarkMessagesReadResponse, error)
 	mustEmbedUnimplementedMessageServiceServer()
 }
 
@@ -77,6 +91,9 @@ func (UnimplementedMessageServiceServer) SendWSMessage(context.Context, *SendWSM
 }
 func (UnimplementedMessageServiceServer) GetHistoryMessages(context.Context, *GetHistoryRequest) (*GetHistoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetHistoryMessages not implemented")
+}
+func (UnimplementedMessageServiceServer) MarkMessagesAsRead(context.Context, *MarkMessagesReadRequest) (*MarkMessagesReadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MarkMessagesAsRead not implemented")
 }
 func (UnimplementedMessageServiceServer) mustEmbedUnimplementedMessageServiceServer() {}
 
@@ -127,6 +144,24 @@ func _MessageService_GetHistoryMessages_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessageService_MarkMessagesAsRead_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkMessagesReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServiceServer).MarkMessagesAsRead(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageService_MarkMessagesAsRead_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServiceServer).MarkMessagesAsRead(ctx, req.(*MarkMessagesReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessageService_ServiceDesc is the grpc.ServiceDesc for MessageService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -141,6 +176,10 @@ var MessageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetHistoryMessages",
 			Handler:    _MessageService_GetHistoryMessages_Handler,
+		},
+		{
+			MethodName: "MarkMessagesAsRead",
+			Handler:    _MessageService_MarkMessagesAsRead_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

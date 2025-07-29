@@ -528,8 +528,9 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 	// 从WebSocket消息中提取用户ID和消息ID
 	userID := wsMsg.From // 客户端发送ACK时，From字段是自己的用户ID
 	messageID := wsMsg.MessageId
+	ackID := wsMsg.AckId
 
-	log.Printf("收到客户端ACK: UserID=%d, MessageID=%d", userID, messageID)
+	log.Printf("收到客户端ACK: UserID=%d, MessageID=%d, AckID=%s", userID, messageID, ackID)
 
 	// 检查消息ID是否存在
 	if messageID == 0 {
@@ -537,6 +538,31 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 		return fmt.Errorf("MessageID不能为0")
 	}
 
+	// 检查Logic服务客户端是否已初始化
+	if s.logicClient == nil {
+		log.Printf("Logic服务客户端未初始化，无法处理ACK: UserID=%d, MessageID=%d", userID, messageID)
+		return fmt.Errorf("Logic服务客户端未初始化")
+	}
+
+	// 调用Logic服务处理ACK
+	req := &rest.MessageAckRequest{
+		UserId:    userID,
+		MessageId: messageID,
+		AckId:     ackID,
+	}
+
+	resp, err := s.logicClient.HandleMessageAck(ctx, req)
+	if err != nil {
+		log.Printf("调用Logic服务处理ACK失败: UserID=%d, MessageID=%d, Error=%v", userID, messageID, err)
+		return fmt.Errorf("处理消息ACK失败: %v", err)
+	}
+
+	if !resp.Success {
+		log.Printf("Logic服务处理ACK失败: UserID=%d, MessageID=%d, Message=%s", userID, messageID, resp.Message)
+		return fmt.Errorf("处理消息ACK失败: %s", resp.Message)
+	}
+
+	log.Printf("消息ACK处理成功: UserID=%d, MessageID=%d", userID, messageID)
 	return nil
 }
 

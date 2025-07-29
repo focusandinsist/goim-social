@@ -105,3 +105,34 @@ func (g *GRPCHandler) GetHistoryMessages(ctx context.Context, req *rest.GetHisto
 		Size:     req.Size,
 	}, nil
 }
+
+// MarkMessagesAsRead 标记消息已读gRPC接口
+func (g *GRPCHandler) MarkMessagesAsRead(ctx context.Context, req *rest.MarkMessagesReadRequest) (*rest.MarkMessagesReadResponse, error) {
+	log.Printf("Message服务接收标记已读请求: UserID=%d, MessageIDs=%v", req.UserId, req.MessageIds)
+
+	// 调用service层标记消息已读
+	failedIDs, err := g.service.MarkMessagesAsRead(ctx, req.UserId, req.MessageIds)
+
+	response := &rest.MarkMessagesReadResponse{
+		Success: err == nil && len(failedIDs) == 0,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			if len(failedIDs) > 0 {
+				return "部分消息标记已读失败"
+			}
+			return "标记已读成功"
+		}(),
+		FailedIds: failedIDs,
+	}
+
+	if err != nil {
+		log.Printf("Message服务标记已读失败: %v", err)
+	} else {
+		log.Printf("Message服务标记已读成功: UserID=%d, 成功数量=%d, 失败数量=%d",
+			req.UserId, len(req.MessageIds)-len(failedIDs), len(failedIDs))
+	}
+
+	return response, nil
+}
