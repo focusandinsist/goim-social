@@ -64,9 +64,9 @@ func main() {
 		httpHandler.RegisterRoutes(engine)
 	})
 
-	// 注册gRPC服务 (暂时使用ChatService接口，后续会重命名)
+	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
-		rest.RegisterChatServiceServer(grpcSrv, grpcHandler)
+		rest.RegisterLogicServiceServer(grpcSrv, grpcHandler)
 	})
 
 	// 运行应用程序

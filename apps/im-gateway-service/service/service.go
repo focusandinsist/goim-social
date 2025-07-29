@@ -201,13 +201,13 @@ func (cm *ConnectionManager) CleanupAll() {
 }
 
 type Service struct {
-	db         *database.MongoDB
-	redis      *redis.RedisClient
-	kafka      *kafka.Producer
-	config     *config.Config         // 配置
-	instanceID string                 // Connect服务实例ID
-	chatClient rest.ChatServiceClient // Chat服务客户端
-	connMgr    *ConnectionManager     // 统一连接管理器
+	db          *database.MongoDB
+	redis       *redis.RedisClient
+	kafka       *kafka.Producer
+	config      *config.Config          // 配置
+	instanceID  string                  // Connect服务实例ID
+	logicClient rest.LogicServiceClient // Logic服务客户端
+	connMgr     *ConnectionManager      // 统一连接管理器
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
@@ -251,7 +251,7 @@ func (s *Service) initLogicClient() error {
 	}
 
 	// 创建Logic服务客户端
-	s.chatClient = rest.NewChatServiceClient(conn)
+	s.logicClient = rest.NewLogicServiceClient(conn)
 
 	log.Printf("Logic服务客户端初始化成功，地址: %s", logicAddr)
 	return nil
@@ -542,7 +542,7 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 
 // sendMessageViaUnaryCall 通过Logic服务单向调用发送消息
 func (s *Service) sendMessageViaUnaryCall(ctx context.Context, wsMsg *rest.WSMessage) error {
-	if s.chatClient == nil {
+	if s.logicClient == nil {
 		return fmt.Errorf("Logic服务客户端未初始化")
 	}
 
@@ -550,11 +550,11 @@ func (s *Service) sendMessageViaUnaryCall(ctx context.Context, wsMsg *rest.WSMes
 		wsMsg.From, wsMsg.To, wsMsg.GroupId, wsMsg.Content)
 
 	// 调用Logic服务的SendMessage方法
-	req := &rest.SendChatMessageRequest{
+	req := &rest.SendLogicMessageRequest{
 		Msg: wsMsg,
 	}
 
-	resp, err := s.chatClient.SendMessage(ctx, req)
+	resp, err := s.logicClient.SendMessage(ctx, req)
 	if err != nil {
 		log.Printf("Logic服务单向调用发送消息失败: %v", err)
 		return err

@@ -6,13 +6,13 @@ option go_package = ".;rest";
 
 import "message.proto";
 
-// 发送聊天消息请求
-message SendChatMessageRequest {
+// 发送逻辑消息请求
+message SendLogicMessageRequest {
   WSMessage msg = 1;
 }
 
-// 发送聊天消息响应
-message SendChatMessageResponse {
+// 发送逻辑消息响应
+message SendLogicMessageResponse {
   bool success = 1;
   string message = 2;
   int64 message_id = 3;
@@ -21,8 +21,8 @@ message SendChatMessageResponse {
   repeated int64 failed_users = 6;
 }
 
-// Chat服务的gRPC接口
-service ChatService {
+// Logic服务的gRPC接口
+service LogicService {
   // 发送消息（支持单聊和群聊）
-  rpc SendMessage(SendChatMessageRequest) returns (SendChatMessageResponse);
+  rpc SendMessage(SendLogicMessageRequest) returns (SendLogicMessageResponse);
 }

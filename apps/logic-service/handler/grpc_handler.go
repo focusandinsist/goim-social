@@ -10,7 +10,7 @@ import (
 
 // GRPCHandler gRPC处理器
 type GRPCHandler struct {
-	rest.UnimplementedChatServiceServer
+	rest.UnimplementedLogicServiceServer
 	svc    *service.Service
 	logger logger.Logger
 }
@@ -24,7 +24,7 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 }
 
 // SendMessage 发送消息gRPC接口
-func (h *GRPCHandler) SendMessage(ctx context.Context, req *rest.SendChatMessageRequest) (*rest.SendChatMessageResponse, error) {
+func (h *GRPCHandler) SendMessage(ctx context.Context, req *rest.SendLogicMessageRequest) (*rest.SendLogicMessageResponse, error) {
 	h.logger.Info(ctx, "收到gRPC发送消息请求",
 		logger.F("from", req.Msg.From),
 		logger.F("to", req.Msg.To),
@@ -36,7 +36,7 @@ func (h *GRPCHandler) SendMessage(ctx context.Context, req *rest.SendChatMessage
 	if err != nil {
 		h.logger.Error(ctx, "gRPC处理消息失败",
 			logger.F("error", err.Error()))
-		return &rest.SendChatMessageResponse{
+		return &rest.SendLogicMessageResponse{
 			Success: false,
 			Message: err.Error(),
 		}, nil
@@ -46,7 +46,7 @@ func (h *GRPCHandler) SendMessage(ctx context.Context, req *rest.SendChatMessage
 		logger.F("messageID", result.MessageID),
 		logger.F("successCount", result.SuccessCount))
 
-	return &rest.SendChatMessageResponse{
+	return &rest.SendLogicMessageResponse{
 		Success:      result.Success,
 		Message:      result.Message,
 		MessageId:    result.MessageID,
