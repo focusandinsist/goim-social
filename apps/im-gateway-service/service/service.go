@@ -639,11 +639,40 @@ func (s *Service) subscribeConnectForward() {
 			continue
 		}
 		userID := int64(targetUser)
-		messageData, _ := json.Marshal(pushMsg["message"])
-		var wsMsg rest.WSMessage
-		if err := json.Unmarshal(messageData, &wsMsg); err != nil {
-			log.Printf("推送消息内容解析失败: %v", err)
+
+		// TODO:这里是临时处理：直接从map中提取消息字段，避免JSON序列化导致的精度丢失
+		messageMap, ok := pushMsg["message"].(map[string]interface{})
+		if !ok {
+			log.Printf("推送消息格式错误: %v", pushMsg["message"])
 			continue
+		}
+
+		// 临时testCode：安全地提取各个字段，使用类型断言保护
+		wsMsg := rest.WSMessage{}
+
+		if messageId, ok := messageMap["message_id"].(float64); ok {
+			wsMsg.MessageId = int64(messageId)
+		}
+		if from, ok := messageMap["from"].(float64); ok {
+			wsMsg.From = int64(from)
+		}
+		if to, ok := messageMap["to"].(float64); ok {
+			wsMsg.To = int64(to)
+		}
+		if groupId, ok := messageMap["group_id"].(float64); ok {
+			wsMsg.GroupId = int64(groupId)
+		}
+		if content, ok := messageMap["content"].(string); ok {
+			wsMsg.Content = content
+		}
+		if messageType, ok := messageMap["message_type"].(float64); ok {
+			wsMsg.MessageType = int32(messageType)
+		}
+		if timestamp, ok := messageMap["timestamp"].(float64); ok {
+			wsMsg.Timestamp = int64(timestamp)
+		}
+		if ackId, ok := messageMap["ack_id"].(string); ok {
+			wsMsg.AckId = ackId
 		}
 		// 推送到本地WebSocket连接
 		if conn, exists := s.connMgr.GetConnection(userID); exists {

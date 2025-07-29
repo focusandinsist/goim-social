@@ -279,6 +279,10 @@ func (s *Service) HandleMessageAck(ctx context.Context, userID, messageID int64,
 		MessageIds: []int64{messageID},
 	}
 
+	s.logger.Info(ctx, "调用Message服务标记已读",
+		logger.F("userID", userID),
+		logger.F("messageID", messageID))
+
 	resp, err := s.messageClient.MarkMessagesAsRead(ctx, markReq)
 	if err != nil {
 		s.logger.Error(ctx, "调用Message服务标记已读失败",
