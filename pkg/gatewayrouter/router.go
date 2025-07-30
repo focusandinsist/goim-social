@@ -138,100 +138,56 @@ func (r *Router) GetStats() map[string]interface{} {
 func (r *Router) syncActiveGateways() error {
 	ctx := context.Background()
 
-	// 获取当前时间窗口内的活跃实例
+	// 1: 从Redis获取所有活跃的网关ID(无锁)
 	minScore := strconv.FormatInt(time.Now().Unix()-HeartbeatWindow, 10)
-	maxScore := "+inf"
-
-	opt := &redis.ZRangeBy{
-		Min: minScore,
-		Max: maxScore,
-	}
-
+	opt := &redis.ZRangeBy{Min: minScore, Max: "+inf"}
 	activeIDs, err := r.redis.ZRangeByScore(ctx, ActiveGatewaysKey, opt)
 	if err != nil {
 		return fmt.Errorf("获取活跃网关列表失败: %v", err)
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// 检测变化
-	currentInstanceIDs := make(map[string]bool)
-	for _, id := range activeIDs {
-		currentInstanceIDs[id] = true
-	}
-
-	// 检查是否有变化
-	hasChanges := len(currentInstanceIDs) != len(r.instances)
-	if !hasChanges {
-		for id := range r.instances {
-			if !currentInstanceIDs[id] {
-				hasChanges = true
-				break
-			}
-		}
-	}
-
-	// 如果没有变化，直接返回
-	if !hasChanges {
-		return nil
-	}
-
-	log.Printf("检测到网关实例变化，开始同步...")
-
-	// 记录变化
-	var addedInstances, removedInstances []string
-
-	// 找出新增的实例
-	for id := range currentInstanceIDs {
-		if _, exists := r.instances[id]; !exists {
-			addedInstances = append(addedInstances, id)
-		}
-	}
-
-	// 找出移除的实例
-	for id := range r.instances {
-		if !currentInstanceIDs[id] {
-			removedInstances = append(removedInstances, id)
-		}
-	}
-
-	// 优化：在无锁状态下获取所有新实例的详细信息
-	newInstances := make(map[string]*GatewayInstance)
-	for _, instanceID := range addedInstances {
+	// 2: 构建期望的最新状态，并获取所有实例的详细信息(无锁)
+	newState := make(map[string]*GatewayInstance)
+	for _, instanceID := range activeIDs {
 		instance, err := r.getInstanceDetails(ctx, instanceID)
 		if err != nil {
-			log.Printf("获取实例 %s 详细信息失败: %v", instanceID, err)
-			// 跳过获取失败的实例，而不是使用默认值
-			continue
+			log.Printf("获取实例 %s 详细信息失败: %v, 将在本次同步中跳过该实例", instanceID, err)
+			continue // 跳过获取失败的实例
 		}
-		newInstances[instanceID] = instance
+		newState[instanceID] = instance
 	}
 
-	// 现在获取写锁，进行纯内存操作
+	// 3:对比并更新本地状态(一次性写锁)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// 移除不再活跃的实例
-	for _, instanceID := range removedInstances {
-		delete(r.instances, instanceID)
-		r.ring.Remove(instanceID)
-		log.Printf("移除网关实例: %s", instanceID)
-	}
+	var addedCount, removedCount int
 
-	// 添加新的活跃实例
-	for instanceID, instance := range newInstances {
-		// 防止在获取详情期间，节点又下线了，做最终检查
-		if currentInstanceIDs[instanceID] {
-			r.instances[instanceID] = instance
-			r.ring.Add(instance)
-			log.Printf("添加网关实例: %s (%s)", instanceID, instance.GetAddress())
+	// 找出并移除已下线的实例
+	for localID := range r.instances {
+		if _, existsInNewState := newState[localID]; !existsInNewState {
+			r.ring.Remove(localID)
+			delete(r.instances, localID)
+			removedCount++
+			log.Printf("移除网关实例: %s", localID)
 		}
 	}
 
-	r.lastSyncTime = time.Now().Unix()
-	log.Printf("网关实例同步完成，当前活跃数量: %d (新增: %d, 移除: %d)",
-		len(r.instances), len(addedInstances), len(removedInstances))
+	// 找出并添加新上线的实例
+	for newID, newInstance := range newState {
+		if _, existsLocally := r.instances[newID]; !existsLocally {
+			r.instances[newID] = newInstance
+			r.ring.Add(newInstance)
+			addedCount++
+			log.Printf("添加网关实例: %s (%s)", newID, newInstance.GetAddress())
+		}
+	}
+
+	if addedCount > 0 || removedCount > 0 {
+		r.lastSyncTime = time.Now().Unix()
+		log.Printf("网关实例同步完成，当前活跃数量: %d (新增: %d, 移除: %d)",
+			len(r.instances), addedCount, removedCount)
+	}
 
 	return nil
 }
