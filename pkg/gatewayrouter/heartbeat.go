@@ -87,8 +87,8 @@ func (hm *HeartbeatManager) register(ctx context.Context) error {
 		log.Printf("保存实例详细信息失败: %v", err)
 	}
 
-	// 设置Hash过期时间（防止泄漏）
-	expireTime := time.Duration(HeartbeatWindow*2) * time.Second
+	// 设置Hash过期时间（心跳窗口+30秒缓冲）
+	expireTime := time.Duration(HeartbeatWindow+30) * time.Second
 	if err := hm.redis.Expire(ctx, instanceKey, expireTime); err != nil {
 		log.Printf("设置实例信息过期时间失败: %v", err)
 	}
@@ -149,8 +149,8 @@ func (hm *HeartbeatManager) sendHeartbeat(ctx context.Context) error {
 		log.Printf("更新实例心跳时间失败: %v", err)
 	}
 
-	// 续期Hash
-	expireTime := time.Duration(HeartbeatWindow*2) * time.Second
+	// 续期Hash（心跳窗口+30秒缓冲）
+	expireTime := time.Duration(HeartbeatWindow+30) * time.Second
 	if err := hm.redis.Expire(ctx, instanceKey, expireTime); err != nil {
 		log.Printf("续期实例信息失败: %v", err)
 	}

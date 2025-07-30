@@ -35,6 +35,11 @@ func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, ex
 	return r.client.Set(ctx, key, value, expiration).Err()
 }
 
+// SetNX 设置键值对（仅当键不存在时）
+func (r *RedisClient) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
+	return r.client.SetNX(ctx, key, value, expiration).Result()
+}
+
 // Get 获取值
 func (r *RedisClient) Get(ctx context.Context, key string) (string, error) {
 	return r.client.Get(ctx, key).Result()

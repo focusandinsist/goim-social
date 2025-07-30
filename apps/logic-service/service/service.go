@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -18,14 +19,16 @@ import (
 
 // Service Logic服务 - 业务编排层
 type Service struct {
-	redis         *redis.RedisClient
-	kafka         *kafka.Producer
-	logger        logger.Logger
-	gatewayRouter *gatewayrouter.Router // 网关路由器
-	groupClient   rest.GroupServiceClient
-	messageClient rest.MessageServiceClient
-	friendClient  rest.FriendEventServiceClient
-	userClient    rest.UserServiceClient
+	redis          *redis.RedisClient
+	kafka          *kafka.Producer
+	logger         logger.Logger
+	instanceID     string                 // 服务实例ID
+	gatewayRouter  *gatewayrouter.Router  // 网关路由器
+	gatewayCleaner *gatewayrouter.Cleaner // 网关清理器（领导者选举）
+	groupClient    rest.GroupServiceClient
+	messageClient  rest.MessageServiceClient
+	friendClient   rest.FriendEventServiceClient
+	userClient     rest.UserServiceClient
 }
 
 // NewService 创建Logic服务实例
@@ -58,19 +61,30 @@ func NewService(redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logg
 	}
 	userClient := rest.NewUserServiceClient(userConn)
 
+	// 生成服务实例ID
+	instanceID := fmt.Sprintf("logic-service-%d", time.Now().UnixNano())
+
 	// 初始化网关路由器
 	gatewayRouter := gatewayrouter.NewRouter(redis)
 
+	// 初始化网关清理器（领导者选举）
+	gatewayCleaner := gatewayrouter.NewCleaner(redis, instanceID)
+
 	service := &Service{
-		redis:         redis,
-		kafka:         kafka,
-		logger:        log,
-		gatewayRouter: gatewayRouter,
-		groupClient:   groupClient,
-		messageClient: messageClient,
-		friendClient:  friendClient,
-		userClient:    userClient,
+		redis:          redis,
+		kafka:          kafka,
+		logger:         log,
+		instanceID:     instanceID,
+		gatewayRouter:  gatewayRouter,
+		gatewayCleaner: gatewayCleaner,
+		groupClient:    groupClient,
+		messageClient:  messageClient,
+		friendClient:   friendClient,
+		userClient:     userClient,
 	}
+
+	// 启动网关清理器（包含领导者选举）
+	gatewayCleaner.Start(context.Background())
 
 	return service, nil
 }
@@ -304,6 +318,39 @@ func (s *Service) GetActiveGateways() []*gatewayrouter.GatewayInstance {
 func (s *Service) GetUserGateway(userID int64) (*gatewayrouter.GatewayInstance, error) {
 	userIDStr := fmt.Sprintf("%d", userID)
 	return s.gatewayRouter.GetGatewayForUser(userIDStr)
+}
+
+// Cleanup 清理服务资源
+func (s *Service) Cleanup() {
+	s.logger.Info(context.Background(), "开始清理Logic服务资源")
+
+	// 停止网关清理器
+	if s.gatewayCleaner != nil {
+		s.gatewayCleaner.Stop()
+	}
+
+	// 停止网关路由器
+	if s.gatewayRouter != nil {
+		s.gatewayRouter.Stop()
+	}
+
+	s.logger.Info(context.Background(), "Logic服务资源清理完成")
+}
+
+// GetCleanerStatus 获取清理器状态
+func (s *Service) GetCleanerStatus(ctx context.Context) map[string]interface{} {
+	isLeader := s.gatewayCleaner.IsLeader()
+
+	leaderInfo, err := s.gatewayCleaner.GetLeaderInfo(ctx)
+	if err != nil {
+		leaderInfo = "unknown"
+	}
+
+	return map[string]interface{}{
+		"instance_id":    s.instanceID,
+		"is_leader":      isLeader,
+		"current_leader": leaderInfo,
+	}
 }
 
 // ValidateUserPermission 验证用户权限
