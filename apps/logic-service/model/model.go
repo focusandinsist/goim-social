@@ -12,7 +12,7 @@ type LogicMessage struct {
 	GroupID     int64     `json:"group_id"` // 群聊时的群组ID
 	Content     string    `json:"content"`
 	MessageType int32     `json:"message_type"` // 1:文本 2:图片 3:语音 4:视频 5:文件
-	ChatType    int32     `json:"chat_type"`    // 1:单聊 2:群聊
+	ChatType    int32     `json:"chat_type"`    // 1:单聊 2:群聊 (使用MessageChatType常量)
 	Status      int32     `json:"status"`       // 0:发送中 1:已发送 2:已送达 3:已读 -1:发送失败
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -20,7 +20,7 @@ type LogicMessage struct {
 
 // MessageRouteInfo 消息路由信息
 type MessageRouteInfo struct {
-	ChatType    int32   `json:"chat_type"`    // 1:单聊 2:群聊
+	ChatType    int32   `json:"chat_type"`    // 1:单聊 2:群聊 (使用MessageChatType常量)
 	TargetUsers []int64 `json:"target_users"` // 目标用户列表（单聊时只有一个，群聊时是所有成员）
 	GroupID     int64   `json:"group_id"`     // 群聊时的群组ID
 }

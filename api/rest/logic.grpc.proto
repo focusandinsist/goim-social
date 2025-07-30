@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+import "message.proto";
+
+// 发送逻辑消息请求
+message SendLogicMessageRequest {
+  WSMessage msg = 1;
+}
+
+// 发送逻辑消息响应
+message SendLogicMessageResponse {
+  bool success = 1;
+  string message = 2;
+  int64 message_id = 3;
+  int32 success_count = 4;
+  int32 failure_count = 5;
+  repeated int64 failed_users = 6;
+}
+
+// 消息ACK请求
+message MessageAckRequest {
+  int64 user_id = 1;
+  int64 message_id = 2;
+  string ack_id = 3;
+}
+
+// 消息ACK响应
+message MessageAckResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Logic服务的gRPC接口
+service LogicService {
+  // 发送消息（支持单聊和群聊）
+  rpc SendMessage(SendLogicMessageRequest) returns (SendLogicMessageResponse);
+
+  // 处理消息ACK
+  rpc HandleMessageAck(MessageAckRequest) returns (MessageAckResponse);
+}

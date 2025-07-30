@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
 	"websocket-server/apps/im-gateway-service/model"
@@ -199,13 +202,13 @@ func (cm *ConnectionManager) CleanupAll() {
 }
 
 type Service struct {
-	db         *database.MongoDB
-	redis      *redis.RedisClient
-	kafka      *kafka.Producer
-	config     *config.Config         // 配置
-	instanceID string                 // Connect服务实例ID
-	chatClient rest.ChatServiceClient // Chat服务客户端
-	connMgr    *ConnectionManager     // 统一连接管理器
+	db          *database.MongoDB
+	redis       *redis.RedisClient
+	kafka       *kafka.Producer
+	config      *config.Config          // 配置
+	instanceID  string                  // Connect服务实例ID
+	logicClient rest.LogicServiceClient // Logic服务客户端
+	connMgr     *ConnectionManager      // 统一连接管理器
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
@@ -228,8 +231,12 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		log.Printf("服务实例注册失败: %v", err)
 	}
 
-	// 启动时清理旧的连接数据
+	// 启动时清理旧的连接数据和过期实例
 	go service.cleanupOnStartup()
+	go service.cleanupExpiredInstances()
+
+	// 启动Redis订阅 connect_forward 频道
+	go service.subscribeConnectForward()
 
 	return service
 }
@@ -246,13 +253,11 @@ func (s *Service) initLogicClient() error {
 	}
 
 	// 创建Logic服务客户端
-	s.chatClient = rest.NewChatServiceClient(conn)
+	s.logicClient = rest.NewLogicServiceClient(conn)
 
 	log.Printf("Logic服务客户端初始化成功，地址: %s", logicAddr)
 	return nil
 }
-
-
 
 // cleanupOnStartup 启动时清理本实例的旧连接数据
 func (s *Service) cleanupOnStartup() {
@@ -291,6 +296,95 @@ func (s *Service) cleanupOnStartup() {
 	log.Printf("启动时清理完成: 清理了 %d 个旧连接", cleanedCount)
 }
 
+// cleanupExpiredInstances 清理过期的服务实例
+func (s *Service) cleanupExpiredInstances() {
+	ctx := context.Background()
+
+	log.Printf("开始清理过期的服务实例...")
+
+	// 获取所有实例ID
+	instanceIDs, err := s.redis.SMembers(ctx, "connect_instances_list")
+	if err != nil {
+		log.Printf("获取实例列表失败: %v", err)
+		return
+	}
+
+	cleanedInstances := 0
+	cleanedConnections := 0
+
+	for _, instanceID := range instanceIDs {
+		instanceKey := fmt.Sprintf("connect_instances:%s", instanceID)
+
+		// 检查实例是否存在
+		exists, err := s.redis.Exists(ctx, instanceKey)
+		if err != nil {
+			log.Printf("检查实例 %s 存在性失败: %v", instanceID, err)
+			continue
+		}
+
+		if exists == 0 {
+			// 实例已过期，从列表中移除
+			if err := s.redis.SRem(ctx, "connect_instances_list", instanceID); err != nil {
+				log.Printf("从实例列表移除 %s 失败: %v", instanceID, err)
+			} else {
+				cleanedInstances++
+				log.Printf("已清理过期实例: %s", instanceID)
+			}
+
+			// 清理该实例的所有连接
+			connectionsCleaned := s.cleanupInstanceConnections(ctx, instanceID)
+			cleanedConnections += connectionsCleaned
+		}
+	}
+
+	log.Printf("过期实例清理完成: 清理了 %d 个过期实例, %d 个孤儿连接", cleanedInstances, cleanedConnections)
+}
+
+// cleanupInstanceConnections 清理指定实例的所有连接
+func (s *Service) cleanupInstanceConnections(ctx context.Context, instanceID string) int {
+	pattern := "conn:*"
+	keys, err := s.redis.Keys(ctx, pattern)
+	if err != nil {
+		log.Printf("查询连接keys失败: %v", err)
+		return 0
+	}
+
+	cleanedCount := 0
+	cleanedUsers := make(map[string]bool)
+
+	for _, key := range keys {
+		// 获取连接信息
+		connInfo, err := s.redis.HGetAll(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		// 检查是否是指定实例的连接
+		if serverID, exists := connInfo["serverID"]; exists && serverID == instanceID {
+			// 删除连接信息
+			if err := s.redis.Del(ctx, key); err == nil {
+				cleanedCount++
+			}
+
+			// 记录需要从在线用户集合中移除的用户
+			if userIDStr, exists := connInfo["userID"]; exists {
+				cleanedUsers[userIDStr] = true
+			}
+		}
+	}
+
+	// 从在线用户集合中移除用户
+	for userID := range cleanedUsers {
+		s.redis.SRem(ctx, "online_users", userID)
+	}
+
+	if cleanedCount > 0 {
+		log.Printf("清理实例 %s 的连接: %d 个连接, %d 个用户下线", instanceID, cleanedCount, len(cleanedUsers))
+	}
+
+	return cleanedCount
+}
+
 // setupGracefulShutdown 设置优雅退出
 func (s *Service) setupGracefulShutdown() {
 	sigChan := make(chan os.Signal, 1)
@@ -313,6 +407,11 @@ func (s *Service) cleanup() {
 	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
 	if err := s.redis.Del(ctx, instanceKey); err != nil {
 		log.Printf("清理实例信息失败: %v", err)
+	}
+
+	// 从实例列表中移除
+	if err := s.redis.SRem(ctx, "connect_instances_list", s.instanceID); err != nil {
+		log.Printf("从实例列表移除失败: %v", err)
 	}
 
 	// 2. 清理本实例的所有连接
@@ -525,8 +624,9 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 	// 从WebSocket消息中提取用户ID和消息ID
 	userID := wsMsg.From // 客户端发送ACK时，From字段是自己的用户ID
 	messageID := wsMsg.MessageId
+	ackID := wsMsg.AckId
 
-	log.Printf("收到客户端ACK: UserID=%d, MessageID=%d", userID, messageID)
+	log.Printf("收到客户端ACK: UserID=%d, MessageID=%d, AckID=%s", userID, messageID, ackID)
 
 	// 检查消息ID是否存在
 	if messageID == 0 {
@@ -534,12 +634,37 @@ func (s *Service) HandleMessageACK(ctx context.Context, wsMsg *rest.WSMessage) e
 		return fmt.Errorf("MessageID不能为0")
 	}
 
+	// 检查Logic服务客户端是否已初始化
+	if s.logicClient == nil {
+		log.Printf("Logic服务客户端未初始化，无法处理ACK: UserID=%d, MessageID=%d", userID, messageID)
+		return fmt.Errorf("Logic服务客户端未初始化")
+	}
+
+	// 调用Logic服务处理ACK
+	req := &rest.MessageAckRequest{
+		UserId:    userID,
+		MessageId: messageID,
+		AckId:     ackID,
+	}
+
+	resp, err := s.logicClient.HandleMessageAck(ctx, req)
+	if err != nil {
+		log.Printf("调用Logic服务处理ACK失败: UserID=%d, MessageID=%d, Error=%v", userID, messageID, err)
+		return fmt.Errorf("处理消息ACK失败: %v", err)
+	}
+
+	if !resp.Success {
+		log.Printf("Logic服务处理ACK失败: UserID=%d, MessageID=%d, Message=%s", userID, messageID, resp.Message)
+		return fmt.Errorf("处理消息ACK失败: %s", resp.Message)
+	}
+
+	log.Printf("消息ACK处理成功: UserID=%d, MessageID=%d", userID, messageID)
 	return nil
 }
 
 // sendMessageViaUnaryCall 通过Logic服务单向调用发送消息
 func (s *Service) sendMessageViaUnaryCall(ctx context.Context, wsMsg *rest.WSMessage) error {
-	if s.chatClient == nil {
+	if s.logicClient == nil {
 		return fmt.Errorf("Logic服务客户端未初始化")
 	}
 
@@ -547,11 +672,11 @@ func (s *Service) sendMessageViaUnaryCall(ctx context.Context, wsMsg *rest.WSMes
 		wsMsg.From, wsMsg.To, wsMsg.GroupId, wsMsg.Content)
 
 	// 调用Logic服务的SendMessage方法
-	req := &rest.SendChatMessageRequest{
+	req := &rest.SendLogicMessageRequest{
 		Msg: wsMsg,
 	}
 
-	resp, err := s.chatClient.SendMessage(ctx, req)
+	resp, err := s.logicClient.SendMessage(ctx, req)
 	if err != nil {
 		log.Printf("Logic服务单向调用发送消息失败: %v", err)
 		return err
@@ -585,5 +710,66 @@ func (s *Service) RemoveWebSocketConnection(userID int64) {
 	ctx := context.Background()
 	if err := s.connMgr.RemoveConnection(ctx, userID, ""); err != nil {
 		log.Printf("移除WebSocket连接失败: %v", err)
+	}
+}
+
+// 订阅 connect_forward 频道并分发消息到本地连接，在线才会这样推送，不在线就登陆时拉取未读消息
+func (s *Service) subscribeConnectForward() {
+	ctx := context.Background()
+	channel := "connect_forward:" + s.instanceID
+	log.Printf("订阅Redis频道: %s", channel)
+	pubsub := s.redis.Subscribe(ctx, channel)
+	ch := pubsub.Channel()
+	for msg := range ch {
+		log.Printf("收到推送消息: %s", msg.Payload)
+		// 解析消息
+		var pushMsg map[string]interface{}
+		if err := json.Unmarshal([]byte(msg.Payload), &pushMsg); err != nil {
+			log.Printf("推送消息解析失败: %v", err)
+			continue
+		}
+		// 获取目标用户ID和消息内容
+		targetUser, ok := pushMsg["target_user"].(float64)
+		if !ok {
+			log.Printf("推送消息缺少 target_user 字段")
+			continue
+		}
+		userID := int64(targetUser)
+
+		// 直接从Redis消息中反序列化Protobuf二进制数据
+		messageBytes, ok := pushMsg["message_bytes"].(string)
+		if !ok {
+			log.Printf("推送消息格式错误，缺少message_bytes字段: %v", pushMsg)
+			continue
+		}
+
+		// 将base64编码的字节数据解码
+		msgData, err := base64.StdEncoding.DecodeString(messageBytes)
+		if err != nil {
+			log.Printf("解码消息字节数据失败: %v", err)
+			continue
+		}
+
+		// 反序列化Protobuf消息
+		var wsMsg rest.WSMessage
+		if err := proto.Unmarshal(msgData, &wsMsg); err != nil {
+			log.Printf("反序列化Protobuf消息失败: %v", err)
+			continue
+		}
+		// 推送到本地WebSocket连接
+		if conn, exists := s.connMgr.GetConnection(userID); exists {
+			msgBytes, err := proto.Marshal(&wsMsg)
+			if err != nil {
+				log.Printf("WebSocket推送protobuf序列化失败: %v", err)
+				continue
+			}
+			if err := conn.WriteMessage(websocket.BinaryMessage, msgBytes); err != nil {
+				log.Printf("WebSocket推送失败: %v", err)
+			} else {
+				log.Printf("WebSocket推送成功: UserID=%d, MessageID=%d", userID, wsMsg.MessageId)
+			}
+		} else {
+			log.Printf("用户 %d 不在本地连接，无法推送", userID)
+		}
 	}
 }

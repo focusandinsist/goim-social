@@ -1,9 +1,9 @@
 package model
 
-// ChatType 聊天类型常量
+// MessageChatType 消息聊天类型常量
 const (
-	ChatTypePrivate = 1 // 单聊
-	ChatTypeGroup   = 2 // 群聊
+	MessageChatTypePrivate = 1 // 单聊
+	MessageChatTypeGroup   = 2 // 群聊
 )
 
 // MessageType 消息类型常量

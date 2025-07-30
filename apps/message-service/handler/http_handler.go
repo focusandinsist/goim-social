@@ -77,22 +77,25 @@ func (h *HTTPHandler) GetHistory(c *gin.Context) {
 	}
 
 	msgs, total, err := h.service.GetMessageHistory(ctx, req.UserId, req.GroupId, int(req.Page), int(req.Size))
-	
+	if err != nil {
+		h.logger.Error(ctx, "Get history failed", logger.F("error", err.Error()))
+		utils.WriteObject(c, nil, err)
+		return
+	}
+
 	// 转换为proto消息格式
 	var wsMessages []*rest.WSMessage
-	if err == nil {
-		for _, msg := range msgs {
-			wsMessages = append(wsMessages, &rest.WSMessage{
-				MessageId:   msg.MessageID,
-				From:        msg.From,
-				To:          msg.To,
-				GroupId:     msg.GroupID,
-				Content:     msg.Content,
-				Timestamp:   msg.Timestamp,
-				MessageType: int32(msg.MessageType),
-				AckId:       msg.AckID,
-			})
-		}
+	for _, msg := range msgs {
+		wsMessages = append(wsMessages, &rest.WSMessage{
+			MessageId:   msg.MessageID,
+			From:        msg.From,
+			To:          msg.To,
+			GroupId:     msg.GroupID,
+			Content:     msg.Content,
+			Timestamp:   msg.Timestamp,
+			MessageType: int32(msg.MessageType),
+			AckId:       msg.AckID,
+		})
 	}
 
 	res := &rest.GetHistoryResponse{
@@ -101,9 +104,7 @@ func (h *HTTPHandler) GetHistory(c *gin.Context) {
 		Page:     req.Page,
 		Size:     req.Size,
 	}
-	if err != nil {
-		h.logger.Error(ctx, "Get history failed", logger.F("error", err.Error()))
-	}
+
 	utils.WriteObject(c, res, err)
 }
 
@@ -177,7 +178,7 @@ func (h *HTTPHandler) MarkMessagesRead(c *gin.Context) {
 
 	// 调用service层标记消息已读
 	failedIDs, err := h.service.MarkMessagesAsRead(ctx, req.UserId, req.MessageIds)
-	
+
 	res := &rest.MarkMessagesReadResponse{
 		Success: err == nil && len(failedIDs) == 0,
 		Message: func() string {

@@ -25,13 +25,13 @@ func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 
 // RegisterRoutes 注册HTTP路由
 func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
-	// 网关管理API
-	gateway := r.Group("/api/v1/api-gateway")
-	{
-		gateway.POST("/online_status", h.OnlineStatus) // 查询在线状态(通过gRPC调用IM Gateway)
-		gateway.POST("/services", h.GetServices)       // 获取所有注册的服务
-		gateway.POST("/health", h.HealthCheck)         // 健康检查
-	}
+	// // 网关管理API
+	// gateway := r.Group("/api/v1/api-gateway")
+	// {
+	// 	gateway.POST("/online_status", h.OnlineStatus) // 查询在线状态(通过gRPC调用IM Gateway)
+	// 	gateway.POST("/services", h.GetServices)       // 获取所有注册的服务
+	// 	gateway.POST("/health", h.HealthCheck)         // 健康检查
+	// }
 
 	// 动态路由 [这是核心功能！]
 	// 所有符合 /api/v1/{service-name}/* 格式的请求都会被动态路由

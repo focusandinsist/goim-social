@@ -10,9 +10,15 @@ import (
 	"websocket-server/apps/logic-service/handler"
 	"websocket-server/apps/logic-service/service"
 	"websocket-server/pkg/server"
+	"websocket-server/pkg/snowflake"
 )
 
 func main() {
+	// 初始化Snowflake ID生成器 (Logic服务使用机器ID: 1)
+	if err := snowflake.InitGlobalSnowflake(1); err != nil {
+		panic(fmt.Sprintf("初始化Snowflake失败: %v", err))
+	}
+
 	// 创建应用程序
 	app := server.NewApplication("logic-service")
 
@@ -64,9 +70,9 @@ func main() {
 		httpHandler.RegisterRoutes(engine)
 	})
 
-	// 注册gRPC服务 (暂时使用ChatService接口，后续会重命名)
+	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
-		rest.RegisterChatServiceServer(grpcSrv, grpcHandler)
+		rest.RegisterLogicServiceServer(grpcSrv, grpcHandler)
 	})
 
 	// 运行应用程序

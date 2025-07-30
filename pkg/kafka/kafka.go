@@ -223,7 +223,7 @@ func (c *Consumer) Cleanup(_ sarama.ConsumerGroupSession) error {
 
 // ConsumeClaim 消费消息
 func (c *Consumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	fmt.Printf("开始消费分区 %d 的消息\n", claim.Partition())
+	fmt.Printf("会话建立成功！开始监听分区 %d 的消息, 起始Offset: %d\n", claim.Partition(), claim.InitialOffset())
 
 	for msg := range claim.Messages() {
 		fmt.Printf("收到消息: partition=%d, offset=%d\n", msg.Partition, msg.Offset)
@@ -236,6 +236,6 @@ func (c *Consumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.C
 		}
 	}
 
-	fmt.Printf("🔚 分区 %d 的消息消费结束\n", claim.Partition())
+	fmt.Printf("分区 %d 的消息消费结束\n", claim.Partition())
 	return nil
 }

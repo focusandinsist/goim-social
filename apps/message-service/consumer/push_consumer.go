@@ -2,12 +2,14 @@ package consumer
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/IBM/sarama"
+	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
 	"websocket-server/pkg/kafka"
@@ -84,6 +86,7 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 			log.Printf("标记推送已处理失败: %v", err)
 		}
 
+		log.Printf("处理新消息成功: %v", event.Message.Content)
 		return nil
 	default:
 		log.Printf("未知的消息事件类型: %s", event.Type)
@@ -135,6 +138,8 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 		} else {
 			log.Printf("群聊消息缺少目标用户ID，跳过推送: GroupID=%d, MessageID=%d", msg.GroupId, msg.MessageId)
 		}
+	} else {
+		log.Printf("推送群聊消息失败，没有发送给任何人: From=%d, To=%dGroupID=%d, Content=%s, MessageID=%d", msg.From, msg.To, msg.GroupId, msg.Content, msg.MessageId)
 	}
 
 	return nil
@@ -167,12 +172,20 @@ func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WS
 		return fmt.Errorf("连接信息中缺少serverID")
 	}
 
-	// 构造推送消息
+	// 序列化Protobuf消息为二进制数据，避免JSON精度丢失
+	messageBytes, err := proto.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("序列化Protobuf消息失败: %v", err)
+	}
+
+	// 使用base64编码二进制数据，便于在JSON中传输
+	messageBase64 := base64.StdEncoding.EncodeToString(messageBytes)
+
 	pushMsg := map[string]interface{}{
-		"type":        "push_message",
-		"target_user": targetUserID,
-		"message":     message,
-		"timestamp":   time.Now().Unix(),
+		"type":          "push_message",
+		"target_user":   targetUserID,
+		"message_bytes": messageBase64, // 使用Protobuf二进制数据
+		"timestamp":     time.Now().Unix(),
 	}
 
 	// 序列化消息
@@ -187,8 +200,8 @@ func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WS
 		return fmt.Errorf("发布推送消息失败: %v", err)
 	}
 
-	log.Printf("已发布推送消息到Connect服务: ServerID=%s, UserID=%d, MessageID=%d",
-		serverID, targetUserID, message.MessageId)
+	log.Printf("已发布推送消息到Connect服务: ServerID=%s, UserID=%d, MessageID=%d, Key=%s",
+		serverID, targetUserID, message.MessageId, channel)
 	return nil
 }
 
