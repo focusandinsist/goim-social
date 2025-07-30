@@ -105,6 +105,31 @@ func (r *RedisClient) Subscribe(ctx context.Context, channels ...string) *redis.
 	return r.client.Subscribe(ctx, channels...)
 }
 
+// ZAdd 添加成员到有序集合
+func (r *RedisClient) ZAdd(ctx context.Context, key string, members ...*redis.Z) error {
+	return r.client.ZAdd(ctx, key, members...).Err()
+}
+
+// ZRangeByScore 根据分数范围获取有序集合成员
+func (r *RedisClient) ZRangeByScore(ctx context.Context, key string, opt *redis.ZRangeBy) ([]string, error) {
+	return r.client.ZRangeByScore(ctx, key, opt).Result()
+}
+
+// ZRemRangeByScore 根据分数范围移除有序集合成员
+func (r *RedisClient) ZRemRangeByScore(ctx context.Context, key string, min, max string) error {
+	return r.client.ZRemRangeByScore(ctx, key, min, max).Err()
+}
+
+// ZRem 从有序集合移除成员
+func (r *RedisClient) ZRem(ctx context.Context, key string, members ...interface{}) error {
+	return r.client.ZRem(ctx, key, members...).Err()
+}
+
+// ZCard 获取有序集合成员数量
+func (r *RedisClient) ZCard(ctx context.Context, key string) (int64, error) {
+	return r.client.ZCard(ctx, key).Result()
+}
+
 // Close 关闭连接
 func (r *RedisClient) Close() error {
 	return r.client.Close()

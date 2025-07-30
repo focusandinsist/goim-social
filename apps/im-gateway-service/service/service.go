@@ -22,6 +22,7 @@ import (
 	"websocket-server/pkg/auth"
 	"websocket-server/pkg/config"
 	"websocket-server/pkg/database"
+	"websocket-server/pkg/gatewayrouter"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
 )
@@ -202,23 +203,25 @@ func (cm *ConnectionManager) CleanupAll() {
 }
 
 type Service struct {
-	db          *database.MongoDB
-	redis       *redis.RedisClient
-	kafka       *kafka.Producer
-	config      *config.Config          // 配置
-	instanceID  string                  // Connect服务实例ID
-	logicClient rest.LogicServiceClient // Logic服务客户端
-	connMgr     *ConnectionManager      // 统一连接管理器
+	db            *database.MongoDB
+	redis         *redis.RedisClient
+	kafka         *kafka.Producer
+	config        *config.Config          // 配置
+	instanceID    string                  // Connect服务实例ID
+	logicClient   rest.LogicServiceClient // Logic服务客户端
+	connMgr       *ConnectionManager      // 统一连接管理器
+	gatewayRouter *gatewayrouter.Router   // 网关路由管理器
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
 	service := &Service{
-		db:         db,
-		redis:      redis,
-		kafka:      kafka,
-		config:     cfg,
-		instanceID: fmt.Sprintf("im-gateway-%d", time.Now().UnixNano()), // 生成唯一实例ID
-		connMgr:    NewConnectionManager(redis, cfg),                    // 初始化连接管理器
+		db:            db,
+		redis:         redis,
+		kafka:         kafka,
+		config:        cfg,
+		instanceID:    fmt.Sprintf("im-gateway-%d", time.Now().UnixNano()), // 生成唯一实例ID
+		connMgr:       NewConnectionManager(redis, cfg),                    // 初始化连接管理器
+		gatewayRouter: gatewayrouter.NewRouter(redis),                      // 初始化网关路由管理器
 	}
 
 	// 初始化Logic服务客户端
@@ -409,10 +412,18 @@ func (s *Service) cleanup() {
 		log.Printf("清理实例信息失败: %v", err)
 	}
 
-	// 从实例列表中移除
+	// 从旧的实例列表中移除（兼容性）
 	if err := s.redis.SRem(ctx, "connect_instances_list", s.instanceID); err != nil {
 		log.Printf("从实例列表移除失败: %v", err)
 	}
+
+	// 从网关路由管理器注销
+	if err := s.gatewayRouter.UnregisterGateway(ctx, s.instanceID); err != nil {
+		log.Printf("从网关路由管理器注销失败: %v", err)
+	}
+
+	// 停止网关路由管理器
+	s.gatewayRouter.Stop()
 
 	// 2. 清理本实例的所有连接
 	pattern := "conn:*"
@@ -464,7 +475,7 @@ func (s *Service) GetInstanceID() string {
 func (s *Service) registerInstance() error {
 	ctx := context.Background()
 
-	// 服务实例信息
+	// 服务实例信息（保留原有的Hash存储，用于详细信息）
 	instanceInfo := map[string]interface{}{
 		"instance_id": s.instanceID,
 		"host":        s.config.Connect.Instance.Host,
@@ -486,9 +497,15 @@ func (s *Service) registerInstance() error {
 		log.Printf("设置实例过期时间失败: %v", err)
 	}
 
-	// 添加到实例列表
+	// 兼容性：添加到旧的实例列表（TODO:逐步移除）
 	if err := s.redis.SAdd(ctx, "connect_instances_list", s.instanceID); err != nil {
 		log.Printf("添加到实例列表失败: %v", err)
+	}
+
+	// 注册到网关路由管理器（使用ZSET）
+	if err := s.gatewayRouter.RegisterGateway(ctx, s.instanceID,
+		s.config.Connect.Instance.Host, s.config.Connect.Instance.Port); err != nil {
+		log.Printf("注册到网关路由管理器失败: %v", err)
 	}
 
 	log.Printf("Connect服务实例已注册: %s", s.instanceID)
@@ -514,15 +531,19 @@ func (s *Service) startHeartbeat() {
 		ctx := context.Background()
 		key := fmt.Sprintf("connect_instances:%s", s.instanceID)
 
-		// 更新心跳时间
+		// 更新原有的Hash心跳时间（保持兼容性）
 		if err := s.redis.HSet(ctx, key, "last_ping", time.Now().Unix()); err != nil {
-			log.Printf("更新心跳失败: %v", err)
-			continue
+			log.Printf("更新Hash心跳失败: %v", err)
 		}
 
-		// 续期
+		// 续期Hash
 		if err := s.redis.Expire(ctx, key, timeout); err != nil {
-			log.Printf("续期失败: %v", err)
+			log.Printf("Hash续期失败: %v", err)
+		}
+
+		// 更新ZSET心跳
+		if err := s.gatewayRouter.Heartbeat(ctx, s.instanceID); err != nil {
+			log.Printf("更新ZSET心跳失败: %v", err)
 		}
 	}
 }
