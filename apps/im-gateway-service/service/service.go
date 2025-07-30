@@ -239,7 +239,6 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 
 	// 启动时清理旧的连接数据和过期实例
 	go service.cleanupOnStartup()
-	go service.cleanupExpiredInstances()
 
 	// 启动Redis订阅 connect_forward 频道
 	go service.subscribeConnectForward()
@@ -302,95 +301,6 @@ func (s *Service) cleanupOnStartup() {
 	log.Printf("启动时清理完成: 清理了 %d 个旧连接", cleanedCount)
 }
 
-// cleanupExpiredInstances 清理过期的服务实例
-func (s *Service) cleanupExpiredInstances() {
-	ctx := context.Background()
-
-	log.Printf("开始清理过期的服务实例...")
-
-	// 获取所有实例ID
-	instanceIDs, err := s.redis.SMembers(ctx, "connect_instances_list")
-	if err != nil {
-		log.Printf("获取实例列表失败: %v", err)
-		return
-	}
-
-	cleanedInstances := 0
-	cleanedConnections := 0
-
-	for _, instanceID := range instanceIDs {
-		instanceKey := fmt.Sprintf("connect_instances:%s", instanceID)
-
-		// 检查实例是否存在
-		exists, err := s.redis.Exists(ctx, instanceKey)
-		if err != nil {
-			log.Printf("检查实例 %s 存在性失败: %v", instanceID, err)
-			continue
-		}
-
-		if exists == 0 {
-			// 实例已过期，从列表中移除
-			if err := s.redis.SRem(ctx, "connect_instances_list", instanceID); err != nil {
-				log.Printf("从实例列表移除 %s 失败: %v", instanceID, err)
-			} else {
-				cleanedInstances++
-				log.Printf("已清理过期实例: %s", instanceID)
-			}
-
-			// 清理该实例的所有连接
-			connectionsCleaned := s.cleanupInstanceConnections(ctx, instanceID)
-			cleanedConnections += connectionsCleaned
-		}
-	}
-
-	log.Printf("过期实例清理完成: 清理了 %d 个过期实例, %d 个孤儿连接", cleanedInstances, cleanedConnections)
-}
-
-// cleanupInstanceConnections 清理指定实例的所有连接
-func (s *Service) cleanupInstanceConnections(ctx context.Context, instanceID string) int {
-	pattern := "conn:*"
-	keys, err := s.redis.Keys(ctx, pattern)
-	if err != nil {
-		log.Printf("查询连接keys失败: %v", err)
-		return 0
-	}
-
-	cleanedCount := 0
-	cleanedUsers := make(map[string]bool)
-
-	for _, key := range keys {
-		// 获取连接信息
-		connInfo, err := s.redis.HGetAll(ctx, key)
-		if err != nil {
-			continue
-		}
-
-		// 检查是否是指定实例的连接
-		if serverID, exists := connInfo["serverID"]; exists && serverID == instanceID {
-			// 删除连接信息
-			if err := s.redis.Del(ctx, key); err == nil {
-				cleanedCount++
-			}
-
-			// 记录需要从在线用户集合中移除的用户
-			if userIDStr, exists := connInfo["userID"]; exists {
-				cleanedUsers[userIDStr] = true
-			}
-		}
-	}
-
-	// 从在线用户集合中移除用户
-	for userID := range cleanedUsers {
-		s.redis.SRem(ctx, "online_users", userID)
-	}
-
-	if cleanedCount > 0 {
-		log.Printf("清理实例 %s 的连接: %d 个连接, %d 个用户下线", instanceID, cleanedCount, len(cleanedUsers))
-	}
-
-	return cleanedCount
-}
-
 // setupGracefulShutdown 设置优雅退出
 func (s *Service) setupGracefulShutdown() {
 	sigChan := make(chan os.Signal, 1)
@@ -409,18 +319,7 @@ func (s *Service) cleanup() {
 
 	log.Printf("开始清理实例资源: %s", s.instanceID)
 
-	// 清理实例注册信息
-	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
-	if err := s.redis.Del(ctx, instanceKey); err != nil {
-		log.Printf("清理实例信息失败: %v", err)
-	}
-
-	// 从旧的实例列表中移除（兼容性）
-	if err := s.redis.SRem(ctx, "connect_instances_list", s.instanceID); err != nil {
-		log.Printf("从实例列表移除失败: %v", err)
-	}
-
-	// 停止心跳管理器（会自动注销）
+	// 停止心跳管理器（会自动注销新的ZSET和Hash）
 	if err := s.heartbeatMgr.Stop(ctx); err != nil {
 		log.Printf("停止心跳管理器失败: %v", err)
 	}
@@ -475,74 +374,17 @@ func (s *Service) GetInstanceID() string {
 func (s *Service) registerInstance() error {
 	ctx := context.Background()
 
-	// 服务实例信息（保留原有的Hash存储，用于详细信息）
-	instanceInfo := map[string]interface{}{
-		"instance_id": s.instanceID,
-		"host":        s.config.Connect.Instance.Host,
-		"port":        s.config.Connect.Instance.Port,
-		"status":      "active",
-		"started_at":  time.Now().Unix(),
-		"last_ping":   time.Now().Unix(),
-	}
-
-	// 注册到Redis Hash
-	key := fmt.Sprintf("connect_instances:%s", s.instanceID)
-	if err := s.redis.HMSet(ctx, key, instanceInfo); err != nil {
-		return fmt.Errorf("注册实例信息失败: %v", err)
-	}
-
-	// 设置过期时间（心跳机制）
-	expireTime := time.Duration(s.config.Connect.Heartbeat.Timeout) * time.Second
-	if err := s.redis.Expire(ctx, key, expireTime); err != nil {
-		log.Printf("设置实例过期时间失败: %v", err)
-	}
-
-	// 兼容性：添加到旧的实例列表（TODO:逐步移除）
-	if err := s.redis.SAdd(ctx, "connect_instances_list", s.instanceID); err != nil {
-		log.Printf("添加到实例列表失败: %v", err)
-	}
-
-	// 启动心跳管理器（会自动注册）
+	// 启动心跳管理器（会自动注册到新的ZSET和Hash）
 	if err := s.heartbeatMgr.Start(ctx); err != nil {
-		log.Printf("启动心跳管理器失败: %v", err)
+		return fmt.Errorf("启动心跳管理器失败: %v", err)
 	}
 
 	log.Printf("Connect服务实例已注册: %s", s.instanceID)
-
-	// 启动心跳
-	go s.startHeartbeat()
 
 	// 启动优雅退出监听
 	go s.setupGracefulShutdown()
 
 	return nil
-}
-
-// startHeartbeat 启动心跳机制
-func (s *Service) startHeartbeat() {
-	interval := time.Duration(s.config.Connect.Heartbeat.Interval) * time.Second
-	timeout := time.Duration(s.config.Connect.Heartbeat.Timeout) * time.Second
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		ctx := context.Background()
-		key := fmt.Sprintf("connect_instances:%s", s.instanceID)
-
-		// 更新原有的Hash心跳时间（保持兼容性）
-		if err := s.redis.HSet(ctx, key, "last_ping", time.Now().Unix()); err != nil {
-			log.Printf("更新Hash心跳失败: %v", err)
-		}
-
-		// 续期Hash
-		if err := s.redis.Expire(ctx, key, timeout); err != nil {
-			log.Printf("Hash续期失败: %v", err)
-		}
-
-		// 心跳由HeartbeatManager自动管理，这里只需要更新Hash心跳
-		// ZSET心跳已经由HeartbeatManager处理
-	}
 }
 
 // Connect 处理连接，写入 redis hash，并维护在线用户 set
