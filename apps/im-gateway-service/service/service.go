@@ -203,25 +203,28 @@ func (cm *ConnectionManager) CleanupAll() {
 }
 
 type Service struct {
-	db            *database.MongoDB
-	redis         *redis.RedisClient
-	kafka         *kafka.Producer
-	config        *config.Config          // 配置
-	instanceID    string                  // Connect服务实例ID
-	logicClient   rest.LogicServiceClient // Logic服务客户端
-	connMgr       *ConnectionManager      // 统一连接管理器
-	gatewayRouter *gatewayrouter.Router   // 网关路由管理器
+	db           *database.MongoDB
+	redis        *redis.RedisClient
+	kafka        *kafka.Producer
+	config       *config.Config                  // 配置
+	instanceID   string                          // Connect服务实例ID
+	logicClient  rest.LogicServiceClient         // Logic服务客户端
+	connMgr      *ConnectionManager              // 统一连接管理器
+	heartbeatMgr *gatewayrouter.HeartbeatManager // 心跳管理器
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
+	instanceID := fmt.Sprintf("im-gateway-%d", time.Now().UnixNano()) // 生成唯一实例ID
+
 	service := &Service{
-		db:            db,
-		redis:         redis,
-		kafka:         kafka,
-		config:        cfg,
-		instanceID:    fmt.Sprintf("im-gateway-%d", time.Now().UnixNano()), // 生成唯一实例ID
-		connMgr:       NewConnectionManager(redis, cfg),                    // 初始化连接管理器
-		gatewayRouter: gatewayrouter.NewRouter(redis),                      // 初始化网关路由管理器
+		db:         db,
+		redis:      redis,
+		kafka:      kafka,
+		config:     cfg,
+		instanceID: instanceID,
+		connMgr:    NewConnectionManager(redis, cfg), // 初始化连接管理器
+		heartbeatMgr: gatewayrouter.NewHeartbeatManager(redis, instanceID, // 初始化心跳管理器
+			cfg.Connect.Instance.Host, cfg.Connect.Instance.Port),
 	}
 
 	// 初始化Logic服务客户端
@@ -417,13 +420,10 @@ func (s *Service) cleanup() {
 		log.Printf("从实例列表移除失败: %v", err)
 	}
 
-	// 从网关路由管理器注销
-	if err := s.gatewayRouter.UnregisterGateway(ctx, s.instanceID); err != nil {
-		log.Printf("从网关路由管理器注销失败: %v", err)
+	// 停止心跳管理器（会自动注销）
+	if err := s.heartbeatMgr.Stop(ctx); err != nil {
+		log.Printf("停止心跳管理器失败: %v", err)
 	}
-
-	// 停止网关路由管理器
-	s.gatewayRouter.Stop()
 
 	// 2. 清理本实例的所有连接
 	pattern := "conn:*"
@@ -502,10 +502,9 @@ func (s *Service) registerInstance() error {
 		log.Printf("添加到实例列表失败: %v", err)
 	}
 
-	// 注册到网关路由管理器（使用ZSET）
-	if err := s.gatewayRouter.RegisterGateway(ctx, s.instanceID,
-		s.config.Connect.Instance.Host, s.config.Connect.Instance.Port); err != nil {
-		log.Printf("注册到网关路由管理器失败: %v", err)
+	// 启动心跳管理器（会自动注册）
+	if err := s.heartbeatMgr.Start(ctx); err != nil {
+		log.Printf("启动心跳管理器失败: %v", err)
 	}
 
 	log.Printf("Connect服务实例已注册: %s", s.instanceID)
@@ -541,10 +540,8 @@ func (s *Service) startHeartbeat() {
 			log.Printf("Hash续期失败: %v", err)
 		}
 
-		// 更新ZSET心跳
-		if err := s.gatewayRouter.Heartbeat(ctx, s.instanceID); err != nil {
-			log.Printf("更新ZSET心跳失败: %v", err)
-		}
+		// 心跳由HeartbeatManager自动管理，这里只需要更新Hash心跳
+		// ZSET心跳已经由HeartbeatManager处理
 	}
 }
 

@@ -41,17 +41,19 @@ func (g *GatewayInstance) GetAddress() string {
 	return fmt.Sprintf("%s:%d", g.Host, g.Port)
 }
 
-// Router 网关路由管理器
+// Router 网关路由器
+// 负责监控Redis ZSET变化并同步到本地一致性哈希环，提供路由决策
 type Router struct {
-	redis         *redisClient.RedisClient
-	ring          *consistent.Consistent
-	instances     map[string]*GatewayInstance // 实例ID -> 实例信息
-	mu            sync.RWMutex
-	stopCh        chan struct{}
-	cleanupTicker *time.Ticker
+	redis        *redisClient.RedisClient
+	ring         *consistent.Consistent
+	instances    map[string]*GatewayInstance // 实例ID -> 实例信息
+	mu           sync.RWMutex
+	stopCh       chan struct{}
+	syncTicker   *time.Ticker
+	lastSyncTime int64 // 上次同步时间戳，用于检测变化
 }
 
-// NewRouter 创建网关路由管理器
+// NewRouter 创建网关路由器
 func NewRouter(redis *redisClient.RedisClient) *Router {
 	// 配置一致性哈希环
 	config := consistent.Config{
@@ -73,75 +75,10 @@ func NewRouter(redis *redisClient.RedisClient) *Router {
 		log.Printf("初始化同步活跃网关失败: %v", err)
 	}
 
-	// 启动后台监控和清理任务
-	router.startBackgroundTasks()
+	// 启动后台监控任务
+	router.startMonitoring()
 
 	return router
-}
-
-// RegisterGateway 注册网关实例（网关启动时调用）
-func (r *Router) RegisterGateway(ctx context.Context, instanceID, host string, port int) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// 创建实例信息
-	instance := &GatewayInstance{
-		ID:            instanceID,
-		Host:          host,
-		Port:          port,
-		LastHeartbeat: time.Now().Unix(),
-	}
-
-	// 添加到Redis ZSET
-	score := float64(time.Now().Unix())
-	z := &redis.Z{Score: score, Member: instanceID}
-	if err := r.redis.ZAdd(ctx, ActiveGatewaysKey, z); err != nil {
-		return fmt.Errorf("注册网关到Redis失败: %v", err)
-	}
-
-	// 添加到本地缓存和一致性哈希环
-	r.instances[instanceID] = instance
-	r.ring.Add(instance)
-
-	log.Printf("网关实例已注册: %s (%s)", instanceID, instance.GetAddress())
-	return nil
-}
-
-// UnregisterGateway 注销网关实例（网关关闭时调用）
-func (r *Router) UnregisterGateway(ctx context.Context, instanceID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// 从Redis ZSET移除
-	if err := r.redis.ZRem(ctx, ActiveGatewaysKey, instanceID); err != nil {
-		log.Printf("从Redis移除网关失败: %v", err)
-	}
-
-	// 从本地缓存和一致性哈希环移除
-	delete(r.instances, instanceID)
-	r.ring.Remove(instanceID)
-
-	log.Printf("网关实例已注销: %s", instanceID)
-	return nil
-}
-
-// Heartbeat 网关心跳上报（网关定期调用）
-func (r *Router) Heartbeat(ctx context.Context, instanceID string) error {
-	// 更新Redis ZSET中的分数（时间戳）
-	score := float64(time.Now().Unix())
-	z := &redis.Z{Score: score, Member: instanceID}
-	if err := r.redis.ZAdd(ctx, ActiveGatewaysKey, z); err != nil {
-		return fmt.Errorf("更新心跳失败: %v", err)
-	}
-
-	// 更新本地缓存
-	r.mu.Lock()
-	if instance, exists := r.instances[instanceID]; exists {
-		instance.LastHeartbeat = time.Now().Unix()
-	}
-	r.mu.Unlock()
-
-	return nil
 }
 
 // GetGatewayForUser 根据用户ID获取对应的网关实例
@@ -202,6 +139,7 @@ func (r *Router) GetStats() map[string]interface{} {
 		"active_gateways":   len(r.instances),
 		"average_load":      r.ring.AverageLoad(),
 		"load_distribution": loadDist,
+		"last_sync_time":    r.lastSyncTime,
 	}
 }
 
@@ -226,52 +164,137 @@ func (r *Router) syncActiveGateways() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// 清空当前实例
-	r.instances = make(map[string]*GatewayInstance)
-	r.ring = consistent.New(nil, consistent.Config{
-		Hasher:            consistent.NewCRC64Hasher(),
-		PartitionCount:    271,
-		ReplicationFactor: 20,
-		Load:              1.25,
-	})
-
-	// 重新构建实例列表和哈希环
-	for _, instanceID := range activeIDs {
-		// TODO: 从hash节点信息里获取host和port信息
-		instance := &GatewayInstance{
-			ID:            instanceID,
-			Host:          "localhost",
-			Port:          8080,
-			LastHeartbeat: time.Now().Unix(),
-		}
-
-		r.instances[instanceID] = instance
-		r.ring.Add(instance)
+	// 检测变化
+	currentInstanceIDs := make(map[string]bool)
+	for _, id := range activeIDs {
+		currentInstanceIDs[id] = true
 	}
 
-	log.Printf("同步完成，当前活跃网关数量: %d", len(r.instances))
+	// 检查是否有变化
+	hasChanges := len(currentInstanceIDs) != len(r.instances)
+	if !hasChanges {
+		for id := range r.instances {
+			if !currentInstanceIDs[id] {
+				hasChanges = true
+				break
+			}
+		}
+	}
+
+	// 如果没有变化，直接返回
+	if !hasChanges {
+		return nil
+	}
+
+	log.Printf("检测到网关实例变化，开始同步...")
+
+	// 记录变化
+	var addedInstances, removedInstances []string
+
+	// 找出新增的实例
+	for id := range currentInstanceIDs {
+		if _, exists := r.instances[id]; !exists {
+			addedInstances = append(addedInstances, id)
+		}
+	}
+
+	// 找出移除的实例
+	for id := range r.instances {
+		if !currentInstanceIDs[id] {
+			removedInstances = append(removedInstances, id)
+		}
+	}
+
+	// 优化：在无锁状态下获取所有新实例的详细信息
+	newInstances := make(map[string]*GatewayInstance)
+	for _, instanceID := range addedInstances {
+		instance, err := r.getInstanceDetails(ctx, instanceID)
+		if err != nil {
+			log.Printf("获取实例 %s 详细信息失败: %v", instanceID, err)
+			// 跳过获取失败的实例，而不是使用默认值
+			continue
+		}
+		newInstances[instanceID] = instance
+	}
+
+	// 现在获取写锁，进行纯内存操作
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// 移除不再活跃的实例
+	for _, instanceID := range removedInstances {
+		delete(r.instances, instanceID)
+		r.ring.Remove(instanceID)
+		log.Printf("移除网关实例: %s", instanceID)
+	}
+
+	// 添加新的活跃实例
+	for instanceID, instance := range newInstances {
+		// 防止在获取详情期间，节点又下线了，做最终检查
+		if currentInstanceIDs[instanceID] {
+			r.instances[instanceID] = instance
+			r.ring.Add(instance)
+			log.Printf("添加网关实例: %s (%s)", instanceID, instance.GetAddress())
+		}
+	}
+
+	r.lastSyncTime = time.Now().Unix()
+	log.Printf("网关实例同步完成，当前活跃数量: %d (新增: %d, 移除: %d)",
+		len(r.instances), len(addedInstances), len(removedInstances))
+
 	return nil
 }
 
-// startBackgroundTasks 启动后台监控和清理任务
-func (r *Router) startBackgroundTasks() {
-	// 启动定期同步任务
-	go r.periodicSync()
+// getInstanceDetails 从Redis Hash获取实例详细信息
+func (r *Router) getInstanceDetails(ctx context.Context, instanceID string) (*GatewayInstance, error) {
+	key := fmt.Sprintf("connect_instances:%s", instanceID)
+	fields, err := r.redis.HGetAll(ctx, key)
+	if err != nil {
+		return nil, err
+	}
 
-	// 启动清理任务
-	// TODO: 选举leader清理,或者扔给k8s
-	r.cleanupTicker = time.NewTicker(CleanupInterval)
-	go r.cleanupExpiredGateways()
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("实例信息不存在")
+	}
+
+	// 解析端口号
+	port := 8080 // 默认值
+	if portStr, exists := fields["port"]; exists {
+		if p, err := strconv.Atoi(portStr); err == nil {
+			port = p
+		}
+	}
+
+	// 解析最后心跳时间
+	lastHeartbeat := time.Now().Unix()
+	if hbStr, exists := fields["last_ping"]; exists {
+		if hb, err := strconv.ParseInt(hbStr, 10, 64); err == nil {
+			lastHeartbeat = hb
+		}
+	}
+
+	return &GatewayInstance{
+		ID:            instanceID,
+		Host:          fields["host"],
+		Port:          port,
+		LastHeartbeat: lastHeartbeat,
+	}, nil
+}
+
+// startMonitoring 启动后台监控任务
+func (r *Router) startMonitoring() {
+	// 启动定期同步任务（频率较高，用于快速检测变化）
+	r.syncTicker = time.NewTicker(10 * time.Second)
+	go r.periodicSync()
 }
 
 // periodicSync 定期同步Redis中的活跃实例
 func (r *Router) periodicSync() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	defer r.syncTicker.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-r.syncTicker.C:
 			if err := r.syncActiveGateways(); err != nil {
 				log.Printf("定期同步活跃网关失败: %v", err)
 			}
@@ -281,32 +304,15 @@ func (r *Router) periodicSync() {
 	}
 }
 
-// cleanupExpiredGateways 清理过期的网关实例
-func (r *Router) cleanupExpiredGateways() {
-	defer r.cleanupTicker.Stop()
-
-	for {
-		select {
-		case <-r.cleanupTicker.C:
-			ctx := context.Background()
-
-			// 移除90秒之前的过期实例
-			maxScore := strconv.FormatInt(time.Now().Unix()-HeartbeatWindow, 10)
-			if err := r.redis.ZRemRangeByScore(ctx, ActiveGatewaysKey, "0", maxScore); err != nil {
-				log.Printf("清理过期网关实例失败: %v", err)
-			} else {
-				log.Printf("已清理过期网关实例")
-			}
-		case <-r.stopCh:
-			return
-		}
+// Stop 停止路由客户端
+func (r *Router) Stop() {
+	close(r.stopCh)
+	if r.syncTicker != nil {
+		r.syncTicker.Stop()
 	}
 }
 
-// Stop 停止路由管理器
-func (r *Router) Stop() {
-	close(r.stopCh)
-	if r.cleanupTicker != nil {
-		r.cleanupTicker.Stop()
-	}
+// ForceSync 强制同步（用于手动触发同步）
+func (r *Router) ForceSync() error {
+	return r.syncActiveGateways()
 }
