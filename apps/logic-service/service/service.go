@@ -9,6 +9,7 @@ import (
 
 	"websocket-server/api/rest"
 	"websocket-server/apps/logic-service/model"
+	"websocket-server/pkg/gatewayrouter"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/logger"
 	"websocket-server/pkg/redis"
@@ -20,6 +21,7 @@ type Service struct {
 	redis         *redis.RedisClient
 	kafka         *kafka.Producer
 	logger        logger.Logger
+	gatewayRouter *gatewayrouter.Router // 网关路由器
 	groupClient   rest.GroupServiceClient
 	messageClient rest.MessageServiceClient
 	friendClient  rest.FriendEventServiceClient
@@ -56,10 +58,14 @@ func NewService(redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logg
 	}
 	userClient := rest.NewUserServiceClient(userConn)
 
+	// 初始化网关路由器
+	gatewayRouter := gatewayrouter.NewRouter(redis)
+
 	service := &Service{
 		redis:         redis,
 		kafka:         kafka,
 		logger:        log,
+		gatewayRouter: gatewayRouter,
 		groupClient:   groupClient,
 		messageClient: messageClient,
 		friendClient:  friendClient,
@@ -219,14 +225,85 @@ func (s *Service) publishMessageToQueue(ctx context.Context, targetUserID int64,
 		AckId:       msg.AckId,
 	}
 
+	// 使用网关路由器找到用户对应的网关实例
+	userIDStr := fmt.Sprintf("%d", targetUserID)
+	gateway, err := s.gatewayRouter.GetGatewayForUser(userIDStr)
+	if err != nil {
+		s.logger.Error(ctx, "获取用户网关失败",
+			logger.F("userID", targetUserID),
+			logger.F("error", err.Error()))
+		// 降级：发布到消息队列作为备选方案
+		return s.publishToKafkaFallback(ctx, targetMsg)
+	}
+
+	s.logger.Info(ctx, "路由消息到网关",
+		logger.F("userID", targetUserID),
+		logger.F("gatewayID", gateway.ID),
+		logger.F("gatewayAddr", gateway.GetAddress()))
+
+	// 直接通过Redis发送消息到特定网关
+	return s.forwardMessageToGateway(ctx, gateway, targetMsg)
+}
+
+// forwardMessageToGateway 向特定网关转发消息
+func (s *Service) forwardMessageToGateway(ctx context.Context, gateway *gatewayrouter.GatewayInstance, msg *rest.WSMessage) error {
+	// 通过Redis发布消息到特定网关的频道
+	channel := fmt.Sprintf("gateway:%s:user_message", gateway.ID)
+
+	// 构造消息负载
+	messagePayload := map[string]interface{}{
+		"type":    "user_message",
+		"message": msg,
+	}
+
+	// 发布到Redis频道
+	err := s.redis.Publish(ctx, channel, messagePayload)
+	if err != nil {
+		s.logger.Error(ctx, "发送消息到网关失败",
+			logger.F("gatewayID", gateway.ID),
+			logger.F("userID", msg.To),
+			logger.F("error", err.Error()))
+		return err
+	}
+
+	s.logger.Info(ctx, "消息已发送到网关",
+		logger.F("gatewayID", gateway.ID),
+		logger.F("userID", msg.To),
+		logger.F("messageID", msg.MessageId))
+
+	return nil
+}
+
+// publishToKafkaFallback 降级到Kafka队列的备选方案
+func (s *Service) publishToKafkaFallback(ctx context.Context, msg *rest.WSMessage) error {
+	s.logger.Warn(ctx, "使用Kafka降级方案发送消息",
+		logger.F("userID", msg.To),
+		logger.F("messageID", msg.MessageId))
+
 	// 构造消息事件
 	messageEvent := map[string]interface{}{
 		"type":    "new_message",
-		"message": targetMsg,
+		"message": msg,
 	}
 
 	// 发布到下行消息队列
 	return s.kafka.PublishMessage("downlink_messages", messageEvent)
+}
+
+// GetGatewayRouterStatus 获取网关路由器状态信息
+func (s *Service) GetGatewayRouterStatus() map[string]interface{} {
+	return s.gatewayRouter.GetStats()
+}
+
+// GetActiveGateways 获取所有活跃网关实例
+func (s *Service) GetActiveGateways() []*gatewayrouter.GatewayInstance {
+	return s.gatewayRouter.GetAllActiveGateways()
+}
+
+// GetUserGateway 获取用户对应的网关实例
+func (s *Service) GetUserGateway(userID int64) (*gatewayrouter.GatewayInstance, error) {
+	userIDStr := fmt.Sprintf("%d", userID)
+	return s.gatewayRouter.GetGatewayForUser(userIDStr)
 }
 
 // ValidateUserPermission 验证用户权限

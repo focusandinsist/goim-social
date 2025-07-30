@@ -14,15 +14,6 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-const (
-	// ActiveGatewaysKey Redis ZSET键名，存储活跃网关实例
-	ActiveGatewaysKey = "active_gateways"
-	// HeartbeatWindow 心跳窗口时间（秒），超过此时间认为实例不活跃
-	HeartbeatWindow = 90
-	// CleanupInterval 清理过期实例的间隔时间
-	CleanupInterval = 60 * time.Second
-)
-
 // GatewayInstance 网关实例信息
 type GatewayInstance struct {
 	ID            string `json:"id"`
@@ -247,7 +238,7 @@ func (r *Router) syncActiveGateways() error {
 
 // getInstanceDetails 从Redis Hash获取实例详细信息
 func (r *Router) getInstanceDetails(ctx context.Context, instanceID string) (*GatewayInstance, error) {
-	key := fmt.Sprintf("connect_instances:%s", instanceID)
+	key := fmt.Sprintf(GatewayInstanceHashKeyFmt, instanceID)
 	fields, err := r.redis.HGetAll(ctx, key)
 	if err != nil {
 		return nil, err
@@ -283,8 +274,8 @@ func (r *Router) getInstanceDetails(ctx context.Context, instanceID string) (*Ga
 
 // startMonitoring 启动后台监控任务
 func (r *Router) startMonitoring() {
-	// 启动定期同步任务（频率较高，用于快速检测变化）
-	r.syncTicker = time.NewTicker(10 * time.Second)
+	// 使用常量定义的同步间隔
+	r.syncTicker = time.NewTicker(SyncInterval)
 	go r.periodicSync()
 }
 

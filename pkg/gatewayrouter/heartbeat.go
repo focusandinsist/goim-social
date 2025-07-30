@@ -6,8 +6,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	redisClient "websocket-server/pkg/redis"
+
+	"github.com/go-redis/redis/v8"
 )
 
 // HeartbeatManager 网关心跳管理器
@@ -73,7 +74,7 @@ func (hm *HeartbeatManager) register(ctx context.Context) error {
 	}
 
 	// 可选：保存实例详细信息到Hash（用于获取host、port等信息）
-	instanceKey := fmt.Sprintf("gateway_instances:%s", hm.instanceID)
+	instanceKey := fmt.Sprintf(GatewayInstanceHashKeyFmt, hm.instanceID)
 	instanceInfo := map[string]interface{}{
 		"id":             hm.instanceID,
 		"host":           hm.host,
@@ -81,7 +82,7 @@ func (hm *HeartbeatManager) register(ctx context.Context) error {
 		"registered_at":  time.Now().Unix(),
 		"last_heartbeat": time.Now().Unix(),
 	}
-	
+
 	if err := hm.redis.HMSet(ctx, instanceKey, instanceInfo); err != nil {
 		log.Printf("保存实例详细信息失败: %v", err)
 	}
@@ -103,7 +104,7 @@ func (hm *HeartbeatManager) unregister(ctx context.Context) error {
 	}
 
 	// 删除实例详细信息
-	instanceKey := fmt.Sprintf("gateway_instances:%s", hm.instanceID)
+	instanceKey := fmt.Sprintf(GatewayInstanceHashKeyFmt, hm.instanceID)
 	if err := hm.redis.Del(ctx, instanceKey); err != nil {
 		log.Printf("删除实例详细信息失败: %v", err)
 	}
@@ -113,12 +114,12 @@ func (hm *HeartbeatManager) unregister(ctx context.Context) error {
 
 // startHeartbeat 启动心跳循环
 func (hm *HeartbeatManager) startHeartbeat() {
-	// 每30秒发送一次心跳
-	hm.ticker = time.NewTicker(30 * time.Second)
-	
+	// 使用常量定义的心跳间隔
+	hm.ticker = time.NewTicker(HeartbeatInterval)
+
 	go func() {
 		defer hm.ticker.Stop()
-		
+
 		for {
 			select {
 			case <-hm.ticker.C:
@@ -143,7 +144,7 @@ func (hm *HeartbeatManager) sendHeartbeat(ctx context.Context) error {
 	}
 
 	// 更新实例详细信息中的心跳时间
-	instanceKey := fmt.Sprintf("gateway_instances:%s", hm.instanceID)
+	instanceKey := fmt.Sprintf(GatewayInstanceHashKeyFmt, hm.instanceID)
 	if err := hm.redis.HSet(ctx, instanceKey, "last_heartbeat", time.Now().Unix()); err != nil {
 		log.Printf("更新实例心跳时间失败: %v", err)
 	}
