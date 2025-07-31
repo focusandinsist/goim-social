@@ -484,7 +484,7 @@ func sendMessageACK(conn *websocket.Conn, userID, messageID int64) {
 	if err := conn.WriteMessage(websocket.BinaryMessage, msgBytes); err != nil {
 		log.Printf("❌ 发送ACK消息失败: %v", err)
 	} else {
-		log.Printf("✅ 已发送ACK: MessageID=%d, UserID=%d", messageID, userID)
+		log.Printf("✅ [已发送ACK MSGID=%d]: UserID=%d", messageID, userID)
 	}
 }
 
@@ -616,9 +616,9 @@ func receiveMessages(c *websocket.Conn, userID int64) {
 			if wsMsg.To == userID {
 				// 收到的消息
 				if isHistoryMessage {
-					direction = fmt.Sprintf("📜 [历史消息] 来自用户%d", wsMsg.From)
+					direction = fmt.Sprintf("📜 [历史消息 MSGID=%d] 来自用户%d", wsMsg.MessageId, wsMsg.From)
 				} else {
-					direction = fmt.Sprintf("📥 来自用户%d", wsMsg.From)
+					direction = fmt.Sprintf("📥 [实时消息 MSGID=%d] 来自用户%d", wsMsg.MessageId, wsMsg.From)
 					// 收到新消息时，发送ACK确认已读
 					sendMessageACK(c, userID, wsMsg.MessageId)
 				}

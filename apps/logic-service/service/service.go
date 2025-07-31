@@ -2,13 +2,17 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"time"
 
+	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"websocket-server/api/rest"
 	"websocket-server/apps/logic-service/model"
+	"websocket-server/pkg/gatewayrouter"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/logger"
 	"websocket-server/pkg/redis"
@@ -17,13 +21,16 @@ import (
 
 // Service Logic服务 - 业务编排层
 type Service struct {
-	redis         *redis.RedisClient
-	kafka         *kafka.Producer
-	logger        logger.Logger
-	groupClient   rest.GroupServiceClient
-	messageClient rest.MessageServiceClient
-	friendClient  rest.FriendEventServiceClient
-	userClient    rest.UserServiceClient
+	redis          *redis.RedisClient
+	kafka          *kafka.Producer
+	logger         logger.Logger
+	instanceID     string                 // 服务实例ID
+	gatewayRouter  *gatewayrouter.Router  // 网关路由器
+	gatewayCleaner *gatewayrouter.Cleaner // 网关清理器（领导者选举）
+	groupClient    rest.GroupServiceClient
+	messageClient  rest.MessageServiceClient
+	friendClient   rest.FriendEventServiceClient
+	userClient     rest.UserServiceClient
 }
 
 // NewService 创建Logic服务实例
@@ -56,15 +63,30 @@ func NewService(redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logg
 	}
 	userClient := rest.NewUserServiceClient(userConn)
 
+	// 生成服务实例ID
+	instanceID := fmt.Sprintf("logic-service-%d", time.Now().UnixNano())
+
+	// 初始化网关路由器
+	gatewayRouter := gatewayrouter.NewRouter(redis)
+
+	// 初始化网关清理器（领导者选举）
+	gatewayCleaner := gatewayrouter.NewCleaner(redis, instanceID)
+
 	service := &Service{
-		redis:         redis,
-		kafka:         kafka,
-		logger:        log,
-		groupClient:   groupClient,
-		messageClient: messageClient,
-		friendClient:  friendClient,
-		userClient:    userClient,
+		redis:          redis,
+		kafka:          kafka,
+		logger:         log,
+		instanceID:     instanceID,
+		gatewayRouter:  gatewayRouter,
+		gatewayCleaner: gatewayCleaner,
+		groupClient:    groupClient,
+		messageClient:  messageClient,
+		friendClient:   friendClient,
+		userClient:     userClient,
 	}
+
+	// 启动网关清理器（包含领导者选举）
+	gatewayCleaner.Start(context.Background())
 
 	return service, nil
 }
@@ -219,14 +241,134 @@ func (s *Service) publishMessageToQueue(ctx context.Context, targetUserID int64,
 		AckId:       msg.AckId,
 	}
 
-	// 构造消息事件
-	messageEvent := map[string]interface{}{
-		"type":    "new_message",
-		"message": targetMsg,
+	// 使用网关路由器找到用户对应的网关实例
+	userIDStr := fmt.Sprintf("%d", targetUserID)
+	gateway, err := s.gatewayRouter.GetGatewayForUser(userIDStr)
+	if err != nil {
+		s.logger.Error(ctx, "获取用户网关失败",
+			logger.F("userID", targetUserID),
+			logger.F("error", err.Error()))
+		// 降级：发布到消息队列作为备选方案
+		return s.publishToKafkaFallback(ctx, targetMsg)
+	}
+
+	s.logger.Info(ctx, "路由消息到网关",
+		logger.F("userID", targetUserID),
+		logger.F("gatewayID", gateway.ID),
+		logger.F("gatewayAddr", gateway.GetAddress()))
+
+	// 直接通过Redis发送消息到特定网关
+	return s.forwardMessageToGateway(ctx, gateway, targetMsg)
+}
+
+// forwardMessageToGateway 向特定网关转发消息
+func (s *Service) forwardMessageToGateway(ctx context.Context, gateway *gatewayrouter.GatewayInstance, msg *rest.WSMessage) error {
+	// 通过Redis发布消息到特定网关的频道
+	channel := fmt.Sprintf("gateway:%s:user_message", gateway.ID)
+
+	// 构造protobuf消息负载
+	gatewayMsg := &rest.GatewayMessage{
+		Type:       "user_message",
+		Message:    msg,
+		TargetUser: msg.To,
+		Timestamp:  time.Now().Unix(),
+	}
+
+	// 序列化为protobuf二进制数据
+	payloadBytes, err := proto.Marshal(gatewayMsg)
+	if err != nil {
+		s.logger.Error(ctx, "序列化protobuf消息失败",
+			logger.F("gatewayID", gateway.ID),
+			logger.F("userID", msg.To),
+			logger.F("error", err.Error()))
+		return err
+	}
+
+	// 使用base64编码便于Redis传输
+	payloadBase64 := base64.StdEncoding.EncodeToString(payloadBytes)
+
+	// 发布到Redis频道
+	err = s.redis.Publish(ctx, channel, payloadBase64)
+	if err != nil {
+		s.logger.Error(ctx, "发送消息到网关失败",
+			logger.F("gatewayID", gateway.ID),
+			logger.F("userID", msg.To),
+			logger.F("error", err.Error()))
+		return err
+	}
+
+	s.logger.Info(ctx, "消息已发送到网关",
+		logger.F("gatewayID", gateway.ID),
+		logger.F("userID", msg.To),
+		logger.F("messageID", msg.MessageId))
+
+	return nil
+}
+
+// publishToKafkaFallback 降级到Kafka队列的备选方案
+func (s *Service) publishToKafkaFallback(ctx context.Context, msg *rest.WSMessage) error {
+	s.logger.Warn(ctx, "使用Kafka降级方案发送消息",
+		logger.F("userID", msg.To),
+		logger.F("messageID", msg.MessageId))
+
+	// 构造protobuf消息事件
+	messageEvent := &rest.MessageEvent{
+		Type:      "new_message",
+		Message:   msg,
+		Timestamp: time.Now().Unix(),
 	}
 
 	// 发布到下行消息队列
 	return s.kafka.PublishMessage("downlink_messages", messageEvent)
+}
+
+// GetGatewayRouterStatus 获取网关路由器状态信息
+func (s *Service) GetGatewayRouterStatus() map[string]interface{} {
+	return s.gatewayRouter.GetStats()
+}
+
+// GetActiveGateways 获取所有活跃网关实例
+func (s *Service) GetActiveGateways() []*gatewayrouter.GatewayInstance {
+	return s.gatewayRouter.GetAllActiveGateways()
+}
+
+// GetUserGateway 获取用户对应的网关实例
+func (s *Service) GetUserGateway(userID int64) (*gatewayrouter.GatewayInstance, error) {
+	userIDStr := fmt.Sprintf("%d", userID)
+	return s.gatewayRouter.GetGatewayForUser(userIDStr)
+}
+
+// Cleanup 清理服务资源
+func (s *Service) Cleanup() {
+	s.logger.Info(context.Background(), "开始清理Logic服务资源")
+
+	// 停止网关清理器
+	if s.gatewayCleaner != nil {
+		s.gatewayCleaner.Stop()
+	}
+
+	// 停止网关路由器
+	if s.gatewayRouter != nil {
+		s.gatewayRouter.Stop()
+	}
+
+	s.logger.Info(context.Background(), "Logic服务资源清理完成")
+}
+
+// GetCleanerStatus 获取清理器状态
+func (s *Service) GetCleanerStatus(ctx context.Context) map[string]interface{} {
+	isLeader := s.gatewayCleaner.IsLeader()
+
+	leaderInfo, err := s.gatewayCleaner.GetLeaderInfo(ctx)
+	if err != nil {
+		leaderInfo = "unknown"
+	}
+
+	return map[string]interface{}{
+		"instance_id":    s.instanceID,
+		"is_leader":      isLeader,
+		"current_leader": leaderInfo,
+	}
 }
 
 // ValidateUserPermission 验证用户权限

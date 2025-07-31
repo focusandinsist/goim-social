@@ -708,6 +708,142 @@ func (x *MarkMessagesReadResponse) GetFailedIds() []int64 {
 	return nil
 }
 
+// Gateway消息传输结构（用于Redis发布/订阅）
+type GatewayMessage struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Type       string     `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`                                // 消息类型：user_message, push_message等
+	Message    *WSMessage `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`                          // 实际消息内容
+	TargetUser int64      `protobuf:"varint,3,opt,name=target_user,json=targetUser,proto3" json:"target_user,omitempty"` // 目标用户ID
+	Timestamp  int64      `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                     // 时间戳
+}
+
+func (x *GatewayMessage) Reset() {
+	*x = GatewayMessage{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_message_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GatewayMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GatewayMessage) ProtoMessage() {}
+
+func (x *GatewayMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GatewayMessage.ProtoReflect.Descriptor instead.
+func (*GatewayMessage) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GatewayMessage) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *GatewayMessage) GetMessage() *WSMessage {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+func (x *GatewayMessage) GetTargetUser() int64 {
+	if x != nil {
+		return x.TargetUser
+	}
+	return 0
+}
+
+func (x *GatewayMessage) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+// Kafka消息事件结构
+type MessageEvent struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Type      string     `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`            // 事件类型：new_message等
+	Message   *WSMessage `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`      // 消息内容
+	Timestamp int64      `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // 时间戳
+}
+
+func (x *MessageEvent) Reset() {
+	*x = MessageEvent{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_message_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEvent) ProtoMessage() {}
+
+func (x *MessageEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_message_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEvent.ProtoReflect.Descriptor instead.
+func (*MessageEvent) Descriptor() ([]byte, []int) {
+	return file_message_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *MessageEvent) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *MessageEvent) GetMessage() *WSMessage {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+func (x *MessageEvent) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
 var File_message_proto protoreflect.FileDescriptor
 
 var file_message_proto_rawDesc = []byte{
@@ -786,8 +922,24 @@ var file_message_proto_rawDesc = []byte{
 	0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
 	0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x66, 0x61,
 	0x69, 0x6c, 0x65, 0x64, 0x5f, 0x69, 0x64, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x03, 0x52, 0x09,
-	0x66, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x49, 0x64, 0x73, 0x42, 0x08, 0x5a, 0x06, 0x2e, 0x3b, 0x72,
-	0x65, 0x73, 0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x66, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x49, 0x64, 0x73, 0x22, 0x8e, 0x01, 0x0a, 0x0e, 0x47, 0x61,
+	0x74, 0x65, 0x77, 0x61, 0x79, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x12, 0x0a, 0x04,
+	0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65,
+	0x12, 0x29, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x0f, 0x2e, 0x72, 0x65, 0x73, 0x74, 0x2e, 0x57, 0x53, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x74,
+	0x61, 0x72, 0x67, 0x65, 0x74, 0x5f, 0x75, 0x73, 0x65, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03,
+	0x52, 0x0a, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x55, 0x73, 0x65, 0x72, 0x12, 0x1c, 0x0a, 0x09,
+	0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x04, 0x20, 0x01, 0x28, 0x03, 0x52,
+	0x09, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x22, 0x6b, 0x0a, 0x0c, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x79,
+	0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x29,
+	0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x0f, 0x2e, 0x72, 0x65, 0x73, 0x74, 0x2e, 0x57, 0x53, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+	0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x74, 0x69, 0x6d,
+	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52, 0x09, 0x74, 0x69,
+	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x42, 0x08, 0x5a, 0x06, 0x2e, 0x3b, 0x72, 0x65, 0x73,
+	0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -802,7 +954,7 @@ func file_message_proto_rawDescGZIP() []byte {
 	return file_message_proto_rawDescData
 }
 
-var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_message_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_message_proto_goTypes = []interface{}{
 	(*WSMessage)(nil),                 // 0: rest.WSMessage
 	(*SendMessageRequest)(nil),        // 1: rest.SendMessageRequest
@@ -814,15 +966,19 @@ var file_message_proto_goTypes = []interface{}{
 	(*GetUnreadMessagesResponse)(nil), // 7: rest.GetUnreadMessagesResponse
 	(*MarkMessagesReadRequest)(nil),   // 8: rest.MarkMessagesReadRequest
 	(*MarkMessagesReadResponse)(nil),  // 9: rest.MarkMessagesReadResponse
+	(*GatewayMessage)(nil),            // 10: rest.GatewayMessage
+	(*MessageEvent)(nil),              // 11: rest.MessageEvent
 }
 var file_message_proto_depIdxs = []int32{
 	0, // 0: rest.GetHistoryResponse.messages:type_name -> rest.WSMessage
 	0, // 1: rest.GetUnreadMessagesResponse.messages:type_name -> rest.WSMessage
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0, // 2: rest.GatewayMessage.message:type_name -> rest.WSMessage
+	0, // 3: rest.MessageEvent.message:type_name -> rest.WSMessage
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_message_proto_init() }
@@ -951,6 +1107,30 @@ func file_message_proto_init() {
 				return nil
 			}
 		}
+		file_message_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GatewayMessage); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_message_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEvent); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -958,7 +1138,7 @@ func file_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_message_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

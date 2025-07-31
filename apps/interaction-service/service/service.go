@@ -356,6 +356,7 @@ func (s *Service) publishInteractionEvent(ctx context.Context, eventType string,
 		Timestamp:       time.Now(),
 	}
 
+	// TODO：后续改为protobuf序列化
 	eventData, err := json.Marshal(event)
 	if err != nil {
 		s.logger.Error(ctx, "Failed to marshal interaction event",

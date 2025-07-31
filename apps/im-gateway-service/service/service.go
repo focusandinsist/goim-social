@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -22,6 +21,7 @@ import (
 	"websocket-server/pkg/auth"
 	"websocket-server/pkg/config"
 	"websocket-server/pkg/database"
+	"websocket-server/pkg/gatewayrouter"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
 )
@@ -202,23 +202,28 @@ func (cm *ConnectionManager) CleanupAll() {
 }
 
 type Service struct {
-	db          *database.MongoDB
-	redis       *redis.RedisClient
-	kafka       *kafka.Producer
-	config      *config.Config          // 配置
-	instanceID  string                  // Connect服务实例ID
-	logicClient rest.LogicServiceClient // Logic服务客户端
-	connMgr     *ConnectionManager      // 统一连接管理器
+	db           *database.MongoDB
+	redis        *redis.RedisClient
+	kafka        *kafka.Producer
+	config       *config.Config                  // 配置
+	instanceID   string                          // Connect服务实例ID
+	logicClient  rest.LogicServiceClient         // Logic服务客户端
+	connMgr      *ConnectionManager              // 统一连接管理器
+	heartbeatMgr *gatewayrouter.HeartbeatManager // 心跳管理器
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
+	instanceID := fmt.Sprintf("im-gateway-%d", time.Now().UnixNano()) // 生成唯一实例ID
+
 	service := &Service{
 		db:         db,
 		redis:      redis,
 		kafka:      kafka,
 		config:     cfg,
-		instanceID: fmt.Sprintf("im-gateway-%d", time.Now().UnixNano()), // 生成唯一实例ID
-		connMgr:    NewConnectionManager(redis, cfg),                    // 初始化连接管理器
+		instanceID: instanceID,
+		connMgr:    NewConnectionManager(redis, cfg), // 初始化连接管理器
+		heartbeatMgr: gatewayrouter.NewHeartbeatManager(redis, instanceID, // 初始化心跳管理器
+			cfg.Connect.Instance.Host, cfg.Connect.Instance.Port),
 	}
 
 	// 初始化Logic服务客户端
@@ -233,10 +238,12 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 
 	// 启动时清理旧的连接数据和过期实例
 	go service.cleanupOnStartup()
-	go service.cleanupExpiredInstances()
 
 	// 启动Redis订阅 connect_forward 频道
 	go service.subscribeConnectForward()
+
+	// 启动Redis订阅 gateway:instanceID:user_message 频道（来自Logic服务的消息）
+	go service.subscribeGatewayUserMessage()
 
 	return service
 }
@@ -296,95 +303,6 @@ func (s *Service) cleanupOnStartup() {
 	log.Printf("启动时清理完成: 清理了 %d 个旧连接", cleanedCount)
 }
 
-// cleanupExpiredInstances 清理过期的服务实例
-func (s *Service) cleanupExpiredInstances() {
-	ctx := context.Background()
-
-	log.Printf("开始清理过期的服务实例...")
-
-	// 获取所有实例ID
-	instanceIDs, err := s.redis.SMembers(ctx, "connect_instances_list")
-	if err != nil {
-		log.Printf("获取实例列表失败: %v", err)
-		return
-	}
-
-	cleanedInstances := 0
-	cleanedConnections := 0
-
-	for _, instanceID := range instanceIDs {
-		instanceKey := fmt.Sprintf("connect_instances:%s", instanceID)
-
-		// 检查实例是否存在
-		exists, err := s.redis.Exists(ctx, instanceKey)
-		if err != nil {
-			log.Printf("检查实例 %s 存在性失败: %v", instanceID, err)
-			continue
-		}
-
-		if exists == 0 {
-			// 实例已过期，从列表中移除
-			if err := s.redis.SRem(ctx, "connect_instances_list", instanceID); err != nil {
-				log.Printf("从实例列表移除 %s 失败: %v", instanceID, err)
-			} else {
-				cleanedInstances++
-				log.Printf("已清理过期实例: %s", instanceID)
-			}
-
-			// 清理该实例的所有连接
-			connectionsCleaned := s.cleanupInstanceConnections(ctx, instanceID)
-			cleanedConnections += connectionsCleaned
-		}
-	}
-
-	log.Printf("过期实例清理完成: 清理了 %d 个过期实例, %d 个孤儿连接", cleanedInstances, cleanedConnections)
-}
-
-// cleanupInstanceConnections 清理指定实例的所有连接
-func (s *Service) cleanupInstanceConnections(ctx context.Context, instanceID string) int {
-	pattern := "conn:*"
-	keys, err := s.redis.Keys(ctx, pattern)
-	if err != nil {
-		log.Printf("查询连接keys失败: %v", err)
-		return 0
-	}
-
-	cleanedCount := 0
-	cleanedUsers := make(map[string]bool)
-
-	for _, key := range keys {
-		// 获取连接信息
-		connInfo, err := s.redis.HGetAll(ctx, key)
-		if err != nil {
-			continue
-		}
-
-		// 检查是否是指定实例的连接
-		if serverID, exists := connInfo["serverID"]; exists && serverID == instanceID {
-			// 删除连接信息
-			if err := s.redis.Del(ctx, key); err == nil {
-				cleanedCount++
-			}
-
-			// 记录需要从在线用户集合中移除的用户
-			if userIDStr, exists := connInfo["userID"]; exists {
-				cleanedUsers[userIDStr] = true
-			}
-		}
-	}
-
-	// 从在线用户集合中移除用户
-	for userID := range cleanedUsers {
-		s.redis.SRem(ctx, "online_users", userID)
-	}
-
-	if cleanedCount > 0 {
-		log.Printf("清理实例 %s 的连接: %d 个连接, %d 个用户下线", instanceID, cleanedCount, len(cleanedUsers))
-	}
-
-	return cleanedCount
-}
-
 // setupGracefulShutdown 设置优雅退出
 func (s *Service) setupGracefulShutdown() {
 	sigChan := make(chan os.Signal, 1)
@@ -403,15 +321,9 @@ func (s *Service) cleanup() {
 
 	log.Printf("开始清理实例资源: %s", s.instanceID)
 
-	// 清理实例注册信息
-	instanceKey := fmt.Sprintf("connect_instances:%s", s.instanceID)
-	if err := s.redis.Del(ctx, instanceKey); err != nil {
-		log.Printf("清理实例信息失败: %v", err)
-	}
-
-	// 从实例列表中移除
-	if err := s.redis.SRem(ctx, "connect_instances_list", s.instanceID); err != nil {
-		log.Printf("从实例列表移除失败: %v", err)
+	// 停止心跳管理器（会自动注销新的ZSET和Hash）
+	if err := s.heartbeatMgr.Stop(ctx); err != nil {
+		log.Printf("停止心跳管理器失败: %v", err)
 	}
 
 	// 2. 清理本实例的所有连接
@@ -464,67 +376,17 @@ func (s *Service) GetInstanceID() string {
 func (s *Service) registerInstance() error {
 	ctx := context.Background()
 
-	// 服务实例信息
-	instanceInfo := map[string]interface{}{
-		"instance_id": s.instanceID,
-		"host":        s.config.Connect.Instance.Host,
-		"port":        s.config.Connect.Instance.Port,
-		"status":      "active",
-		"started_at":  time.Now().Unix(),
-		"last_ping":   time.Now().Unix(),
-	}
-
-	// 注册到Redis Hash
-	key := fmt.Sprintf("connect_instances:%s", s.instanceID)
-	if err := s.redis.HMSet(ctx, key, instanceInfo); err != nil {
-		return fmt.Errorf("注册实例信息失败: %v", err)
-	}
-
-	// 设置过期时间（心跳机制）
-	expireTime := time.Duration(s.config.Connect.Heartbeat.Timeout) * time.Second
-	if err := s.redis.Expire(ctx, key, expireTime); err != nil {
-		log.Printf("设置实例过期时间失败: %v", err)
-	}
-
-	// 添加到实例列表
-	if err := s.redis.SAdd(ctx, "connect_instances_list", s.instanceID); err != nil {
-		log.Printf("添加到实例列表失败: %v", err)
+	// 启动心跳管理器（会自动注册到新的ZSET和Hash）
+	if err := s.heartbeatMgr.Start(ctx); err != nil {
+		return fmt.Errorf("启动心跳管理器失败: %v", err)
 	}
 
 	log.Printf("Connect服务实例已注册: %s", s.instanceID)
-
-	// 启动心跳
-	go s.startHeartbeat()
 
 	// 启动优雅退出监听
 	go s.setupGracefulShutdown()
 
 	return nil
-}
-
-// startHeartbeat 启动心跳机制
-func (s *Service) startHeartbeat() {
-	interval := time.Duration(s.config.Connect.Heartbeat.Interval) * time.Second
-	timeout := time.Duration(s.config.Connect.Heartbeat.Timeout) * time.Second
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		ctx := context.Background()
-		key := fmt.Sprintf("connect_instances:%s", s.instanceID)
-
-		// 更新心跳时间
-		if err := s.redis.HSet(ctx, key, "last_ping", time.Now().Unix()); err != nil {
-			log.Printf("更新心跳失败: %v", err)
-			continue
-		}
-
-		// 续期
-		if err := s.redis.Expire(ctx, key, timeout); err != nil {
-			log.Printf("续期失败: %v", err)
-		}
-	}
 }
 
 // Connect 处理连接，写入 redis hash，并维护在线用户 set
@@ -722,43 +584,38 @@ func (s *Service) subscribeConnectForward() {
 	ch := pubsub.Channel()
 	for msg := range ch {
 		log.Printf("收到推送消息: %s", msg.Payload)
-		// 解析消息
-		var pushMsg map[string]interface{}
-		if err := json.Unmarshal([]byte(msg.Payload), &pushMsg); err != nil {
-			log.Printf("推送消息解析失败: %v", err)
-			continue
-		}
-		// 获取目标用户ID和消息内容
-		targetUser, ok := pushMsg["target_user"].(float64)
-		if !ok {
-			log.Printf("推送消息缺少 target_user 字段")
-			continue
-		}
-		userID := int64(targetUser)
 
-		// 直接从Redis消息中反序列化Protobuf二进制数据
-		messageBytes, ok := pushMsg["message_bytes"].(string)
-		if !ok {
-			log.Printf("推送消息格式错误，缺少message_bytes字段: %v", pushMsg)
-			continue
-		}
-
-		// 将base64编码的字节数据解码
-		msgData, err := base64.StdEncoding.DecodeString(messageBytes)
+		// 解码base64数据
+		payloadBytes, err := base64.StdEncoding.DecodeString(msg.Payload)
 		if err != nil {
-			log.Printf("解码消息字节数据失败: %v", err)
+			log.Printf("推送消息base64解码失败: %v", err)
 			continue
 		}
 
-		// 反序列化Protobuf消息
-		var wsMsg rest.WSMessage
-		if err := proto.Unmarshal(msgData, &wsMsg); err != nil {
-			log.Printf("反序列化Protobuf消息失败: %v", err)
+		// 反序列化protobuf消息
+		var gatewayMsg rest.GatewayMessage
+		if err := proto.Unmarshal(payloadBytes, &gatewayMsg); err != nil {
+			log.Printf("推送protobuf消息解析失败: %v", err)
 			continue
 		}
+
+		// 检查消息类型
+		if gatewayMsg.Type != "push_message" {
+			log.Printf("未知的推送消息类型: %v", gatewayMsg.Type)
+			continue
+		}
+
+		// 检查消息内容
+		if gatewayMsg.Message == nil {
+			log.Printf("推送消息缺少message字段")
+			continue
+		}
+
+		userID := gatewayMsg.TargetUser
+
 		// 推送到本地WebSocket连接
 		if conn, exists := s.connMgr.GetConnection(userID); exists {
-			msgBytes, err := proto.Marshal(&wsMsg)
+			msgBytes, err := proto.Marshal(gatewayMsg.Message)
 			if err != nil {
 				log.Printf("WebSocket推送protobuf序列化失败: %v", err)
 				continue
@@ -766,10 +623,82 @@ func (s *Service) subscribeConnectForward() {
 			if err := conn.WriteMessage(websocket.BinaryMessage, msgBytes); err != nil {
 				log.Printf("WebSocket推送失败: %v", err)
 			} else {
-				log.Printf("WebSocket推送成功: UserID=%d, MessageID=%d", userID, wsMsg.MessageId)
+				log.Printf("WebSocket推送成功: UserID=%d, MessageID=%d", userID, gatewayMsg.Message.MessageId)
 			}
 		} else {
 			log.Printf("用户 %d 不在本地连接，无法推送", userID)
 		}
 	}
+}
+
+// subscribeGatewayUserMessage 订阅来自Logic服务的用户消息
+func (s *Service) subscribeGatewayUserMessage() {
+	ctx := context.Background()
+	channel := fmt.Sprintf("gateway:%s:user_message", s.instanceID)
+	log.Printf("订阅Logic服务消息频道: %s", channel)
+
+	pubsub := s.redis.Subscribe(ctx, channel)
+	ch := pubsub.Channel()
+
+	for msg := range ch {
+		log.Printf("收到Logic服务消息: %s", msg.Payload)
+
+		// 解码base64数据
+		payloadBytes, err := base64.StdEncoding.DecodeString(msg.Payload)
+		if err != nil {
+			log.Printf("Logic服务消息base64解码失败: %v", err)
+			continue
+		}
+
+		// 反序列化protobuf消息
+		var gatewayMsg rest.GatewayMessage
+		if err := proto.Unmarshal(payloadBytes, &gatewayMsg); err != nil {
+			log.Printf("Logic服务protobuf消息解析失败: %v", err)
+			continue
+		}
+
+		// 检查消息类型
+		if gatewayMsg.Type != "user_message" {
+			log.Printf("未知的Logic服务消息类型: %v", gatewayMsg.Type)
+			continue
+		}
+
+		// 检查消息内容
+		if gatewayMsg.Message == nil {
+			log.Printf("Logic服务消息缺少message字段")
+			continue
+		}
+
+		// 转发消息到目标用户
+		if err := s.forwardMessageToUser(ctx, gatewayMsg.Message); err != nil {
+			log.Printf("转发消息到用户失败: %v", err)
+		}
+	}
+}
+
+// forwardMessageToUser 转发消息到指定用户的连接
+func (s *Service) forwardMessageToUser(ctx context.Context, wsMsg *rest.WSMessage) error {
+	userID := wsMsg.To
+
+	// 获取用户在本实例的WebSocket连接
+	conn, exists := s.connMgr.GetConnection(userID)
+	if !exists {
+		log.Printf("用户 %d 在本实例没有活跃连接", userID)
+		return nil
+	}
+
+	// 序列化消息
+	messageBytes, err := proto.Marshal(wsMsg)
+	if err != nil {
+		return fmt.Errorf("序列化消息失败: %v", err)
+	}
+
+	// 发送消息到WebSocket连接
+	if err := conn.WriteMessage(websocket.TextMessage, messageBytes); err != nil {
+		log.Printf("向用户 %d 发送消息失败: %v", userID, err)
+		return err
+	}
+
+	log.Printf("消息已成功发送到用户 %d", userID)
+	return nil
 }

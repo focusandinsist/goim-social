@@ -3,7 +3,6 @@ package consumer
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -66,10 +65,10 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 		return nil
 	}
 
-	// 解析消息事件
-	var event MessageEvent
-	if err := json.Unmarshal(msg.Value, &event); err != nil {
-		log.Printf("解析消息事件失败: %v, 原始消息: %s", err, string(msg.Value))
+	// 解析protobuf消息事件
+	var event rest.MessageEvent
+	if err := proto.Unmarshal(msg.Value, &event); err != nil {
+		log.Printf("解析protobuf消息事件失败: %v, 原始消息: %s", err, string(msg.Value))
 		return nil // 返回nil避免重试
 	}
 
@@ -122,8 +121,8 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	if msg.To > 0 {
 		// 单聊消息：推送给目标用户
 		log.Printf("推送单聊消息: From=%d, To=%d, Content=%s, MessageID=%d", msg.From, msg.To, msg.Content, msg.MessageId)
-		if err := p.pushToConnectService(msg.To, msg); err != nil {
-			log.Printf("推送消息到Connect服务失败: %v", err)
+		if err := p.pushToGatewayService(msg.To, msg); err != nil {
+			log.Printf("推送消息到Gateway服务失败: %v", err)
 		}
 	} else if msg.GroupId > 0 {
 		// 群聊消息：推送给所有群成员（已在Logic服务中处理扇出）
@@ -132,8 +131,8 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 		// 这里接收到的应该是针对特定用户的消息，直接推送即可
 		// 如果To字段有值，说明是扇出后的单个用户消息
 		if msg.To > 0 {
-			if err := p.pushToConnectService(msg.To, msg); err != nil {
-				log.Printf("推送群聊消息到Connect服务失败: %v", err)
+			if err := p.pushToGatewayService(msg.To, msg); err != nil {
+				log.Printf("推送群聊消息到Gateway服务失败: %v", err)
 			}
 		} else {
 			log.Printf("群聊消息缺少目标用户ID，跳过推送: GroupID=%d, MessageID=%d", msg.GroupId, msg.MessageId)
@@ -145,8 +144,8 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	return nil
 }
 
-// pushToConnectService 通过Redis发布消息到Connect服务
-func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WSMessage) error {
+// pushToGatewayService 通过Redis发布消息到Gateway服务
+func (p *PushConsumer) pushToGatewayService(targetUserID int64, message *rest.WSMessage) error {
 	ctx := context.Background()
 
 	// 查找用户所在的Connect实例
@@ -172,31 +171,26 @@ func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WS
 		return fmt.Errorf("连接信息中缺少serverID")
 	}
 
-	// 序列化Protobuf消息为二进制数据，避免JSON精度丢失
-	messageBytes, err := proto.Marshal(message)
+	// 构造protobuf推送消息
+	pushMsg := &rest.GatewayMessage{
+		Type:       "push_message",
+		Message:    message,
+		TargetUser: targetUserID,
+		Timestamp:  time.Now().Unix(),
+	}
+
+	// 序列化为protobuf二进制数据
+	msgBytes, err := proto.Marshal(pushMsg)
 	if err != nil {
-		return fmt.Errorf("序列化Protobuf消息失败: %v", err)
+		return fmt.Errorf("序列化protobuf推送消息失败: %v", err)
 	}
 
-	// 使用base64编码二进制数据，便于在JSON中传输
-	messageBase64 := base64.StdEncoding.EncodeToString(messageBytes)
+	// 使用base64编码便于Redis传输
+	msgBase64 := base64.StdEncoding.EncodeToString(msgBytes)
 
-	pushMsg := map[string]interface{}{
-		"type":          "push_message",
-		"target_user":   targetUserID,
-		"message_bytes": messageBase64, // 使用Protobuf二进制数据
-		"timestamp":     time.Now().Unix(),
-	}
-
-	// 序列化消息
-	msgBytes, err := json.Marshal(pushMsg)
-	if err != nil {
-		return fmt.Errorf("序列化推送消息失败: %v", err)
-	}
-
-	// 发布到Connect服务的频道
+	// 发布到Gateway服务的频道
 	channel := fmt.Sprintf("connect_forward:%s", serverID)
-	if err := p.redis.Publish(ctx, channel, string(msgBytes)); err != nil {
+	if err := p.redis.Publish(ctx, channel, msgBase64); err != nil {
 		return fmt.Errorf("发布推送消息失败: %v", err)
 	}
 
