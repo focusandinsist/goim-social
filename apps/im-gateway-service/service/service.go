@@ -243,6 +243,9 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 	// 启动Redis订阅 connect_forward 频道
 	go service.subscribeConnectForward()
 
+	// 启动Redis订阅 gateway:instanceID:user_message 频道（来自Logic服务的消息）
+	go service.subscribeGatewayUserMessage()
+
 	return service
 }
 
@@ -632,4 +635,84 @@ func (s *Service) subscribeConnectForward() {
 			log.Printf("用户 %d 不在本地连接，无法推送", userID)
 		}
 	}
+}
+
+// subscribeGatewayUserMessage 订阅来自Logic服务的用户消息
+func (s *Service) subscribeGatewayUserMessage() {
+	ctx := context.Background()
+	channel := fmt.Sprintf("gateway:%s:user_message", s.instanceID)
+	log.Printf("订阅Logic服务消息频道: %s", channel)
+
+	pubsub := s.redis.Subscribe(ctx, channel)
+	ch := pubsub.Channel()
+
+	for msg := range ch {
+		log.Printf("收到Logic服务消息: %s", msg.Payload)
+
+		// 解析消息
+		var messageData map[string]interface{}
+		if err := json.Unmarshal([]byte(msg.Payload), &messageData); err != nil {
+			log.Printf("Logic服务消息解析失败: %v", err)
+			continue
+		}
+
+		// 检查消息类型
+		msgType, ok := messageData["type"].(string)
+		if !ok || msgType != "user_message" {
+			log.Printf("未知的Logic服务消息类型: %v", msgType)
+			continue
+		}
+
+		// 提取消息内容
+		messageObj, ok := messageData["message"]
+		if !ok {
+			log.Printf("Logic服务消息缺少message字段")
+			continue
+		}
+
+		// 将消息转换为WSMessage
+		messageBytes, err := json.Marshal(messageObj)
+		if err != nil {
+			log.Printf("序列化消息失败: %v", err)
+			continue
+		}
+
+		var wsMsg rest.WSMessage
+		if err := json.Unmarshal(messageBytes, &wsMsg); err != nil {
+			log.Printf("反序列化WSMessage失败: %v", err)
+			continue
+		}
+
+		// 转发消息到目标用户
+		if err := s.forwardMessageToUser(ctx, &wsMsg); err != nil {
+			log.Printf("转发消息到用户失败: %v", err)
+		}
+	}
+}
+
+// forwardMessageToUser 转发消息到指定用户的连接
+func (s *Service) forwardMessageToUser(ctx context.Context, wsMsg *rest.WSMessage) error {
+	userID := wsMsg.To
+
+	// 获取用户在本实例的WebSocket连接
+	conn, exists := s.connMgr.GetConnection(userID)
+	if !exists {
+		log.Printf("用户 %d 在本实例没有活跃连接", userID)
+		return nil
+	}
+
+	// 序列化消息
+	messageBytes, err := json.Marshal(wsMsg)
+	if err != nil {
+		return fmt.Errorf("序列化消息失败: %v", err)
+	}
+
+	// 发送消息到WebSocket连接
+	if err := conn.WriteMessage(websocket.TextMessage, messageBytes); err != nil {
+		log.Printf("向用户 %d 发送消息失败: %v", userID, err)
+		return err
+	}
+
+	log.Printf("消息已成功发送到用户 %d", userID)
+	return nil
 }
