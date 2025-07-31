@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -585,43 +584,38 @@ func (s *Service) subscribeConnectForward() {
 	ch := pubsub.Channel()
 	for msg := range ch {
 		log.Printf("收到推送消息: %s", msg.Payload)
-		// 解析消息
-		var pushMsg map[string]interface{}
-		if err := json.Unmarshal([]byte(msg.Payload), &pushMsg); err != nil {
-			log.Printf("推送消息解析失败: %v", err)
-			continue
-		}
-		// 获取目标用户ID和消息内容
-		targetUser, ok := pushMsg["target_user"].(float64)
-		if !ok {
-			log.Printf("推送消息缺少 target_user 字段")
-			continue
-		}
-		userID := int64(targetUser)
 
-		// 直接从Redis消息中反序列化Protobuf二进制数据
-		messageBytes, ok := pushMsg["message_bytes"].(string)
-		if !ok {
-			log.Printf("推送消息格式错误，缺少message_bytes字段: %v", pushMsg)
-			continue
-		}
-
-		// 将base64编码的字节数据解码
-		msgData, err := base64.StdEncoding.DecodeString(messageBytes)
+		// 解码base64数据
+		payloadBytes, err := base64.StdEncoding.DecodeString(msg.Payload)
 		if err != nil {
-			log.Printf("解码消息字节数据失败: %v", err)
+			log.Printf("推送消息base64解码失败: %v", err)
 			continue
 		}
 
-		// 反序列化Protobuf消息
-		var wsMsg rest.WSMessage
-		if err := proto.Unmarshal(msgData, &wsMsg); err != nil {
-			log.Printf("反序列化Protobuf消息失败: %v", err)
+		// 反序列化protobuf消息
+		var gatewayMsg rest.GatewayMessage
+		if err := proto.Unmarshal(payloadBytes, &gatewayMsg); err != nil {
+			log.Printf("推送protobuf消息解析失败: %v", err)
 			continue
 		}
+
+		// 检查消息类型
+		if gatewayMsg.Type != "push_message" {
+			log.Printf("未知的推送消息类型: %v", gatewayMsg.Type)
+			continue
+		}
+
+		// 检查消息内容
+		if gatewayMsg.Message == nil {
+			log.Printf("推送消息缺少message字段")
+			continue
+		}
+
+		userID := gatewayMsg.TargetUser
+
 		// 推送到本地WebSocket连接
 		if conn, exists := s.connMgr.GetConnection(userID); exists {
-			msgBytes, err := proto.Marshal(&wsMsg)
+			msgBytes, err := proto.Marshal(gatewayMsg.Message)
 			if err != nil {
 				log.Printf("WebSocket推送protobuf序列化失败: %v", err)
 				continue
@@ -629,7 +623,7 @@ func (s *Service) subscribeConnectForward() {
 			if err := conn.WriteMessage(websocket.BinaryMessage, msgBytes); err != nil {
 				log.Printf("WebSocket推送失败: %v", err)
 			} else {
-				log.Printf("WebSocket推送成功: UserID=%d, MessageID=%d", userID, wsMsg.MessageId)
+				log.Printf("WebSocket推送成功: UserID=%d, MessageID=%d", userID, gatewayMsg.Message.MessageId)
 			}
 		} else {
 			log.Printf("用户 %d 不在本地连接，无法推送", userID)
@@ -649,42 +643,34 @@ func (s *Service) subscribeGatewayUserMessage() {
 	for msg := range ch {
 		log.Printf("收到Logic服务消息: %s", msg.Payload)
 
-		// 解析消息
-		var messageData map[string]interface{}
-		if err := json.Unmarshal([]byte(msg.Payload), &messageData); err != nil {
-			log.Printf("Logic服务消息解析失败: %v", err)
+		// 解码base64数据
+		payloadBytes, err := base64.StdEncoding.DecodeString(msg.Payload)
+		if err != nil {
+			log.Printf("Logic服务消息base64解码失败: %v", err)
+			continue
+		}
+
+		// 反序列化protobuf消息
+		var gatewayMsg rest.GatewayMessage
+		if err := proto.Unmarshal(payloadBytes, &gatewayMsg); err != nil {
+			log.Printf("Logic服务protobuf消息解析失败: %v", err)
 			continue
 		}
 
 		// 检查消息类型
-		msgType, ok := messageData["type"].(string)
-		if !ok || msgType != "user_message" {
-			log.Printf("未知的Logic服务消息类型: %v", msgType)
+		if gatewayMsg.Type != "user_message" {
+			log.Printf("未知的Logic服务消息类型: %v", gatewayMsg.Type)
 			continue
 		}
 
-		// 提取消息内容
-		messageObj, ok := messageData["message"]
-		if !ok {
+		// 检查消息内容
+		if gatewayMsg.Message == nil {
 			log.Printf("Logic服务消息缺少message字段")
 			continue
 		}
 
-		// 将消息转换为WSMessage
-		messageBytes, err := json.Marshal(messageObj)
-		if err != nil {
-			log.Printf("序列化消息失败: %v", err)
-			continue
-		}
-
-		var wsMsg rest.WSMessage
-		if err := json.Unmarshal(messageBytes, &wsMsg); err != nil {
-			log.Printf("反序列化WSMessage失败: %v", err)
-			continue
-		}
-
 		// 转发消息到目标用户
-		if err := s.forwardMessageToUser(ctx, &wsMsg); err != nil {
+		if err := s.forwardMessageToUser(ctx, gatewayMsg.Message); err != nil {
 			log.Printf("转发消息到用户失败: %v", err)
 		}
 	}

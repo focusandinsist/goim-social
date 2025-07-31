@@ -2,13 +2,13 @@ package consumer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/IBM/sarama"
 	"go.mongodb.org/mongo-driver/bson"
+	"google.golang.org/protobuf/proto"
 
 	"websocket-server/api/rest"
 	"websocket-server/apps/message-service/model"
@@ -24,12 +24,7 @@ type StorageConsumer struct {
 	redis    *redis.RedisClient
 }
 
-// MessageEvent Kafka消息事件结构
-type MessageEvent struct {
-	Type      string          `json:"type"`
-	Message   *rest.WSMessage `json:"message"`
-	Timestamp int64           `json:"timestamp"`
-}
+// 使用protobuf的MessageEvent，不再需要本地结构
 
 // NewStorageConsumer 创建存储消费者
 func NewStorageConsumer(db *database.MongoDB, redis *redis.RedisClient) *StorageConsumer {
@@ -76,10 +71,10 @@ func (s *StorageConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 		return nil
 	}
 
-	// 解析消息事件
-	var event MessageEvent
-	if err := json.Unmarshal(msg.Value, &event); err != nil {
-		log.Printf("解析消息事件失败: %v, 原始消息: %s", err, string(msg.Value))
+	// 解析protobuf消息事件
+	var event rest.MessageEvent
+	if err := proto.Unmarshal(msg.Value, &event); err != nil {
+		log.Printf("解析protobuf消息事件失败: %v, 原始消息: %s", err, string(msg.Value))
 		return nil // 返回nil避免重试
 	}
 

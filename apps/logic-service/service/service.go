@@ -2,10 +2,11 @@ package service
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -265,24 +266,29 @@ func (s *Service) forwardMessageToGateway(ctx context.Context, gateway *gatewayr
 	// 通过Redis发布消息到特定网关的频道
 	channel := fmt.Sprintf("gateway:%s:user_message", gateway.ID)
 
-	// 构造消息负载
-	messagePayload := map[string]interface{}{
-		"type":    "user_message",
-		"message": msg,
+	// 构造protobuf消息负载
+	gatewayMsg := &rest.GatewayMessage{
+		Type:       "user_message",
+		Message:    msg,
+		TargetUser: msg.To,
+		Timestamp:  time.Now().Unix(),
 	}
 
-	// 序列化为JSON字符串
-	payloadBytes, err := json.Marshal(messagePayload)
+	// 序列化为protobuf二进制数据
+	payloadBytes, err := proto.Marshal(gatewayMsg)
 	if err != nil {
-		s.logger.Error(ctx, "序列化消息负载失败",
+		s.logger.Error(ctx, "序列化protobuf消息失败",
 			logger.F("gatewayID", gateway.ID),
 			logger.F("userID", msg.To),
 			logger.F("error", err.Error()))
 		return err
 	}
 
+	// 使用base64编码便于Redis传输
+	payloadBase64 := base64.StdEncoding.EncodeToString(payloadBytes)
+
 	// 发布到Redis频道
-	err = s.redis.Publish(ctx, channel, string(payloadBytes))
+	err = s.redis.Publish(ctx, channel, payloadBase64)
 	if err != nil {
 		s.logger.Error(ctx, "发送消息到网关失败",
 			logger.F("gatewayID", gateway.ID),
@@ -305,10 +311,11 @@ func (s *Service) publishToKafkaFallback(ctx context.Context, msg *rest.WSMessag
 		logger.F("userID", msg.To),
 		logger.F("messageID", msg.MessageId))
 
-	// 构造消息事件
-	messageEvent := map[string]interface{}{
-		"type":    "new_message",
-		"message": msg,
+	// 构造protobuf消息事件
+	messageEvent := &rest.MessageEvent{
+		Type:      "new_message",
+		Message:   msg,
+		Timestamp: time.Now().Unix(),
 	}
 
 	// 发布到下行消息队列
@@ -418,7 +425,6 @@ func (s *Service) HandleMessageAck(ctx context.Context, userID, messageID int64,
 		logger.F("userID", userID),
 		logger.F("messageID", messageID))
 
-	time.Sleep(1 * time.Second) // TEMP TEST: 看看ack失败是不是因为标记ack先于msg落盘的原因
 	resp, err := s.messageClient.MarkMessagesAsRead(ctx, markReq)
 	if err != nil {
 		s.logger.Error(ctx, "调用Message服务标记已读失败",

@@ -3,7 +3,6 @@ package consumer
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -66,10 +65,10 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 		return nil
 	}
 
-	// 解析消息事件
-	var event MessageEvent
-	if err := json.Unmarshal(msg.Value, &event); err != nil {
-		log.Printf("解析消息事件失败: %v, 原始消息: %s", err, string(msg.Value))
+	// 解析protobuf消息事件
+	var event rest.MessageEvent
+	if err := proto.Unmarshal(msg.Value, &event); err != nil {
+		log.Printf("解析protobuf消息事件失败: %v, 原始消息: %s", err, string(msg.Value))
 		return nil // 返回nil避免重试
 	}
 
@@ -172,31 +171,26 @@ func (p *PushConsumer) pushToGatewayService(targetUserID int64, message *rest.WS
 		return fmt.Errorf("连接信息中缺少serverID")
 	}
 
-	// 序列化Protobuf消息为二进制数据，避免JSON精度丢失
-	messageBytes, err := proto.Marshal(message)
+	// 构造protobuf推送消息
+	pushMsg := &rest.GatewayMessage{
+		Type:       "push_message",
+		Message:    message,
+		TargetUser: targetUserID,
+		Timestamp:  time.Now().Unix(),
+	}
+
+	// 序列化为protobuf二进制数据
+	msgBytes, err := proto.Marshal(pushMsg)
 	if err != nil {
-		return fmt.Errorf("序列化Protobuf消息失败: %v", err)
+		return fmt.Errorf("序列化protobuf推送消息失败: %v", err)
 	}
 
-	// 使用base64编码二进制数据，便于在JSON中传输
-	messageBase64 := base64.StdEncoding.EncodeToString(messageBytes)
+	// 使用base64编码便于Redis传输
+	msgBase64 := base64.StdEncoding.EncodeToString(msgBytes)
 
-	pushMsg := map[string]interface{}{
-		"type":          "push_message",
-		"target_user":   targetUserID,
-		"message_bytes": messageBase64, // 使用Protobuf二进制数据
-		"timestamp":     time.Now().Unix(),
-	}
-
-	// 序列化消息
-	msgBytes, err := json.Marshal(pushMsg)
-	if err != nil {
-		return fmt.Errorf("序列化推送消息失败: %v", err)
-	}
-
-	// 发布到Connect服务的频道
+	// 发布到Gateway服务的频道
 	channel := fmt.Sprintf("connect_forward:%s", serverID)
-	if err := p.redis.Publish(ctx, channel, string(msgBytes)); err != nil {
+	if err := p.redis.Publish(ctx, channel, msgBase64); err != nil {
 		return fmt.Errorf("发布推送消息失败: %v", err)
 	}
 
