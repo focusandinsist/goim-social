@@ -21,9 +21,9 @@ import (
 	"websocket-server/pkg/auth"
 	"websocket-server/pkg/config"
 	"websocket-server/pkg/database"
-	"websocket-server/pkg/gatewayrouter"
 	"websocket-server/pkg/kafka"
 	"websocket-server/pkg/redis"
+	"websocket-server/pkg/sessionlocator"
 )
 
 // ConnectionManager 连接管理器，封装本地WebSocket连接和Redis状态
@@ -205,11 +205,11 @@ type Service struct {
 	db           *database.MongoDB
 	redis        *redis.RedisClient
 	kafka        *kafka.Producer
-	config       *config.Config                  // 配置
-	instanceID   string                          // Connect服务实例ID
-	logicClient  rest.LogicServiceClient         // Logic服务客户端
-	connMgr      *ConnectionManager              // 统一连接管理器
-	heartbeatMgr *gatewayrouter.HeartbeatManager // 心跳管理器
+	config       *config.Config                   // 配置
+	instanceID   string                           // Connect服务实例ID
+	logicClient  rest.LogicServiceClient          // Logic服务客户端
+	connMgr      *ConnectionManager               // 统一连接管理器
+	heartbeatMgr *sessionlocator.HeartbeatManager // 心跳管理器
 }
 
 func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
@@ -222,7 +222,7 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		config:     cfg,
 		instanceID: instanceID,
 		connMgr:    NewConnectionManager(redis, cfg), // 初始化连接管理器
-		heartbeatMgr: gatewayrouter.NewHeartbeatManager(redis, instanceID, // 初始化心跳管理器
+		heartbeatMgr: sessionlocator.NewHeartbeatManager(redis, instanceID, // 初始化心跳管理器
 			cfg.Connect.Instance.Host, cfg.Connect.Instance.Port),
 	}
 

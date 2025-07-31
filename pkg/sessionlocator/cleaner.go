@@ -1,4 +1,4 @@
-package gatewayrouter
+package sessionlocator
 
 import (
 	"context"

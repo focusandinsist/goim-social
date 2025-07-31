@@ -1,4 +1,4 @@
-package gatewayrouter
+package sessionlocator
 
 import (
 	"context"
@@ -9,24 +9,24 @@ import (
 	"websocket-server/pkg/redis"
 )
 
-// LogicService 示例Logic服务，展示如何使用网关路由
+// LogicService 示例Logic服务，展示如何使用会话定位器
 type LogicService struct {
-	redis         *redis.RedisClient
-	gatewayRouter *Router
+	redis          *redis.RedisClient
+	sessionLocator *Locator
 }
 
 // NewLogicService 创建Logic服务实例
 func NewLogicService(redis *redis.RedisClient) *LogicService {
 	return &LogicService{
-		redis:         redis,
-		gatewayRouter: NewRouter(redis),
+		redis:          redis,
+		sessionLocator: NewLocator(redis),
 	}
 }
 
 // SendMessageToUser 向用户发送消息的示例
 func (ls *LogicService) SendMessageToUser(ctx context.Context, userID string, message string) error {
 	// 1. 使用一致性哈希找到用户对应的网关实例
-	gateway, err := ls.gatewayRouter.GetGatewayForUser(userID)
+	gateway, err := ls.sessionLocator.GetGatewayForUser(userID)
 	if err != nil {
 		return fmt.Errorf("获取用户网关失败: %v", err)
 	}
@@ -40,7 +40,7 @@ func (ls *LogicService) SendMessageToUser(ctx context.Context, userID string, me
 // SendMessageToRoom 向房间发送消息的示例
 func (ls *LogicService) SendMessageToRoom(ctx context.Context, roomID string, message string) error {
 	// 1. 使用一致性哈希找到房间对应的网关实例
-	gateway, err := ls.gatewayRouter.GetGatewayForRoom(roomID)
+	gateway, err := ls.sessionLocator.GetGatewayForRoom(roomID)
 	if err != nil {
 		return fmt.Errorf("获取房间网关失败: %v", err)
 	}
@@ -53,22 +53,22 @@ func (ls *LogicService) SendMessageToRoom(ctx context.Context, roomID string, me
 
 // GetUserGateway 获取用户所在的网关实例
 func (ls *LogicService) GetUserGateway(userID string) (*GatewayInstance, error) {
-	return ls.gatewayRouter.GetGatewayForUser(userID)
+	return ls.sessionLocator.GetGatewayForUser(userID)
 }
 
 // GetRoomGateway 获取房间所在的网关实例
 func (ls *LogicService) GetRoomGateway(roomID string) (*GatewayInstance, error) {
-	return ls.gatewayRouter.GetGatewayForRoom(roomID)
+	return ls.sessionLocator.GetGatewayForRoom(roomID)
 }
 
 // GetGatewayStats 获取网关路由统计信息
 func (ls *LogicService) GetGatewayStats() map[string]interface{} {
-	return ls.gatewayRouter.GetStats()
+	return ls.sessionLocator.GetStats()
 }
 
 // GetAllActiveGateways 获取所有活跃网关
 func (ls *LogicService) GetAllActiveGateways() []*GatewayInstance {
-	return ls.gatewayRouter.GetAllActiveGateways()
+	return ls.sessionLocator.GetAllActiveGateways()
 }
 
 // forwardMessageToGateway 向网关转发用户消息（示例实现）
@@ -125,8 +125,8 @@ func (ls *LogicService) MonitorGatewayChanges() {
 
 // Stop 停止Logic服务
 func (ls *LogicService) Stop() {
-	if ls.gatewayRouter != nil {
-		ls.gatewayRouter.Stop()
+	if ls.sessionLocator != nil {
+		ls.sessionLocator.Stop()
 	}
 }
 
@@ -171,8 +171,8 @@ func ExampleUsage() {
 
 // TestConsistentRouting 测试一致性路由
 func TestConsistentRouting(redisClient *redis.RedisClient) {
-	router := NewRouter(redisClient)
-	defer router.Stop()
+	locator := NewLocator(redisClient)
+	defer locator.Stop()
 
 	// 测试多个用户的路由一致性
 	testUsers := []string{"user1", "user2", "user3", "user4", "user5"}
@@ -181,7 +181,7 @@ func TestConsistentRouting(redisClient *redis.RedisClient) {
 	for i := 0; i < 3; i++ { // 测试3轮
 		log.Printf("第 %d 轮测试:", i+1)
 		for _, userID := range testUsers {
-			if gateway, err := router.GetGatewayForUser(userID); err != nil {
+			if gateway, err := locator.GetGatewayForUser(userID); err != nil {
 				log.Printf("  用户 %s: 路由失败 - %v", userID, err)
 			} else {
 				log.Printf("  用户 %s: 网关 %s", userID, gateway.ID)
