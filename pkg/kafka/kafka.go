@@ -161,7 +161,8 @@ func (p *Producer) PublishMessage(topic string, data interface{}) error {
 		return p.SendMessage(topic, nil, protoData)
 	}
 
-	// 兼容性：如果不是protobuf消息，仍使用json（主要用于非消息数据）
+	// TEMP兼容性：如果不是protobuf消息，仍使用json（主要用于非消息数据）
+	// TODO 服务端全部protobuf，尤其是kafka这里
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("JSON序列化失败: %v", err)
