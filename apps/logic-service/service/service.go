@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -270,8 +271,18 @@ func (s *Service) forwardMessageToGateway(ctx context.Context, gateway *gatewayr
 		"message": msg,
 	}
 
+	// 序列化为JSON字符串
+	payloadBytes, err := json.Marshal(messagePayload)
+	if err != nil {
+		s.logger.Error(ctx, "序列化消息负载失败",
+			logger.F("gatewayID", gateway.ID),
+			logger.F("userID", msg.To),
+			logger.F("error", err.Error()))
+		return err
+	}
+
 	// 发布到Redis频道
-	err := s.redis.Publish(ctx, channel, messagePayload)
+	err = s.redis.Publish(ctx, channel, string(payloadBytes))
 	if err != nil {
 		s.logger.Error(ctx, "发送消息到网关失败",
 			logger.F("gatewayID", gateway.ID),
@@ -407,6 +418,7 @@ func (s *Service) HandleMessageAck(ctx context.Context, userID, messageID int64,
 		logger.F("userID", userID),
 		logger.F("messageID", messageID))
 
+	time.Sleep(1 * time.Second) // TEMP TEST: 看看ack失败是不是因为标记ack先于msg落盘的原因
 	resp, err := s.messageClient.MarkMessagesAsRead(ctx, markReq)
 	if err != nil {
 		s.logger.Error(ctx, "调用Message服务标记已读失败",

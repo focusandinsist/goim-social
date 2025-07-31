@@ -702,7 +702,7 @@ func (s *Service) forwardMessageToUser(ctx context.Context, wsMsg *rest.WSMessag
 	}
 
 	// 序列化消息
-	messageBytes, err := json.Marshal(wsMsg)
+	messageBytes, err := proto.Marshal(wsMsg)
 	if err != nil {
 		return fmt.Errorf("序列化消息失败: %v", err)
 	}

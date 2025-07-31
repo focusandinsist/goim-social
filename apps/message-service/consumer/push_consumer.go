@@ -122,8 +122,8 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	if msg.To > 0 {
 		// 单聊消息：推送给目标用户
 		log.Printf("推送单聊消息: From=%d, To=%d, Content=%s, MessageID=%d", msg.From, msg.To, msg.Content, msg.MessageId)
-		if err := p.pushToConnectService(msg.To, msg); err != nil {
-			log.Printf("推送消息到Connect服务失败: %v", err)
+		if err := p.pushToGatewayService(msg.To, msg); err != nil {
+			log.Printf("推送消息到Gateway服务失败: %v", err)
 		}
 	} else if msg.GroupId > 0 {
 		// 群聊消息：推送给所有群成员（已在Logic服务中处理扇出）
@@ -132,8 +132,8 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 		// 这里接收到的应该是针对特定用户的消息，直接推送即可
 		// 如果To字段有值，说明是扇出后的单个用户消息
 		if msg.To > 0 {
-			if err := p.pushToConnectService(msg.To, msg); err != nil {
-				log.Printf("推送群聊消息到Connect服务失败: %v", err)
+			if err := p.pushToGatewayService(msg.To, msg); err != nil {
+				log.Printf("推送群聊消息到Gateway服务失败: %v", err)
 			}
 		} else {
 			log.Printf("群聊消息缺少目标用户ID，跳过推送: GroupID=%d, MessageID=%d", msg.GroupId, msg.MessageId)
@@ -145,8 +145,8 @@ func (p *PushConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	return nil
 }
 
-// pushToConnectService 通过Redis发布消息到Connect服务
-func (p *PushConsumer) pushToConnectService(targetUserID int64, message *rest.WSMessage) error {
+// pushToGatewayService 通过Redis发布消息到Gateway服务
+func (p *PushConsumer) pushToGatewayService(targetUserID int64, message *rest.WSMessage) error {
 	ctx := context.Background()
 
 	// 查找用户所在的Connect实例
