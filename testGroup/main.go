@@ -704,7 +704,12 @@ func (c *GroupChatClient) generateChatHTML(member GroupMember) string {
     </div>
 </body>
 </html>
-`, member.Nickname, member.UserID, c.groupInfo.Name, c.groupInfo.ID, member.Nickname, time.Now().Format("15:04:05"))
+`, // --- CORRECTED ARGUMENTS START HERE ---
+		member.Nickname, member.UserID, // For <title>
+		member.Nickname, member.UserID, // For <h2>
+		c.groupInfo.Name, c.groupInfo.ID, // For <p>
+		member.Nickname,               // For system message
+		time.Now().Format("15:04:05")) // For timestamp
 }
 
 // generateChatHTMLWithMessages generates HTML content with actual messages
@@ -828,7 +833,12 @@ func (c *GroupChatClient) generateChatHTMLWithMessages(member GroupMember, messa
     </div>
 </body>
 </html>
-`, member.Nickname, member.UserID, c.groupInfo.Name, c.groupInfo.ID, len(messages), messagesHTML)
+`, // --- CORRECTED ARGUMENTS START HERE ---
+		member.Nickname, member.UserID, // For <title>
+		member.Nickname, member.UserID, // For <h2>
+		c.groupInfo.Name, c.groupInfo.ID, // For <p>
+		len(messages), // For message count in <p>
+		messagesHTML)  // For the messages div
 }
 
 // updateAllChatWindows updates all chat windows by regenerating HTML files
