@@ -10,13 +10,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/logic-service/model"
-	"websocket-server/pkg/gatewayrouter"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/redis"
-	"websocket-server/pkg/snowflake"
+	"goim-social/api/rest"
+	"goim-social/apps/logic-service/model"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/redis"
+	"goim-social/pkg/sessionlocator"
+	"goim-social/pkg/snowflake"
 )
 
 // Service Logic服务 - 业务编排层
@@ -24,9 +24,9 @@ type Service struct {
 	redis          *redis.RedisClient
 	kafka          *kafka.Producer
 	logger         logger.Logger
-	instanceID     string                 // 服务实例ID
-	gatewayRouter  *gatewayrouter.Router  // 网关路由器
-	gatewayCleaner *gatewayrouter.Cleaner // 网关清理器（领导者选举）
+	instanceID     string                  // 服务实例ID
+	sessionLocator *sessionlocator.Locator // 会话定位器
+	gatewayCleaner *sessionlocator.Cleaner // 网关清理器（领导者选举）
 	groupClient    rest.GroupServiceClient
 	messageClient  rest.MessageServiceClient
 	friendClient   rest.FriendEventServiceClient
@@ -66,18 +66,18 @@ func NewService(redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logg
 	// 生成服务实例ID
 	instanceID := fmt.Sprintf("logic-service-%d", time.Now().UnixNano())
 
-	// 初始化网关路由器
-	gatewayRouter := gatewayrouter.NewRouter(redis)
+	// 初始化会话定位器
+	sessionLocator := sessionlocator.NewLocator(redis)
 
 	// 初始化网关清理器（领导者选举）
-	gatewayCleaner := gatewayrouter.NewCleaner(redis, instanceID)
+	gatewayCleaner := sessionlocator.NewCleaner(redis, instanceID)
 
 	service := &Service{
 		redis:          redis,
 		kafka:          kafka,
 		logger:         log,
 		instanceID:     instanceID,
-		gatewayRouter:  gatewayRouter,
+		sessionLocator: sessionLocator,
 		gatewayCleaner: gatewayCleaner,
 		groupClient:    groupClient,
 		messageClient:  messageClient,
@@ -241,9 +241,9 @@ func (s *Service) publishMessageToQueue(ctx context.Context, targetUserID int64,
 		AckId:       msg.AckId,
 	}
 
-	// 使用网关路由器找到用户对应的网关实例
+	// 使用会话定位器找到用户对应的网关实例
 	userIDStr := fmt.Sprintf("%d", targetUserID)
-	gateway, err := s.gatewayRouter.GetGatewayForUser(userIDStr)
+	gateway, err := s.sessionLocator.GetGatewayForUser(userIDStr)
 	if err != nil {
 		s.logger.Error(ctx, "获取用户网关失败",
 			logger.F("userID", targetUserID),
@@ -262,7 +262,7 @@ func (s *Service) publishMessageToQueue(ctx context.Context, targetUserID int64,
 }
 
 // forwardMessageToGateway 向特定网关转发消息
-func (s *Service) forwardMessageToGateway(ctx context.Context, gateway *gatewayrouter.GatewayInstance, msg *rest.WSMessage) error {
+func (s *Service) forwardMessageToGateway(ctx context.Context, gateway *sessionlocator.GatewayInstance, msg *rest.WSMessage) error {
 	// 通过Redis发布消息到特定网关的频道
 	channel := fmt.Sprintf("gateway:%s:user_message", gateway.ID)
 
@@ -322,20 +322,20 @@ func (s *Service) publishToKafkaFallback(ctx context.Context, msg *rest.WSMessag
 	return s.kafka.PublishMessage("downlink_messages", messageEvent)
 }
 
-// GetGatewayRouterStatus 获取网关路由器状态信息
-func (s *Service) GetGatewayRouterStatus() map[string]interface{} {
-	return s.gatewayRouter.GetStats()
+// GetSessionLocatorStatus 获取会话定位器状态信息
+func (s *Service) GetSessionLocatorStatus() map[string]interface{} {
+	return s.sessionLocator.GetStats()
 }
 
 // GetActiveGateways 获取所有活跃网关实例
-func (s *Service) GetActiveGateways() []*gatewayrouter.GatewayInstance {
-	return s.gatewayRouter.GetAllActiveGateways()
+func (s *Service) GetActiveGateways() []*sessionlocator.GatewayInstance {
+	return s.sessionLocator.GetAllActiveGateways()
 }
 
 // GetUserGateway 获取用户对应的网关实例
-func (s *Service) GetUserGateway(userID int64) (*gatewayrouter.GatewayInstance, error) {
+func (s *Service) GetUserGateway(userID int64) (*sessionlocator.GatewayInstance, error) {
 	userIDStr := fmt.Sprintf("%d", userID)
-	return s.gatewayRouter.GetGatewayForUser(userIDStr)
+	return s.sessionLocator.GetGatewayForUser(userIDStr)
 }
 
 // Cleanup 清理服务资源
@@ -347,9 +347,9 @@ func (s *Service) Cleanup() {
 		s.gatewayCleaner.Stop()
 	}
 
-	// 停止网关路由器
-	if s.gatewayRouter != nil {
-		s.gatewayRouter.Stop()
+	// 停止会话定位器
+	if s.sessionLocator != nil {
+		s.sessionLocator.Stop()
 	}
 
 	s.logger.Info(context.Background(), "Logic服务资源清理完成")

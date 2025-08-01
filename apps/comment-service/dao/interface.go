@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"websocket-server/apps/comment-service/model"
+	"goim-social/apps/comment-service/model"
 )
 
 // CommentDAO 评论数据访问接口

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"websocket-server/apps/friend-service/model"
-	"websocket-server/pkg/database"
+	"goim-social/apps/friend-service/model"
+	"goim-social/pkg/database"
 )
 
 // friendDAO 好友数据访问对象

@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/message-service/service"
+	"goim-social/api/rest"
+	"goim-social/apps/message-service/service"
 )
 
 // GRPCHandler gRPC处理器

@@ -5,12 +5,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/friend-service/dao"
-	"websocket-server/apps/friend-service/handler"
-	"websocket-server/apps/friend-service/model"
-	"websocket-server/apps/friend-service/service"
-	"websocket-server/pkg/server"
+	"goim-social/api/rest"
+	"goim-social/apps/friend-service/dao"
+	"goim-social/apps/friend-service/handler"
+	"goim-social/apps/friend-service/model"
+	"goim-social/apps/friend-service/service"
+	"goim-social/pkg/server"
 )
 
 func main() {

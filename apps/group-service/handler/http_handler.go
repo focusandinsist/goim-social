@@ -3,10 +3,10 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/group-service/service"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/utils"
+	"goim-social/api/rest"
+	"goim-social/apps/group-service/service"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/utils"
 )
 
 // HTTPHandler HTTP协议处理器

@@ -7,8 +7,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"websocket-server/apps/history-service/model"
-	"websocket-server/pkg/database"
+	"goim-social/apps/history-service/model"
+	"goim-social/pkg/database"
 )
 
 // historyDAO 历史记录数据访问实现

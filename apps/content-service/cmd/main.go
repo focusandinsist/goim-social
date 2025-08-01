@@ -4,12 +4,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/content-service/dao"
-	"websocket-server/apps/content-service/handler"
-	"websocket-server/apps/content-service/model"
-	"websocket-server/apps/content-service/service"
-	"websocket-server/pkg/server"
+	"goim-social/api/rest"
+	"goim-social/apps/content-service/dao"
+	"goim-social/apps/content-service/handler"
+	"goim-social/apps/content-service/model"
+	"goim-social/apps/content-service/service"
+	"goim-social/pkg/server"
 )
 
 func main() {

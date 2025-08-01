@@ -3,7 +3,7 @@ package dao
 import (
 	"context"
 
-	"websocket-server/apps/interaction-service/model"
+	"goim-social/apps/interaction-service/model"
 )
 
 // InteractionDAO 互动数据访问接口

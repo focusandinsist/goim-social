@@ -3,9 +3,9 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"websocket-server/api/rest"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/utils"
+	"goim-social/api/rest"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/utils"
 )
 
 // DeleteFriend 删除好友

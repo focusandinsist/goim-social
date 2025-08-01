@@ -8,14 +8,14 @@ import (
 	kratoslog "github.com/go-kratos/kratos/v2/log"
 	"google.golang.org/grpc"
 
-	"websocket-server/pkg/client"
-	"websocket-server/pkg/config"
-	"websocket-server/pkg/database"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/lifecycle"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/middleware"
-	"websocket-server/pkg/redis"
+	"goim-social/pkg/client"
+	"goim-social/pkg/config"
+	"goim-social/pkg/database"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/lifecycle"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/middleware"
+	"goim-social/pkg/redis"
 )
 
 // Application 应用程序框架

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	friendpb "websocket-server/api/rest"
-	"websocket-server/apps/friend-service/dao"
-	"websocket-server/apps/friend-service/model"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/redis"
+	friendpb "goim-social/api/rest"
+	"goim-social/apps/friend-service/dao"
+	"goim-social/apps/friend-service/model"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/redis"
 )
 
 type Service struct {

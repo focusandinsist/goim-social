@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"websocket-server/pkg/config"
+	"goim-social/pkg/config"
 )
 
 // ClientManager 客户端管理器

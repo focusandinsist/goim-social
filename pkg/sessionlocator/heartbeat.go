@@ -1,4 +1,4 @@
-package gatewayrouter
+package sessionlocator
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	redisClient "websocket-server/pkg/redis"
+	redisClient "goim-social/pkg/redis"
 
 	"github.com/go-redis/redis/v8"
 )

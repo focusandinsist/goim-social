@@ -7,8 +7,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"websocket-server/apps/comment-service/model"
-	"websocket-server/pkg/database"
+	"goim-social/apps/comment-service/model"
+	"goim-social/pkg/database"
 )
 
 // commentDAO 评论数据访问实现

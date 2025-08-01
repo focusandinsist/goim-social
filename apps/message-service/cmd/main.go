@@ -7,11 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/message-service/consumer"
-	"websocket-server/apps/message-service/handler"
-	"websocket-server/apps/message-service/service"
-	"websocket-server/pkg/server"
+	"goim-social/api/rest"
+	"goim-social/apps/message-service/consumer"
+	"goim-social/apps/message-service/handler"
+	"goim-social/apps/message-service/service"
+	"goim-social/pkg/server"
 )
 
 func main() {

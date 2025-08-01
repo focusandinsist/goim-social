@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"websocket-server/pkg/auth"
+	"goim-social/pkg/auth"
 )
 
 // AuthMiddleware 认证中间件配置

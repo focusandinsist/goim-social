@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"websocket-server/apps/comment-service/dao"
-	"websocket-server/apps/comment-service/model"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/redis"
+	"goim-social/apps/comment-service/dao"
+	"goim-social/apps/comment-service/model"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/redis"
 )
 
 // Service 评论服务

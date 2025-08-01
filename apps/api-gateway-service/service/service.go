@@ -10,12 +10,12 @@ import (
 	"strings"
 	"sync"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/api-gateway-service/model"
-	"websocket-server/pkg/config"
-	"websocket-server/pkg/database"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/redis"
+	"goim-social/api/rest"
+	"goim-social/apps/api-gateway-service/model"
+	"goim-social/pkg/config"
+	"goim-social/pkg/database"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/redis"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

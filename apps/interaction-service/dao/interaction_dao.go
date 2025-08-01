@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"websocket-server/apps/interaction-service/model"
-	"websocket-server/pkg/database"
+	"goim-social/apps/interaction-service/model"
+	"goim-social/pkg/database"
 
 	"gorm.io/gorm"
 )

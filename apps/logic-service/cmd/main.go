@@ -6,11 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/logic-service/handler"
-	"websocket-server/apps/logic-service/service"
-	"websocket-server/pkg/server"
-	"websocket-server/pkg/snowflake"
+	"goim-social/api/rest"
+	"goim-social/apps/logic-service/handler"
+	"goim-social/apps/logic-service/service"
+	"goim-social/pkg/server"
+	"goim-social/pkg/snowflake"
 )
 
 func main() {
