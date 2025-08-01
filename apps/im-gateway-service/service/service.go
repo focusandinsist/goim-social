@@ -16,14 +16,14 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/im-gateway-service/model"
-	"websocket-server/pkg/auth"
-	"websocket-server/pkg/config"
-	"websocket-server/pkg/database"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/redis"
-	"websocket-server/pkg/sessionlocator"
+	"goim-social/api/rest"
+	"goim-social/apps/im-gateway-service/model"
+	"goim-social/pkg/auth"
+	"goim-social/pkg/config"
+	"goim-social/pkg/database"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/redis"
+	"goim-social/pkg/sessionlocator"
 )
 
 // ConnectionManager 连接管理器，封装本地WebSocket连接和Redis状态

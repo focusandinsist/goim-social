@@ -5,11 +5,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/comment-service/model"
-	"websocket-server/apps/comment-service/service"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/utils"
+	"goim-social/api/rest"
+	"goim-social/apps/comment-service/model"
+	"goim-social/apps/comment-service/service"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/utils"
 )
 
 // HTTPHandler HTTP处理器

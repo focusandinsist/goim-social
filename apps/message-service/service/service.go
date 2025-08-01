@@ -10,11 +10,11 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/message-service/model"
-	"websocket-server/pkg/database"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/redis"
+	"goim-social/api/rest"
+	"goim-social/apps/message-service/model"
+	"goim-social/pkg/database"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/redis"
 )
 
 // Service Message服务

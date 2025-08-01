@@ -7,7 +7,7 @@ import (
 	kratoslog "github.com/go-kratos/kratos/v2/log"
 	"google.golang.org/grpc"
 
-	"websocket-server/pkg/config"
+	"goim-social/pkg/config"
 )
 
 // GRPCServer gRPC服务器接口

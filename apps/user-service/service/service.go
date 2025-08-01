@@ -5,12 +5,12 @@ import (
 	"errors"
 	"time"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/user-service/dao"
-	"websocket-server/apps/user-service/model"
-	"websocket-server/pkg/auth"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/redis"
+	"goim-social/api/rest"
+	"goim-social/apps/user-service/dao"
+	"goim-social/apps/user-service/model"
+	"goim-social/pkg/auth"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/redis"
 )
 
 // Service 用户服务

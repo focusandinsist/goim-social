@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"websocket-server/apps/user-service/model"
-	"websocket-server/pkg/database"
+	"goim-social/apps/user-service/model"
+	"goim-social/pkg/database"
 )
 
 // userDAO 用户数据访问对象

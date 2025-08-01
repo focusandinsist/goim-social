@@ -3,7 +3,7 @@ package dao
 import (
 	"context"
 
-	"websocket-server/apps/content-service/model"
+	"goim-social/apps/content-service/model"
 )
 
 // ContentDAO 内容数据访问接口

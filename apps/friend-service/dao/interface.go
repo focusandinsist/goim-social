@@ -3,7 +3,7 @@ package dao
 import (
 	"context"
 
-	"websocket-server/apps/friend-service/model"
+	"goim-social/apps/friend-service/model"
 )
 
 // FriendDAO 好友数据访问接口

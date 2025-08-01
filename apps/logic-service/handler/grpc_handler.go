@@ -3,9 +3,9 @@ package handler
 import (
 	"context"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/logic-service/service"
-	"websocket-server/pkg/logger"
+	"goim-social/api/rest"
+	"goim-social/apps/logic-service/service"
+	"goim-social/pkg/logger"
 )
 
 // GRPCHandler gRPC处理器

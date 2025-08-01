@@ -3,7 +3,7 @@ package middleware
 import (
 	"strings"
 
-	"websocket-server/pkg/logger"
+	"goim-social/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )

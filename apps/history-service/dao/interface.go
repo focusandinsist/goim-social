@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"websocket-server/apps/history-service/model"
+	"goim-social/apps/history-service/model"
 )
 
 // HistoryDAO 历史记录数据访问接口

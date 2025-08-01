@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"websocket-server/pkg/consistent"
-	redisClient "websocket-server/pkg/redis"
+	"goim-social/pkg/consistent"
+	redisClient "goim-social/pkg/redis"
 
 	"github.com/go-redis/redis/v8"
 )

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"websocket-server/pkg/logger"
+	"goim-social/pkg/logger"
 )
 
 // IsCommentLiked 检查是否已点赞

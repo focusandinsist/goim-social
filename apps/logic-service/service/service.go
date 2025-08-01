@@ -10,13 +10,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/logic-service/model"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/redis"
-	"websocket-server/pkg/sessionlocator"
-	"websocket-server/pkg/snowflake"
+	"goim-social/api/rest"
+	"goim-social/apps/logic-service/model"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/redis"
+	"goim-social/pkg/sessionlocator"
+	"goim-social/pkg/snowflake"
 )
 
 // Service Logic服务 - 业务编排层

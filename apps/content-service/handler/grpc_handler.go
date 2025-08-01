@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/content-service/model"
-	"websocket-server/apps/content-service/service"
-	"websocket-server/pkg/logger"
+	"goim-social/api/rest"
+	"goim-social/apps/content-service/model"
+	"goim-social/apps/content-service/service"
+	"goim-social/pkg/logger"
 )
 
 // GRPCHandler gRPC处理器

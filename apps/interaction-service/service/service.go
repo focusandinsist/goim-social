@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"websocket-server/apps/interaction-service/dao"
-	"websocket-server/apps/interaction-service/model"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/redis"
+	"goim-social/apps/interaction-service/dao"
+	"goim-social/apps/interaction-service/model"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/redis"
 )
 
 // Service 互动服务

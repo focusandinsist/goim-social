@@ -3,10 +3,10 @@ package handler
 import (
 	"net/http"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/interaction-service/service"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/utils"
+	"goim-social/api/rest"
+	"goim-social/apps/interaction-service/service"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 )

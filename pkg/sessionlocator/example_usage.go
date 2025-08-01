@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"websocket-server/pkg/redis"
+	"goim-social/pkg/redis"
 )
 
 // LogicService 示例Logic服务，展示如何使用会话定位器

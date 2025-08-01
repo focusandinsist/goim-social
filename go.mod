@@ -1,4 +1,4 @@
-module websocket-server
+module goim-social
 
 go 1.23.0
 

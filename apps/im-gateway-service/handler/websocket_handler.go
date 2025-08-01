@@ -11,9 +11,9 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
-	"websocket-server/api/rest"
-	"websocket-server/apps/im-gateway-service/service"
-	"websocket-server/pkg/logger"
+	"goim-social/api/rest"
+	"goim-social/apps/im-gateway-service/service"
+	"goim-social/pkg/logger"
 )
 
 // WSHandler WebSocket协议处理器

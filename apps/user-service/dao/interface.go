@@ -3,7 +3,7 @@ package dao
 import (
 	"context"
 
-	"websocket-server/apps/user-service/model"
+	"goim-social/apps/user-service/model"
 )
 
 // UserDAO 用户数据访问接口

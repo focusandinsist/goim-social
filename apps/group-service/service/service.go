@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"websocket-server/apps/group-service/dao"
-	"websocket-server/apps/group-service/model"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/redis"
+	"goim-social/apps/group-service/dao"
+	"goim-social/apps/group-service/model"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/redis"
 )
 
 // Service 群组服务

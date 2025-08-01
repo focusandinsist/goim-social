@@ -3,7 +3,7 @@ package dao
 import (
 	"context"
 
-	"websocket-server/apps/group-service/model"
+	"goim-social/apps/group-service/model"
 )
 
 // GroupDAO 群组数据访问接口

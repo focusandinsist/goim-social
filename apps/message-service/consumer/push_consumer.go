@@ -10,9 +10,9 @@ import (
 	"github.com/IBM/sarama"
 	"google.golang.org/protobuf/proto"
 
-	"websocket-server/api/rest"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/redis"
+	"goim-social/api/rest"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/redis"
 )
 
 // PushConsumer 推送消费者

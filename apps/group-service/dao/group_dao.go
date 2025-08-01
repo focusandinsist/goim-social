@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"websocket-server/apps/group-service/model"
-	"websocket-server/pkg/database"
+	"goim-social/apps/group-service/model"
+	"goim-social/pkg/database"
 )
 
 // groupDAO .

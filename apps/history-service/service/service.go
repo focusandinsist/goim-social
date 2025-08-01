@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"websocket-server/apps/history-service/dao"
-	"websocket-server/apps/history-service/model"
-	"websocket-server/pkg/kafka"
-	"websocket-server/pkg/logger"
-	"websocket-server/pkg/redis"
+	"goim-social/apps/history-service/dao"
+	"goim-social/apps/history-service/model"
+	"goim-social/pkg/kafka"
+	"goim-social/pkg/logger"
+	"goim-social/pkg/redis"
 )
 
 // Service 历史记录服务

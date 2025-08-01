@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	kratoslog "github.com/go-kratos/kratos/v2/log"
 
-	"websocket-server/pkg/config"
+	"goim-social/pkg/config"
 )
 
 // NewGinEngine 创建Gin引擎

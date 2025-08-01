@@ -9,7 +9,7 @@ import (
 	kratoslog "github.com/go-kratos/kratos/v2/log"
 	"google.golang.org/grpc"
 
-	"websocket-server/pkg/config"
+	"goim-social/pkg/config"
 )
 
 // ServerManager 统一服务器管理器
