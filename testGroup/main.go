@@ -58,12 +58,13 @@ type ChatMessage struct {
 
 // GroupChatClient 群聊客户端
 type GroupChatClient struct {
-	groupID       int64
-	groupInfo     GroupInfo
-	chatWindows   map[int64]*ChatWindow
-	connections   map[int64]*websocket.Conn
-	defaultSender int64 // 默认发送者ID
-	mu            sync.RWMutex
+	groupID         int64
+	groupInfo       GroupInfo
+	chatWindows     map[int64]*ChatWindow
+	connections     map[int64]*websocket.Conn
+	defaultSender   int64          // 默认发送者ID
+	processedMsgIDs map[int64]bool // 已处理的消息ID，用于去重
+	mu              sync.RWMutex
 }
 
 func main() {
@@ -72,8 +73,9 @@ func main() {
 	fmt.Println()
 
 	client := &GroupChatClient{
-		chatWindows: make(map[int64]*ChatWindow),
-		connections: make(map[int64]*websocket.Conn),
+		chatWindows:     make(map[int64]*ChatWindow),
+		connections:     make(map[int64]*websocket.Conn),
+		processedMsgIDs: make(map[int64]bool),
 	}
 
 	// Get group ID
@@ -499,6 +501,17 @@ func (c *GroupChatClient) receiveMessages(userID int64, conn *websocket.Conn) {
 
 // addMessageToAllWindows adds a message to all chat windows
 func (c *GroupChatClient) addMessageToAllWindows(wsMsg *rest.WSMessage) {
+	// 检查消息是否已经处理过（去重）
+	c.mu.Lock()
+	if c.processedMsgIDs[wsMsg.MessageId] {
+		c.mu.Unlock()
+		fmt.Printf("Message %d already processed, skipping...\n", wsMsg.MessageId)
+		return
+	}
+	// 标记消息为已处理
+	c.processedMsgIDs[wsMsg.MessageId] = true
+	c.mu.Unlock()
+
 	senderNickname := fmt.Sprintf("User%d", wsMsg.From)
 
 	// Find sender nickname
@@ -516,7 +529,7 @@ func (c *GroupChatClient) addMessageToAllWindows(wsMsg *rest.WSMessage) {
 		Nickname:  senderNickname,
 	}
 
-	fmt.Printf("Adding message to windows: From=%s(%d), Content=%s\n", senderNickname, wsMsg.From, wsMsg.Content)
+	fmt.Printf("Adding NEW message to windows: From=%s(%d), Content=%s, MsgID=%d\n", senderNickname, wsMsg.From, wsMsg.Content, wsMsg.MessageId)
 
 	c.mu.Lock()
 	windowCount := 0
@@ -614,6 +627,8 @@ func (c *GroupChatClient) generateChatHTML(member GroupMember) string {
 <html>
 <head>
     <title>Chat - %s (ID: %d)</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="2">
     <style>
         body {
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
