@@ -3,8 +3,8 @@ package handler
 import (
 	"goim-social/api/rest"
 	"goim-social/apps/api-gateway-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -50,7 +50,7 @@ func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 		res := &rest.OnlineStatusResponse{
 			Status: make(map[int64]bool),
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -62,7 +62,7 @@ func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Online status failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // DynamicRoute 动态路由处理器 - 核心功能！

@@ -5,8 +5,8 @@ import (
 
 	"goim-social/api/rest"
 	"goim-social/apps/message-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 )
 
 // HTTPHandler HTTP处理器
@@ -44,7 +44,7 @@ func (h *HTTPHandler) SendMessage(c *gin.Context) {
 			MessageId: 0,
 			AckId:     "",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -57,7 +57,7 @@ func (h *HTTPHandler) SendMessage(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Send message failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetHistory 获取历史消息
@@ -72,14 +72,14 @@ func (h *HTTPHandler) GetHistory(c *gin.Context) {
 			Page:     req.Page,
 			Size:     req.Size,
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	msgs, total, err := h.service.GetMessageHistory(ctx, req.UserId, req.GroupId, int(req.Page), int(req.Size))
 	if err != nil {
 		h.logger.Error(ctx, "Get history failed", logger.F("error", err.Error()))
-		utils.WriteObject(c, nil, err)
+		httpx.WriteObject(c, nil, err)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *HTTPHandler) GetHistory(c *gin.Context) {
 		Size:     req.Size,
 	}
 
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetUnreadMessages 获取未读消息
@@ -120,13 +120,13 @@ func (h *HTTPHandler) GetUnreadMessages(c *gin.Context) {
 			Messages: []*rest.WSMessage{},
 			Total:    0,
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 调用service层获取未读消息
 	messages, err := h.service.GetUnreadMessages(ctx, req.UserId)
-	
+
 	// 转换为proto消息格式
 	var wsMessages []*rest.WSMessage
 	if err == nil {
@@ -158,7 +158,7 @@ func (h *HTTPHandler) GetUnreadMessages(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get unread messages failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // MarkMessagesRead 标记消息已读
@@ -172,7 +172,7 @@ func (h *HTTPHandler) MarkMessagesRead(c *gin.Context) {
 			Message:   "Invalid request format",
 			FailedIds: []int64{},
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -195,5 +195,5 @@ func (h *HTTPHandler) MarkMessagesRead(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Mark messages read failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }

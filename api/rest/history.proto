@@ -230,6 +230,17 @@ message GetUserActivityStatsResponse {
   repeated UserActivityStats stats = 3;
 }
 
+// 历史事件消息（用于Kafka）
+message HistoryEvent {
+  string type = 1;                // 事件类型
+  int64 record_id = 2;            // 记录ID
+  int64 user_id = 3;              // 用户ID
+  ActionType action_type = 4;     // 行为类型
+  HistoryObjectType history_object_type = 5;  // 对象类型
+  int64 object_id = 6;            // 对象ID
+  int64 timestamp = 7;            // 时间戳
+}
+
 // 历史记录服务的gRPC接口
 service HistoryService {
   // 基础历史记录操作

@@ -9,8 +9,8 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/history-service/model"
 	"goim-social/apps/history-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 )
 
 // HTTPHandler HTTP处理器
@@ -56,7 +56,7 @@ func (h *HTTPHandler) CreateHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -98,7 +98,7 @@ func (h *HTTPHandler) CreateHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Create history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // BatchCreateHistory 批量创建历史记录
@@ -111,7 +111,7 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -164,7 +164,7 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Batch create history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetUserHistory 获取用户历史记录
@@ -177,7 +177,7 @@ func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -231,7 +231,7 @@ func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get user history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetObjectHistoryRequest 获取对象历史记录请求
@@ -311,7 +311,7 @@ func (h *HTTPHandler) DeleteHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -339,7 +339,7 @@ func (h *HTTPHandler) DeleteHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Delete history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // ClearUserHistory 清空用户历史记录
@@ -352,7 +352,7 @@ func (h *HTTPHandler) ClearUserHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -392,7 +392,7 @@ func (h *HTTPHandler) ClearUserHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Clear user history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetUserActionStatsRequest 获取用户行为统计请求

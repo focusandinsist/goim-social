@@ -8,8 +8,8 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/comment-service/model"
 	"goim-social/apps/comment-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 )
 
 // HTTPHandler HTTP处理器
@@ -69,7 +69,7 @@ func (h *HTTPHandler) CreateComment(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *HTTPHandler) CreateComment(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Create comment failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -128,7 +128,7 @@ func (h *HTTPHandler) UpdateComment(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -157,7 +157,7 @@ func (h *HTTPHandler) UpdateComment(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Update comment failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // DeleteComment 删除评论
@@ -170,7 +170,7 @@ func (h *HTTPHandler) DeleteComment(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -193,7 +193,7 @@ func (h *HTTPHandler) DeleteComment(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Delete comment failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetComment 获取评论
@@ -206,7 +206,7 @@ func (h *HTTPHandler) GetComment(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -229,7 +229,7 @@ func (h *HTTPHandler) GetComment(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get comment failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetComments 获取评论列表
@@ -242,7 +242,7 @@ func (h *HTTPHandler) GetComments(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -287,7 +287,7 @@ func (h *HTTPHandler) GetComments(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get comments failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetUserComments 获取用户评论
@@ -300,7 +300,7 @@ func (h *HTTPHandler) GetUserComments(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -340,7 +340,7 @@ func (h *HTTPHandler) GetUserComments(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get user comments failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // ModerateCommentRequest 审核评论请求

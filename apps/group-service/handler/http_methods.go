@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"goim-social/api/rest"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 )
 
 // InviteToGroup 邀请加入群组
@@ -18,7 +18,7 @@ func (h *HTTPHandler) InviteToGroup(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -35,7 +35,7 @@ func (h *HTTPHandler) InviteToGroup(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Invite to group failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // PublishAnnouncement 发布群公告
@@ -48,7 +48,7 @@ func (h *HTTPHandler) PublishAnnouncement(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -65,7 +65,7 @@ func (h *HTTPHandler) PublishAnnouncement(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Publish announcement failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetUserGroups 获取用户群组列表
@@ -78,7 +78,7 @@ func (h *HTTPHandler) GetUserGroups(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -120,5 +120,5 @@ func (h *HTTPHandler) GetUserGroups(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Get user groups failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }

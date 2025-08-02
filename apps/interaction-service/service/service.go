@@ -2,15 +2,17 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
+	"goim-social/api/rest"
 	"goim-social/apps/interaction-service/dao"
 	"goim-social/apps/interaction-service/model"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Service 互动服务
@@ -200,9 +202,19 @@ func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType
 	cacheKey := model.GetStatsKey(objectID, objectType)
 	if s.redis != nil {
 		if cached, err := s.redis.Get(ctx, cacheKey); err == nil && cached != "" {
-			var stats model.InteractionStats
-			if json.Unmarshal([]byte(cached), &stats) == nil {
-				return &stats, nil
+			// 使用protobuf反序列化
+			protoStats := &rest.InteractionStats{}
+			if proto.Unmarshal([]byte(cached), protoStats) == nil {
+				// 转换为model格式
+				stats := &model.InteractionStats{
+					ObjectID:      protoStats.ObjectId,
+					ObjectType:    convertObjectTypeFromProto(protoStats.InteractionObjectType),
+					LikeCount:     protoStats.LikeCount,
+					FavoriteCount: protoStats.FavoriteCount,
+					ShareCount:    protoStats.ShareCount,
+					RepostCount:   protoStats.RepostCount,
+				}
+				return stats, nil
 			}
 		}
 	}
@@ -213,9 +225,17 @@ func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType
 		return nil, err
 	}
 
-	// 缓存结果
+	// 缓存结果 - 使用protobuf序列化
 	if s.redis != nil {
-		if data, err := json.Marshal(stats); err == nil {
+		protoStats := &rest.InteractionStats{
+			ObjectId:              stats.ObjectID,
+			InteractionObjectType: convertObjectTypeToProto(stats.ObjectType),
+			LikeCount:             stats.LikeCount,
+			FavoriteCount:         stats.FavoriteCount,
+			ShareCount:            stats.ShareCount,
+			RepostCount:           stats.RepostCount,
+		}
+		if data, err := proto.Marshal(protoStats); err == nil {
 			s.redis.Set(ctx, cacheKey, string(data), time.Duration(model.CacheExpireStats)*time.Second)
 		}
 	}
@@ -346,35 +366,25 @@ func (s *Service) publishInteractionEvent(ctx context.Context, eventType string,
 		return
 	}
 
-	event := &model.InteractionEvent{
+	// 构建protobuf事件消息
+	event := &rest.InteractionEvent{
 		EventType:       eventType,
-		UserID:          interaction.UserID,
-		ObjectID:        interaction.ObjectID,
-		ObjectType:      interaction.ObjectType,
-		InteractionType: interaction.InteractionType,
+		UserId:          interaction.UserID,
+		ObjectId:        interaction.ObjectID,
+		ObjectType:      convertObjectTypeToProto(interaction.ObjectType),
+		InteractionType: convertInteractionTypeToProto(interaction.InteractionType),
 		Metadata:        interaction.Metadata,
-		Timestamp:       time.Now(),
-	}
-
-	// TODO：后续改为protobuf序列化
-	eventData, err := json.Marshal(event)
-	if err != nil {
-		s.logger.Error(ctx, "Failed to marshal interaction event",
-			logger.F("error", err.Error()),
-			logger.F("event", event))
-		return
+		Timestamp:       time.Now().Unix(),
 	}
 
 	// 异步发送事件
 	go func() {
-		topic := "interaction-events"
-		key := fmt.Sprintf("%d:%d:%s", event.UserID, event.ObjectID, event.InteractionType)
-
-		if err := s.kafka.SendMessage(topic, []byte(key), eventData); err != nil {
-			s.logger.Error(context.Background(), "Failed to send interaction event",
+		if err := s.kafka.PublishMessage("interaction-events", event); err != nil {
+			s.logger.Error(context.Background(), "Failed to publish interaction event",
 				logger.F("error", err.Error()),
-				logger.F("topic", topic),
-				logger.F("key", key))
+				logger.F("eventType", eventType),
+				logger.F("userID", interaction.UserID),
+				logger.F("objectID", interaction.ObjectID))
 		}
 	}()
 }
@@ -484,4 +494,48 @@ func (s *Service) BatchGetInteractionSummary(ctx context.Context, objectIDs []in
 	}
 
 	return summaries, nil
+}
+
+// convertObjectTypeFromProto 将protobuf枚举转换为对象类型
+func convertObjectTypeFromProto(objectType rest.InteractionObjectType) string {
+	switch objectType {
+	case rest.InteractionObjectType_OBJECT_TYPE_POST:
+		return model.ObjectTypePost
+	case rest.InteractionObjectType_OBJECT_TYPE_COMMENT:
+		return model.ObjectTypeComment
+	case rest.InteractionObjectType_OBJECT_TYPE_USER:
+		return model.ObjectTypeUser
+	default:
+		return ""
+	}
+}
+
+// convertObjectTypeToProto 将对象类型转换为protobuf枚举
+func convertObjectTypeToProto(objectType string) rest.InteractionObjectType {
+	switch objectType {
+	case model.ObjectTypePost:
+		return rest.InteractionObjectType_OBJECT_TYPE_POST
+	case model.ObjectTypeComment:
+		return rest.InteractionObjectType_OBJECT_TYPE_COMMENT
+	case model.ObjectTypeUser:
+		return rest.InteractionObjectType_OBJECT_TYPE_USER
+	default:
+		return rest.InteractionObjectType_OBJECT_TYPE_UNSPECIFIED
+	}
+}
+
+// convertInteractionTypeToProto 将互动类型转换为protobuf枚举
+func convertInteractionTypeToProto(interactionType string) rest.InteractionType {
+	switch interactionType {
+	case model.InteractionTypeLike:
+		return rest.InteractionType_INTERACTION_TYPE_LIKE
+	case model.InteractionTypeFavorite:
+		return rest.InteractionType_INTERACTION_TYPE_FAVORITE
+	case model.InteractionTypeShare:
+		return rest.InteractionType_INTERACTION_TYPE_SHARE
+	case model.InteractionTypeRepost:
+		return rest.InteractionType_INTERACTION_TYPE_REPOST
+	default:
+		return rest.InteractionType_INTERACTION_TYPE_UNSPECIFIED
+	}
 }

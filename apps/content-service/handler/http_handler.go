@@ -4,8 +4,8 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/content-service/model"
 	"goim-social/apps/content-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -61,7 +61,7 @@ func (h *HTTPHandler) CreateContent(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *HTTPHandler) CreateContent(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Create content failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // UpdateContent 更新内容
@@ -126,7 +126,7 @@ func (h *HTTPHandler) UpdateContent(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -178,7 +178,7 @@ func (h *HTTPHandler) UpdateContent(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Update content failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetContent 获取内容详情
@@ -191,7 +191,7 @@ func (h *HTTPHandler) GetContent(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -214,7 +214,7 @@ func (h *HTTPHandler) GetContent(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get content failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // DeleteContent 删除内容
@@ -227,7 +227,7 @@ func (h *HTTPHandler) DeleteContent(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -244,7 +244,7 @@ func (h *HTTPHandler) DeleteContent(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Delete content failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // PublishContent 发布内容
@@ -257,7 +257,7 @@ func (h *HTTPHandler) PublishContent(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -280,7 +280,7 @@ func (h *HTTPHandler) PublishContent(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Publish content failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // ChangeContentStatus 变更内容状态
@@ -293,7 +293,7 @@ func (h *HTTPHandler) ChangeContentStatus(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -319,7 +319,7 @@ func (h *HTTPHandler) ChangeContentStatus(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Change content status failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // SearchContent 搜索内容
@@ -332,7 +332,7 @@ func (h *HTTPHandler) SearchContent(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -379,7 +379,7 @@ func (h *HTTPHandler) SearchContent(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Search content failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetUserContent 获取用户内容列表
@@ -392,7 +392,7 @@ func (h *HTTPHandler) GetUserContent(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -425,7 +425,7 @@ func (h *HTTPHandler) GetUserContent(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get user content failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetContentStats 获取内容统计
@@ -438,7 +438,7 @@ func (h *HTTPHandler) GetContentStats(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -491,7 +491,7 @@ func (h *HTTPHandler) GetContentStats(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get content stats failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // CreateTag 创建标签
@@ -504,7 +504,7 @@ func (h *HTTPHandler) CreateTag(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -527,7 +527,7 @@ func (h *HTTPHandler) CreateTag(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Create tag failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetTags 获取标签列表
@@ -540,7 +540,7 @@ func (h *HTTPHandler) GetTags(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -568,7 +568,7 @@ func (h *HTTPHandler) GetTags(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get tags failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // CreateTopic 创建话题
@@ -581,7 +581,7 @@ func (h *HTTPHandler) CreateTopic(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -604,7 +604,7 @@ func (h *HTTPHandler) CreateTopic(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Create topic failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetTopics 获取话题列表
@@ -617,7 +617,7 @@ func (h *HTTPHandler) GetTopics(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -645,5 +645,5 @@ func (h *HTTPHandler) GetTopics(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get topics failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }

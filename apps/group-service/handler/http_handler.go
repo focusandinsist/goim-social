@@ -5,8 +5,8 @@ import (
 
 	"goim-social/api/rest"
 	"goim-social/apps/group-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 )
 
 // HTTPHandler HTTP协议处理器
@@ -50,7 +50,7 @@ func (h *HTTPHandler) SearchGroups(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *HTTPHandler) SearchGroups(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Search groups failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // CreateGroup 创建群组
@@ -105,7 +105,7 @@ func (h *HTTPHandler) CreateGroup(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *HTTPHandler) CreateGroup(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Create group failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetGroupInfo 获取群组信息
@@ -153,7 +153,7 @@ func (h *HTTPHandler) GetGroupInfo(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -204,7 +204,7 @@ func (h *HTTPHandler) GetGroupInfo(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Get group info failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // DisbandGroup 解散群组
@@ -217,7 +217,7 @@ func (h *HTTPHandler) DisbandGroup(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -234,7 +234,7 @@ func (h *HTTPHandler) DisbandGroup(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Disband group failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // JoinGroup 加入群组
@@ -247,7 +247,7 @@ func (h *HTTPHandler) JoinGroup(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -264,7 +264,7 @@ func (h *HTTPHandler) JoinGroup(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Join group failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // LeaveGroup 退出群组
@@ -277,7 +277,7 @@ func (h *HTTPHandler) LeaveGroup(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -294,7 +294,7 @@ func (h *HTTPHandler) LeaveGroup(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Leave group failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // KickMember 踢出成员
@@ -307,7 +307,7 @@ func (h *HTTPHandler) KickMember(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -324,5 +324,5 @@ func (h *HTTPHandler) KickMember(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Kick member failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }

@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"goim-social/api/rest"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 )
 
 // DeleteFriend 删除好友
@@ -18,7 +18,7 @@ func (h *HTTPHandler) DeleteFriend(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -35,7 +35,7 @@ func (h *HTTPHandler) DeleteFriend(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Delete friend failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // ListFriends 查询好友列表
@@ -48,7 +48,7 @@ func (h *HTTPHandler) ListFriends(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *HTTPHandler) ListFriends(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "List friends failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetFriendProfile 获取好友简介
@@ -96,7 +96,7 @@ func (h *HTTPHandler) GetFriendProfile(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *HTTPHandler) GetFriendProfile(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Get friend failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // UpdateFriendRemark 更新好友备注
@@ -136,7 +136,7 @@ func (h *HTTPHandler) UpdateFriendRemark(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *HTTPHandler) UpdateFriendRemark(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Update friend remark failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // ListFriendApply 查询好友申请列表
@@ -165,7 +165,7 @@ func (h *HTTPHandler) ListFriendApply(c *gin.Context) {
 		res := &rest.ListFriendApplyResponse{
 			Applies: []*rest.FriendApplyInfo{},
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -189,7 +189,7 @@ func (h *HTTPHandler) ListFriendApply(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "List friend apply failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // ApplyFriend 申请加好友
@@ -202,7 +202,7 @@ func (h *HTTPHandler) ApplyFriend(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -219,7 +219,7 @@ func (h *HTTPHandler) ApplyFriend(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Apply friend failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // RespondFriendApply 回应好友申请
@@ -232,7 +232,7 @@ func (h *HTTPHandler) RespondFriendApply(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -249,5 +249,5 @@ func (h *HTTPHandler) RespondFriendApply(c *gin.Context) {
 	if err != nil {
 		h.log.Error(ctx, "Respond friend apply failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }

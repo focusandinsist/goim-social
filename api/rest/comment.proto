@@ -213,6 +213,16 @@ message GetBatchCommentStatsResponse {
   repeated CommentStats stats = 3;
 }
 
+// 评论事件消息（用于Kafka）
+message CommentEvent {
+  string type = 1;                // 事件类型
+  int64 comment_id = 2;           // 评论ID
+  int64 object_id = 3;            // 对象ID
+  CommentObjectType object_type = 4;  // 对象类型
+  int64 user_id = 5;              // 用户ID
+  int64 timestamp = 6;            // 时间戳
+}
+
 // 评论服务的gRPC接口
 service CommentService {
   // 基础评论操作

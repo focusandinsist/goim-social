@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"goim-social/api/rest"
 	"goim-social/apps/history-service/dao"
 	"goim-social/apps/history-service/model"
 	"goim-social/pkg/kafka"
@@ -362,23 +363,71 @@ func (s *Service) publishEvent(ctx context.Context, eventType string, record *mo
 		return
 	}
 
-	// 构建事件消息并发送到Kafka
+	// 构建protobuf事件消息并发送到Kafka
 	go func() {
-		eventData := map[string]interface{}{
-			"type":         eventType,
-			"record_id":    record.ID,
-			"user_id":      record.UserID,
-			"action_type":  record.ActionType,
-			"object_type":  record.ObjectType,
-			"object_id":    record.ObjectID,
-			"timestamp":    time.Now().Unix(),
+		event := &rest.HistoryEvent{
+			Type:              eventType,
+			RecordId:          record.ID,
+			UserId:            record.UserID,
+			ActionType:        convertActionTypeToProto(record.ActionType),
+			HistoryObjectType: convertObjectTypeToProto(record.ObjectType),
+			ObjectId:          record.ObjectID,
+			Timestamp:         time.Now().Unix(),
 		}
 
-		if err := s.kafka.PublishMessage("history-events", eventData); err != nil {
+		if err := s.kafka.PublishMessage("history-events", event); err != nil {
 			s.logger.Error(context.Background(), "Failed to publish event",
 				logger.F("eventType", eventType),
 				logger.F("recordID", record.ID),
 				logger.F("error", err.Error()))
 		}
 	}()
+}
+
+// convertActionTypeToProto 将行为类型转换为protobuf枚举
+func convertActionTypeToProto(actionType string) rest.ActionType {
+	switch actionType {
+	case model.ActionTypeView:
+		return rest.ActionType_ACTION_TYPE_VIEW
+	case model.ActionTypeLike:
+		return rest.ActionType_ACTION_TYPE_LIKE
+	case model.ActionTypeFavorite:
+		return rest.ActionType_ACTION_TYPE_FAVORITE
+	case model.ActionTypeShare:
+		return rest.ActionType_ACTION_TYPE_SHARE
+	case model.ActionTypeComment:
+		return rest.ActionType_ACTION_TYPE_COMMENT
+	case model.ActionTypeFollow:
+		return rest.ActionType_ACTION_TYPE_FOLLOW
+	case model.ActionTypeLogin:
+		return rest.ActionType_ACTION_TYPE_LOGIN
+	case model.ActionTypeSearch:
+		return rest.ActionType_ACTION_TYPE_SEARCH
+	case model.ActionTypeDownload:
+		return rest.ActionType_ACTION_TYPE_DOWNLOAD
+	case model.ActionTypePurchase:
+		return rest.ActionType_ACTION_TYPE_PURCHASE
+	default:
+		return rest.ActionType_ACTION_TYPE_UNSPECIFIED
+	}
+}
+
+// convertObjectTypeToProto 将对象类型转换为protobuf枚举
+func convertObjectTypeToProto(objectType string) rest.HistoryObjectType {
+	switch objectType {
+	case model.ObjectTypePost:
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_POST
+	case model.ObjectTypeArticle:
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_ARTICLE
+	case model.ObjectTypeVideo:
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_VIDEO
+	case model.ObjectTypeUser:
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_USER
+	case model.ObjectTypeProduct:
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_PRODUCT
+	case model.ObjectTypeGroup:
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_GROUP
+	default:
+		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_UNSPECIFIED
+	}
 }

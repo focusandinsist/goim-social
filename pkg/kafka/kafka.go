@@ -2,7 +2,6 @@ package kafka
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -151,24 +150,13 @@ func (p *Producer) SendMessage(topic string, key, value []byte) error {
 }
 
 // PublishMessage 发送protobuf消息
-func (p *Producer) PublishMessage(topic string, data interface{}) error {
-	// 如果是protobuf消息，直接序列化
-	if msg, ok := data.(proto.Message); ok {
-		protoData, err := proto.Marshal(msg)
-		if err != nil {
-			return fmt.Errorf("protobuf序列化失败: %v", err)
-		}
-		return p.SendMessage(topic, nil, protoData)
-	}
-
-	// TEMP兼容性：如果不是protobuf消息，仍使用json（主要用于非消息数据）
-	// TODO 服务端全部protobuf，尤其是kafka这里
-	jsonData, err := json.Marshal(data)
+func (p *Producer) PublishMessage(topic string, msg proto.Message) error {
+	protoData, err := proto.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("JSON序列化失败: %v", err)
+		return fmt.Errorf("protobuf序列化失败: %v", err)
 	}
 
-	return p.SendMessage(topic, nil, jsonData)
+	return p.SendMessage(topic, nil, protoData)
 }
 
 // Close 关闭生产者

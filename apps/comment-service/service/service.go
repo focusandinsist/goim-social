@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"goim-social/api/rest"
 	"goim-social/apps/comment-service/dao"
 	"goim-social/apps/comment-service/model"
 	"goim-social/pkg/kafka"
@@ -393,18 +394,18 @@ func (s *Service) publishEvent(ctx context.Context, eventType string, comment *m
 		return
 	}
 
-	// 构建事件消息并发送到Kafka
+	// 构建protobuf事件消息并发送到Kafka
 	go func() {
-		eventData := map[string]interface{}{
-			"type":        eventType,
-			"comment_id":  comment.ID,
-			"object_id":   comment.ObjectID,
-			"object_type": comment.ObjectType,
-			"user_id":     comment.UserID,
-			"timestamp":   time.Now().Unix(),
+		event := &rest.CommentEvent{
+			Type:       eventType,
+			CommentId:  comment.ID,
+			ObjectId:   comment.ObjectID,
+			ObjectType: convertObjectTypeToProto(comment.ObjectType),
+			UserId:     comment.UserID,
+			Timestamp:  time.Now().Unix(),
 		}
 
-		if err := s.producer.PublishMessage("comment-events", eventData); err != nil {
+		if err := s.producer.PublishMessage("comment-events", event); err != nil {
 			s.logger.Error(context.Background(), "Failed to publish event",
 				logger.F("eventType", eventType),
 				logger.F("commentID", comment.ID),
@@ -511,4 +512,18 @@ func (s *Service) GetCommentsByStatus(ctx context.Context, status string, page, 
 	}
 
 	return s.dao.GetCommentsByStatus(ctx, status, page, pageSize)
+}
+
+// convertObjectTypeToProto 将对象类型转换为protobuf枚举
+func convertObjectTypeToProto(objectType string) rest.CommentObjectType {
+	switch objectType {
+	case model.ObjectTypePost:
+		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_POST
+	case model.ObjectTypeArticle:
+		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_ARTICLE
+	case model.ObjectTypeVideo:
+		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_VIDEO
+	default:
+		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_UNSPECIFIED
+	}
 }
