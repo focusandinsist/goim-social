@@ -8,12 +8,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"bytes"
 	"encoding/json"
 	"net/http"
 	"os/exec"
+	"os/signal"
 	"runtime"
 
 	"github.com/gorilla/websocket"
@@ -56,6 +58,13 @@ type ChatMessage struct {
 	Nickname  string    `json:"nickname"`
 }
 
+// SendMessageRequest 发送消息请求
+type SendMessageRequest struct {
+	UserID  int64  `json:"user_id"`
+	GroupID int64  `json:"group_id"`
+	Content string `json:"content"`
+}
+
 // GroupChatClient 群聊客户端
 type GroupChatClient struct {
 	groupID         int64
@@ -65,6 +74,62 @@ type GroupChatClient struct {
 	defaultSender   int64          // 默认发送者ID
 	processedMsgIDs map[int64]bool // 已处理的消息ID，用于去重
 	mu              sync.RWMutex
+}
+
+// 全局客户端实例，用于HTTP处理器访问
+var globalClient *GroupChatClient
+
+// handleSendMessage 处理发送消息的HTTP请求
+func handleSendMessage(w http.ResponseWriter, r *http.Request) {
+	// 设置CORS头
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req SendMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if globalClient == nil {
+		http.Error(w, "Client not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	// 发送消息
+	if err := globalClient.sendMessage(req.UserID, req.Content); err != nil {
+		fmt.Printf("Failed to send message via HTTP: %v\n", err)
+		http.Error(w, "Failed to send message", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Printf("Message sent via HTTP: UserID=%d, Content=%s\n", req.UserID, req.Content)
+
+	// 返回成功响应
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+}
+
+// startHTTPServer 启动HTTP服务器
+func startHTTPServer() {
+	http.HandleFunc("/send-message", handleSendMessage)
+
+	fmt.Println("Starting HTTP server on :8080 for message handling...")
+	go func() {
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Printf("HTTP server failed: %v", err)
+		}
+	}()
 }
 
 func main() {
@@ -77,6 +142,12 @@ func main() {
 		connections:     make(map[int64]*websocket.Conn),
 		processedMsgIDs: make(map[int64]bool),
 	}
+
+	// 设置全局客户端实例
+	globalClient = client
+
+	// 启动HTTP服务器
+	startHTTPServer()
 
 	// Get group ID
 	fmt.Print("Enter Group ID: ")
@@ -159,78 +230,25 @@ func main() {
 	fmt.Println("Opening chat windows...")
 	client.openChatWindows()
 
-	// Main command loop
-	fmt.Println("\nCommands:")
-	fmt.Println("  <message> - Send message as default user")
-	fmt.Println("  @<userID> <message> - Send message as specific user")
-	fmt.Println("  list - Show all members")
-	fmt.Println("  quit - Exit")
+	// 设置信号处理，优雅退出
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// 使用 select{} 来永久阻塞主程序，保持后台服务运行
+	// 这样HTTP服务器和WebSocket监听器就不会因为main函数退出而关闭
+	fmt.Println("\n=== Group Chat Client is Running ===")
+	fmt.Println("✅ HTTP server running on :8080")
+	fmt.Println("✅ WebSocket connections established")
+	fmt.Println("✅ Chat windows opened")
+	fmt.Println("📝 Use the HTML windows to send messages")
+	fmt.Println("🛑 Press Ctrl+C to exit and cleanup")
 	fmt.Println("----------------------------------------")
 
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		fmt.Print("> ")
-		if !scanner.Scan() {
-			break
-		}
+	// 等待退出信号
+	<-sigChan
 
-		input := strings.TrimSpace(scanner.Text())
-		if input == "" {
-			continue
-		}
-
-		if input == "quit" {
-			fmt.Println("Exiting...")
-			break
-		}
-
-		if input == "list" {
-			client.displayMembers()
-			continue
-		}
-
-		// Check if it's @userID message format
-		if strings.HasPrefix(input, "@") {
-			parts := strings.SplitN(input[1:], " ", 2)
-			if len(parts) < 2 {
-				fmt.Println("Use format: @<userID> <message>")
-				continue
-			}
-
-			userID, err := strconv.ParseInt(parts[0], 10, 64)
-			if err != nil {
-				fmt.Printf("Invalid user ID: %s\n", parts[0])
-				continue
-			}
-
-			content := parts[1]
-
-			if err := client.sendMessage(userID, content); err != nil {
-				fmt.Printf("Failed to send message: %v\n", err)
-			} else {
-				fmt.Printf("Message sent by user %d\n", userID)
-			}
-		} else {
-			// Direct message using default sender
-			if client.defaultSender == 0 {
-				fmt.Println("No default sender available. Use @<userID> <message> format.")
-				continue
-			}
-
-			if err := client.sendMessage(client.defaultSender, input); err != nil {
-				fmt.Printf("Failed to send message: %v\n", err)
-			} else {
-				defaultSenderName := "Unknown"
-				for _, member := range client.groupInfo.Members {
-					if member.UserID == client.defaultSender {
-						defaultSenderName = member.Nickname
-						break
-					}
-				}
-				fmt.Printf("Message sent by %s (ID: %d)\n", defaultSenderName, client.defaultSender)
-			}
-		}
-	}
+	// 优雅退出，清理资源
+	fmt.Println("\n🛑 Received exit signal, cleaning up...")
 
 	// Close all connections and cleanup
 	client.closeAllConnections()
@@ -243,6 +261,8 @@ func main() {
 			fmt.Printf("Deleted chat window file: %s\n", filename)
 		}
 	}
+
+	fmt.Println("✅ Cleanup completed. Goodbye!")
 }
 
 // fetchGroupInfo fetches group information from the API
@@ -657,7 +677,7 @@ func (c *GroupChatClient) generateChatHTML(member GroupMember) string {
             margin-bottom: 12px;
             padding: 10px 12px;
             border-radius: 4px;
-            max-width: 80%;
+            max-width: 80%%;
             word-wrap: break-word;
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
         }
@@ -692,14 +712,79 @@ func (c *GroupChatClient) generateChatHTML(member GroupMember) string {
             border-left: 4px solid #608b4e;
             color: #d4d4d4;
         }
+        .input-area {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .message-input {
+            flex: 1;
+            padding: 10px;
+            background-color: #2d2d30;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .message-input:focus {
+            outline: none;
+            border-color: #007acc;
+        }
+        .send-button {
+            padding: 10px 20px;
+            background-color: #0e639c;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        .send-button:hover {
+            background-color: #1177bb;
+        }
     </style>
     <script>
-        function refreshMessages() {
-            // This would be updated by the Go application
-            setTimeout(refreshMessages, 1000);
+        let userID = %d;
+        let groupID = %d;
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (message === '') return;
+
+            // 发送消息到Go后端
+            fetch('http://localhost:8080/send-message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: userID,
+                    group_id: groupID,
+                    content: message
+                })
+            }).then(response => {
+                if (response.ok) {
+                    input.value = '';
+                    // 立即刷新页面显示新消息
+                    setTimeout(() => location.reload(), 100);
+                }
+            }).catch(error => {
+                console.error('发送消息失败:', error);
+            });
         }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
         window.onload = function() {
-            refreshMessages();
+            const input = document.getElementById('messageInput');
+            input.addEventListener('keypress', handleKeyPress);
+            input.focus();
         };
     </script>
 </head>
@@ -714,13 +799,18 @@ func (c *GroupChatClient) generateChatHTML(member GroupMember) string {
             <div class="timestamp">%s</div>
         </div>
     </div>
+    <div class="input-area">
+        <input type="text" id="messageInput" class="message-input" placeholder="输入消息内容，按回车发送..." />
+        <button onclick="sendMessage()" class="send-button">发送</button>
+    </div>
     <div class="status">
-        <strong>Status:</strong> Connected to group chat. Messages will appear here automatically.
+        <strong>Status:</strong> Connected to group chat. Type message above and press Enter to send.
     </div>
 </body>
 </html>
 `, // --- CORRECTED ARGUMENTS START HERE ---
 		member.Nickname, member.UserID, // For <title>
+		member.UserID, c.groupID, // For JavaScript variables
 		member.Nickname, member.UserID, // For <h2>
 		c.groupInfo.Name, c.groupInfo.ID, // For <p>
 		member.Nickname,               // For system message
@@ -826,12 +916,83 @@ func (c *GroupChatClient) generateChatHTMLWithMessages(member GroupMember, messa
             border-left: 4px solid #608b4e;
             color: #d4d4d4;
         }
+        .input-area {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .message-input {
+            flex: 1;
+            padding: 10px;
+            background-color: #2d2d30;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .message-input:focus {
+            outline: none;
+            border-color: #007acc;
+        }
+        .send-button {
+            padding: 10px 20px;
+            background-color: #0e639c;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+        .send-button:hover {
+            background-color: #1177bb;
+        }
     </style>
     <script>
-        // Auto scroll to bottom
+        let userID = %d;
+        let groupID = %d;
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (message === '') return;
+
+            // 发送消息到Go后端
+            fetch('http://localhost:8080/send-message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: userID,
+                    group_id: groupID,
+                    content: message
+                })
+            }).then(response => {
+                if (response.ok) {
+                    input.value = '';
+                    // 立即刷新页面显示新消息
+                    setTimeout(() => location.reload(), 100);
+                }
+            }).catch(error => {
+                console.error('发送消息失败:', error);
+            });
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // Auto scroll to bottom and setup input
         window.onload = function() {
             var messages = document.getElementById('messages');
             messages.scrollTop = messages.scrollHeight;
+
+            const input = document.getElementById('messageInput');
+            input.addEventListener('keypress', handleKeyPress);
+            input.focus();
         };
     </script>
 </head>
@@ -843,13 +1004,18 @@ func (c *GroupChatClient) generateChatHTMLWithMessages(member GroupMember, messa
     <div class="messages" id="messages">
         %s
     </div>
+    <div class="input-area">
+        <input type="text" id="messageInput" class="message-input" placeholder="输入消息内容，按回车发送..." />
+        <button onclick="sendMessage()" class="send-button">发送</button>
+    </div>
     <div class="status">
-        <strong>Status:</strong> Connected to group chat. Auto-refresh every 2 seconds.
+        <strong>Status:</strong> Connected to group chat. Type message above and press Enter to send.
     </div>
 </body>
 </html>
 `, // --- CORRECTED ARGUMENTS START HERE ---
 		member.Nickname, member.UserID, // For <title>
+		member.UserID, c.groupID, // For JavaScript variables
 		member.Nickname, member.UserID, // For <h2>
 		c.groupInfo.Name, c.groupInfo.ID, // For <p>
 		len(messages), // For message count in <p>
