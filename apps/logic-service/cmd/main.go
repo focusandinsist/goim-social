@@ -52,6 +52,7 @@ func main() {
 		app.GetRedisClient(),
 		app.GetKafkaProducer(),
 		app.GetLogger(),
+		config.Kafka.Brokers, // 传递Kafka brokers配置
 		groupAddr,
 		messageAddr,
 		friendAddr,

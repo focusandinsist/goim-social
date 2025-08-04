@@ -23,12 +23,17 @@ type RetryMessage struct {
 	LastAttempt time.Time
 }
 
-// Producer 生产者
+// Producer 异步生产者
 type Producer struct {
 	asyncProducer sarama.AsyncProducer
 	retryQueue    chan *RetryMessage
 	maxRetries    int
 	retryDelay    time.Duration
+}
+
+// ReliableProducer 高可靠性同步生产者
+type ReliableProducer struct {
+	syncProducer sarama.SyncProducer
 }
 
 // Consumer 消费者
@@ -43,7 +48,7 @@ type ConsumerHandler interface {
 	HandleMessage(msg *sarama.ConsumerMessage) error
 }
 
-// InitProducer 初始化生产者
+// InitProducer 初始化异步生产者
 func InitProducer(brokers []string) (*Producer, error) {
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
@@ -74,6 +79,34 @@ func InitProducer(brokers []string) (*Producer, error) {
 	go p.handleRetries()
 
 	return p, nil
+}
+
+// InitReliableProducer 初始化高可靠性同步生产者（用于持久化保障）
+func InitReliableProducer(brokers []string) (*ReliableProducer, error) {
+	config := sarama.NewConfig()
+
+	// 高可靠性配置
+	config.Producer.RequiredAcks = sarama.WaitForAll // 等待所有副本确认
+	config.Producer.Retry.Max = 5                    // 增加重试次数
+	config.Producer.Retry.Backoff = 250 * time.Millisecond
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+	config.Producer.Idempotent = true // 启用幂等性
+	config.Net.MaxOpenRequests = 1    // 幂等性要求
+
+	// 批量和压缩配置
+	config.Producer.Flush.Frequency = 10 * time.Millisecond
+	config.Producer.Flush.Messages = 1 // 立即发送，不等待批量
+	config.Producer.Compression = sarama.CompressionSnappy
+
+	producer, err := sarama.NewSyncProducer(brokers, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ReliableProducer{
+		syncProducer: producer,
+	}, nil
 }
 
 // handleErrors 处理发送错误，将失败消息加入重试队列
@@ -238,4 +271,40 @@ func (c *Consumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.C
 
 	fmt.Printf("分区 %d 的消息消费结束\n", claim.Partition())
 	return nil
+}
+
+// SendMessageSync 同步发送消息（高可靠性）
+func (rp *ReliableProducer) SendMessageSync(topic string, key, value []byte) error {
+	msg := &sarama.ProducerMessage{
+		Topic: topic,
+		Key:   sarama.ByteEncoder(key),
+		Value: sarama.ByteEncoder(value),
+	}
+
+	fmt.Printf("同步发送消息到topic: %s, 消息大小: %d bytes\n", topic, len(value))
+
+	// 同步发送，等待确认
+	partition, offset, err := rp.syncProducer.SendMessage(msg)
+	if err != nil {
+		fmt.Printf("同步发送消息失败: %v\n", err)
+		return err
+	}
+
+	fmt.Printf("消息发送成功: topic=%s, partition=%d, offset=%d\n", topic, partition, offset)
+	return nil
+}
+
+// PublishMessageSync 同步发送protobuf消息（高可靠性）
+func (rp *ReliableProducer) PublishMessageSync(topic string, msg proto.Message) error {
+	protoData, err := proto.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("protobuf序列化失败: %v", err)
+	}
+
+	return rp.SendMessageSync(topic, nil, protoData)
+}
+
+// Close 关闭同步生产者
+func (rp *ReliableProducer) Close() error {
+	return rp.syncProducer.Close()
 }

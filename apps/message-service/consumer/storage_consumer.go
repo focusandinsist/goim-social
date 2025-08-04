@@ -92,6 +92,20 @@ func (s *StorageConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 		}
 
 		return nil
+	case "persistence_message":
+		// 处理来自Logic Service的持久化保障消息
+		if err := s.handlePersistenceMessage(event.Message); err != nil {
+			log.Printf("处理持久化消息失败: %v", err)
+			return nil // 返回nil避免重试
+		}
+
+		// 标记消息已处理
+		if err := s.markMessageProcessed(ctx, msg.Partition, msg.Offset); err != nil {
+			log.Printf("标记持久化消息已处理失败: %v", err)
+		}
+
+		log.Printf("持久化消息处理成功: MessageID=%d", event.Message.MessageId)
+		return nil
 	default:
 		log.Printf("未知的消息事件类型: %s", event.Type)
 		return nil
@@ -160,6 +174,58 @@ func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	}
 
 	log.Printf("消息存储成功: From=%d, To=%d, Status=未读, MessageID=%d, InsertedID=%v",
+		msg.From, msg.To, msg.MessageId, result.InsertedID)
+
+	return nil
+}
+
+// handlePersistenceMessage 处理持久化保障消息（来自Logic Service的同步写入）
+func (s *StorageConsumer) handlePersistenceMessage(msg *rest.WSMessage) error {
+	log.Printf("处理持久化保障消息: From=%d, To=%d, Content=%s, MessageID=%d",
+		msg.From, msg.To, msg.Content, msg.MessageId)
+
+	// 检查MessageID是否存在
+	if msg.MessageId == 0 {
+		log.Printf("持久化消息MessageID为0，跳过存储: From=%d, To=%d", msg.From, msg.To)
+		return fmt.Errorf("MessageID不能为0")
+	}
+
+	// 转换为Message模型并设置状态
+	message := &model.Message{
+		// 不设置ID，让MongoDB自动生成_id
+		MessageID:   msg.MessageId, // 直接使用Kafka消息中的MessageID
+		From:        msg.From,
+		To:          msg.To,
+		GroupID:     msg.GroupId,
+		Content:     msg.Content,
+		MessageType: int(msg.MessageType),
+		Timestamp:   msg.Timestamp,
+		Status:      model.MessageStatusSent,
+		CreatedAt:   time.Unix(msg.Timestamp, 0),
+		UpdatedAt:   time.Now(),
+	}
+
+	// 先尝试简单的插入操作，如果重复则忽略（幂等性保护）
+	collection := s.db.GetCollection("message")
+
+	// 检查消息是否已存在
+	var existingMsg model.Message
+	err := collection.FindOne(context.Background(), bson.M{"message_id": msg.MessageId}).Decode(&existingMsg)
+	if err == nil {
+		// 消息已存在，跳过插入
+		log.Printf("持久化消息已存在(幂等性保护): From=%d, To=%d, MessageID=%d",
+			msg.From, msg.To, msg.MessageId)
+		return nil
+	}
+
+	// 消息不存在，执行插入
+	result, err := collection.InsertOne(context.Background(), message)
+	if err != nil {
+		log.Printf("持久化消息存储失败: %v", err)
+		return err
+	}
+
+	log.Printf("持久化消息存储成功: From=%d, To=%d, Status=已发送, MessageID=%d, InsertedID=%v",
 		msg.From, msg.To, msg.MessageId, result.InsertedID)
 
 	return nil
