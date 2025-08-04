@@ -3,21 +3,24 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
+	"goim-social/apps/friend-service/converter"
 	"goim-social/apps/friend-service/service"
 	"goim-social/pkg/logger"
 )
 
 // HTTPHandler HTTP协议处理器
 type HTTPHandler struct {
-	svc *service.Service
-	log logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	log       logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc: svc,
-		log: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		log:       log,
 	}
 }
 

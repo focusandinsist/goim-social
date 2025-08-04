@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"goim-social/api/rest"
+	"goim-social/apps/user-service/converter"
 	"goim-social/apps/user-service/service"
 	"goim-social/pkg/logger"
 )
@@ -11,15 +12,17 @@ import (
 // GRPCHandler gRPC处理器
 type GRPCHandler struct {
 	rest.UnimplementedUserServiceServer
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewGRPCHandler 创建gRPC处理器
 func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
-		svc:    svc,
-		logger: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -35,22 +38,9 @@ func (g *GRPCHandler) Register(ctx context.Context, req *rest.RegisterRequest) (
 
 // GetUser 获取用户
 func (g *GRPCHandler) GetUser(ctx context.Context, req *rest.GetUserRequest) (*rest.GetUserResponse, error) {
-	// 这里需要将string类型的user_id转换为int64
-	// 简化处理，实际应该做更严格的转换
-	userID := int64(1) // 临时处理
-
-	user, err := g.svc.GetUserByID(ctx, userID)
+	user, err := g.svc.GetUserByID(ctx, req.UserId)
 	if err != nil {
-		return &rest.GetUserResponse{
-			Success: false,
-			Message: err.Error(),
-			User:    nil,
-		}, nil
+		return g.converter.BuildErrorGetUserResponse(err.Error()), nil
 	}
-
-	return &rest.GetUserResponse{
-		Success: true,
-		Message: "获取用户信息成功",
-		User:    user,
-	}, nil
+	return g.converter.BuildGetUserResponse(true, "获取用户信息成功", user), nil
 }

@@ -375,7 +375,7 @@ func (s *Service) GetCleanerStatus(ctx context.Context) map[string]interface{} {
 func (s *Service) ValidateUserPermission(ctx context.Context, userID int64) error {
 	// 调用User服务验证用户状态
 	userResp, err := s.userClient.GetUser(ctx, &rest.GetUserRequest{
-		UserId: fmt.Sprintf("%d", userID),
+		UserId: userID,
 	})
 	if err != nil {
 		return fmt.Errorf("获取用户信息失败: %v", err)

@@ -6,17 +6,17 @@ option go_package = ".;rest";
 
 import "user.proto";
 
-// 获取用户信息请求
-message GetUserRequest {
-  string user_id = 1;
-}
+// // 获取用户信息请求
+// message GetUserRequest {
+//   string user_id = 1;
+// }
 
-// 获取用户信息响应
-message GetUserResponse {
-  bool success = 1;
-  string message = 2;
-  UserResponse user = 3;
-}
+// // 获取用户信息响应
+// message GetUserResponse {
+//   bool success = 1;
+//   string message = 2;
+//   UserResponse user = 3;
+// }
 
 // User服务的gRPC接口
 service UserService {
