@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"goim-social/api/rest"
+	"goim-social/apps/logic-service/converter"
 	"goim-social/apps/logic-service/service"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/utils"
@@ -13,15 +14,17 @@ import (
 
 // HTTPHandler HTTP处理器
 type HTTPHandler struct {
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc:    svc,
-		logger: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -48,10 +51,8 @@ func (h *HTTPHandler) RouteMessage(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error(ctx, "Invalid route message request", logger.F("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "请求参数错误: " + err.Error(),
-		})
+		response := h.converter.BuildHTTPErrorResponse("请求参数错误: " + err.Error())
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
@@ -68,28 +69,17 @@ func (h *HTTPHandler) RouteMessage(c *gin.Context) {
 	result, err := h.svc.ProcessMessage(ctx, wsMsg)
 	if err != nil {
 		h.logger.Error(ctx, "Route message failed", logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "消息路由失败: " + err.Error(),
-		})
+		response := h.converter.BuildHTTPErrorResponse("消息路由失败: " + err.Error())
+		c.JSON(http.StatusInternalServerError, response)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success":       result.Success,
-		"message":       result.Message,
-		"message_id":    result.MessageID,
-		"success_count": result.SuccessCount,
-		"failure_count": result.FailureCount,
-		"failed_users":  result.FailedUsers,
-	})
+	response := h.converter.BuildHTTPRouteMessageResponse(result)
+	c.JSON(http.StatusOK, response)
 }
 
 // HealthCheck 健康检查
 func (h *HTTPHandler) HealthCheck(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status":    "ok",
-		"service":   "logic-service",
-		"timestamp": utils.GetCurrentTimestamp(),
-	})
+	response := h.converter.BuildHTTPHealthResponse("logic-service", utils.GetCurrentTimestamp())
+	c.JSON(http.StatusOK, response)
 }
