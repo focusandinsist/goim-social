@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"goim-social/api/rest"
+	"goim-social/apps/history-service/converter"
 	"goim-social/apps/history-service/model"
 	"goim-social/apps/history-service/service"
 	"goim-social/pkg/logger"
@@ -13,15 +14,17 @@ import (
 // GRPCHandler gRPC处理器
 type GRPCHandler struct {
 	rest.UnimplementedHistoryServiceServer
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewGRPCHandler 创建gRPC处理器
 func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
-		svc:    svc,
-		logger: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -29,8 +32,8 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 func (h *GRPCHandler) CreateHistory(ctx context.Context, req *rest.CreateHistoryRequest) (*rest.CreateHistoryResponse, error) {
 	params := &model.CreateHistoryParams{
 		UserID:      req.UserId,
-		ActionType:  convertActionTypeFromProto(req.ActionType),
-		ObjectType:  convertObjectTypeFromProto(req.HistoryObjectType),
+		ActionType:  h.converter.ActionTypeFromProto(req.ActionType),
+		ObjectType:  h.converter.ObjectTypeFromProto(req.HistoryObjectType),
 		ObjectID:    req.ObjectId,
 		ObjectTitle: req.ObjectTitle,
 		ObjectURL:   req.ObjectUrl,
@@ -47,17 +50,10 @@ func (h *GRPCHandler) CreateHistory(ctx context.Context, req *rest.CreateHistory
 		h.logger.Error(ctx, "Failed to create history via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId))
-		return &rest.CreateHistoryResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorCreateHistoryResponse(err.Error()), nil
 	}
 
-	return &rest.CreateHistoryResponse{
-		Success: true,
-		Message: "历史记录创建成功",
-		Record:  convertHistoryRecordToProto(record),
-	}, nil
+	return h.converter.BuildCreateHistoryResponse(true, "历史记录创建成功", record), nil
 }
 
 // BatchCreateHistory 批量创建历史记录
@@ -66,8 +62,8 @@ func (h *GRPCHandler) BatchCreateHistory(ctx context.Context, req *rest.BatchCre
 	for _, r := range req.Records {
 		params := &model.CreateHistoryParams{
 			UserID:      r.UserId,
-			ActionType:  convertActionTypeFromProto(r.ActionType),
-			ObjectType:  convertObjectTypeFromProto(r.HistoryObjectType),
+			ActionType:  h.converter.ActionTypeFromProto(r.ActionType),
+			ObjectType:  h.converter.ObjectTypeFromProto(r.HistoryObjectType),
 			ObjectID:    r.ObjectId,
 			ObjectTitle: r.ObjectTitle,
 			ObjectURL:   r.ObjectUrl,
@@ -86,31 +82,18 @@ func (h *GRPCHandler) BatchCreateHistory(ctx context.Context, req *rest.BatchCre
 		h.logger.Error(ctx, "Failed to batch create history via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("count", len(req.Records)))
-		return &rest.BatchCreateHistoryResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorBatchCreateHistoryResponse(err.Error()), nil
 	}
 
-	var protoRecords []*rest.HistoryRecord
-	for _, record := range records {
-		protoRecords = append(protoRecords, convertHistoryRecordToProto(record))
-	}
-
-	return &rest.BatchCreateHistoryResponse{
-		Success:      true,
-		Message:      "批量创建成功",
-		CreatedCount: int32(len(records)),
-		Records:      protoRecords,
-	}, nil
+	return h.converter.BuildSuccessBatchCreateHistoryResponse(int32(len(records)), records), nil
 }
 
 // GetUserHistory 获取用户历史记录
 func (h *GRPCHandler) GetUserHistory(ctx context.Context, req *rest.GetUserHistoryRequest) (*rest.GetUserHistoryResponse, error) {
 	params := &model.GetUserHistoryParams{
 		UserID:     req.UserId,
-		ActionType: convertActionTypeFromProto(req.ActionType),
-		ObjectType: convertObjectTypeFromProto(req.HistoryObjectType),
+		ActionType: h.converter.ActionTypeFromProto(req.ActionType),
+		ObjectType: h.converter.ObjectTypeFromProto(req.HistoryObjectType),
 		Page:       req.Page,
 		PageSize:   req.PageSize,
 	}
@@ -132,33 +115,18 @@ func (h *GRPCHandler) GetUserHistory(ctx context.Context, req *rest.GetUserHisto
 		h.logger.Error(ctx, "Failed to get user history via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId))
-		return &rest.GetUserHistoryResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorGetUserHistoryResponse(err.Error()), nil
 	}
 
-	var protoRecords []*rest.HistoryRecord
-	for _, record := range records {
-		protoRecords = append(protoRecords, convertHistoryRecordToProto(record))
-	}
-
-	return &rest.GetUserHistoryResponse{
-		Success:  true,
-		Message:  "获取成功",
-		Records:  protoRecords,
-		Total:    total,
-		Page:     req.Page,
-		PageSize: req.PageSize,
-	}, nil
+	return h.converter.BuildSuccessGetUserHistoryResponse(records, total, req.Page, req.PageSize), nil
 }
 
 // GetObjectHistory 获取对象历史记录
 func (h *GRPCHandler) GetObjectHistory(ctx context.Context, req *rest.GetObjectHistoryRequest) (*rest.GetObjectHistoryResponse, error) {
 	params := &model.GetObjectHistoryParams{
-		ObjectType: convertObjectTypeFromProto(req.HistoryObjectType),
+		ObjectType: h.converter.ObjectTypeFromProto(req.HistoryObjectType),
 		ObjectID:   req.ObjectId,
-		ActionType: convertActionTypeFromProto(req.ActionType),
+		ActionType: h.converter.ActionTypeFromProto(req.ActionType),
 		Page:       req.Page,
 		PageSize:   req.PageSize,
 	}
@@ -181,25 +149,10 @@ func (h *GRPCHandler) GetObjectHistory(ctx context.Context, req *rest.GetObjectH
 			logger.F("error", err.Error()),
 			logger.F("objectType", req.HistoryObjectType),
 			logger.F("objectID", req.ObjectId))
-		return &rest.GetObjectHistoryResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorGetObjectHistoryResponse(err.Error()), nil
 	}
 
-	var protoRecords []*rest.HistoryRecord
-	for _, record := range records {
-		protoRecords = append(protoRecords, convertHistoryRecordToProto(record))
-	}
-
-	return &rest.GetObjectHistoryResponse{
-		Success:  true,
-		Message:  "获取成功",
-		Records:  protoRecords,
-		Total:    total,
-		Page:     req.Page,
-		PageSize: req.PageSize,
-	}, nil
+	return h.converter.BuildSuccessGetObjectHistoryResponse(records, total, req.Page, req.PageSize), nil
 }
 
 // DeleteHistory 删除历史记录
@@ -220,19 +173,15 @@ func (h *GRPCHandler) DeleteHistory(ctx context.Context, req *rest.DeleteHistory
 		}, nil
 	}
 
-	return &rest.DeleteHistoryResponse{
-		Success:      true,
-		Message:      "删除成功",
-		DeletedCount: deletedCount,
-	}, nil
+	return h.converter.BuildSuccessDeleteHistoryResponse(deletedCount), nil
 }
 
 // ClearUserHistory 清空用户历史记录
 func (h *GRPCHandler) ClearUserHistory(ctx context.Context, req *rest.ClearUserHistoryRequest) (*rest.ClearUserHistoryResponse, error) {
 	params := &model.ClearUserHistoryParams{
 		UserID:     req.UserId,
-		ActionType: convertActionTypeFromProto(req.ActionType),
-		ObjectType: convertObjectTypeFromProto(req.HistoryObjectType),
+		ActionType: h.converter.ActionTypeFromProto(req.ActionType),
+		ObjectType: h.converter.ObjectTypeFromProto(req.HistoryObjectType),
 	}
 
 	// 解析时间参数
@@ -247,49 +196,30 @@ func (h *GRPCHandler) ClearUserHistory(ctx context.Context, req *rest.ClearUserH
 		h.logger.Error(ctx, "Failed to clear user history via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId))
-		return &rest.ClearUserHistoryResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorClearUserHistoryResponse(err.Error()), nil
 	}
 
-	return &rest.ClearUserHistoryResponse{
-		Success:      true,
-		Message:      "清空成功",
-		DeletedCount: deletedCount,
-	}, nil
+	return h.converter.BuildSuccessClearUserHistoryResponse(deletedCount), nil
 }
 
 // GetUserActionStats 获取用户行为统计
 func (h *GRPCHandler) GetUserActionStats(ctx context.Context, req *rest.GetUserActionStatsRequest) (*rest.GetUserActionStatsResponse, error) {
-	actionType := convertActionTypeFromProto(req.ActionType)
+	actionType := h.converter.ActionTypeFromProto(req.ActionType)
 	stats, err := h.svc.GetUserActionStats(ctx, req.UserId, actionType)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get user action stats via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId))
-		return &rest.GetUserActionStatsResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorGetUserActionStatsResponse(err.Error()), nil
 	}
 
-	var protoStats []*rest.UserActionStats
-	for _, stat := range stats {
-		protoStats = append(protoStats, convertUserActionStatsToProto(stat))
-	}
-
-	return &rest.GetUserActionStatsResponse{
-		Success: true,
-		Message: "获取成功",
-		Stats:   protoStats,
-	}, nil
+	return h.converter.BuildSuccessGetUserActionStatsResponse(stats), nil
 }
 
 // GetHotObjects 获取热门对象
 func (h *GRPCHandler) GetHotObjects(ctx context.Context, req *rest.GetHotObjectsRequest) (*rest.GetHotObjectsResponse, error) {
 	params := &model.GetHotObjectsParams{
-		ObjectType: convertObjectTypeFromProto(req.HistoryObjectType),
+		ObjectType: h.converter.ObjectTypeFromProto(req.HistoryObjectType),
 		TimeRange:  req.TimeRange,
 		Limit:      req.Limit,
 	}
@@ -299,22 +229,10 @@ func (h *GRPCHandler) GetHotObjects(ctx context.Context, req *rest.GetHotObjects
 		h.logger.Error(ctx, "Failed to get hot objects via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("objectType", req.HistoryObjectType))
-		return &rest.GetHotObjectsResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorGetHotObjectsResponse(err.Error()), nil
 	}
 
-	var protoObjects []*rest.ObjectHotStats
-	for _, obj := range objects {
-		protoObjects = append(protoObjects, convertObjectHotStatsToProto(obj))
-	}
-
-	return &rest.GetHotObjectsResponse{
-		Success: true,
-		Message: "获取成功",
-		Objects: protoObjects,
-	}, nil
+	return h.converter.BuildSuccessGetHotObjectsResponse(objects), nil
 }
 
 // GetUserActivityStats 获取用户活跃度统计
@@ -340,195 +258,8 @@ func (h *GRPCHandler) GetUserActivityStats(ctx context.Context, req *rest.GetUse
 		h.logger.Error(ctx, "Failed to get user activity stats via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId))
-		return &rest.GetUserActivityStatsResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorGetUserActivityStatsResponse(err.Error()), nil
 	}
 
-	var protoStats []*rest.UserActivityStats
-	for _, stat := range stats {
-		protoStats = append(protoStats, convertUserActivityStatsToProto(stat))
-	}
-
-	return &rest.GetUserActivityStatsResponse{
-		Success: true,
-		Message: "获取成功",
-		Stats:   protoStats,
-	}, nil
-}
-
-// 转换函数
-
-// convertHistoryRecordToProto 将历史记录模型转换为protobuf格式
-func convertHistoryRecordToProto(record *model.HistoryRecord) *rest.HistoryRecord {
-	if record == nil {
-		return nil
-	}
-
-	return &rest.HistoryRecord{
-		Id:                record.ID,
-		UserId:            record.UserID,
-		ActionType:        convertActionTypeToProto(record.ActionType),
-		HistoryObjectType: convertObjectTypeToProto(record.ObjectType),
-		ObjectId:          record.ObjectID,
-		ObjectTitle:       record.ObjectTitle,
-		ObjectUrl:         record.ObjectURL,
-		Metadata:          record.Metadata,
-		IpAddress:         record.IPAddress,
-		UserAgent:         record.UserAgent,
-		DeviceInfo:        record.DeviceInfo,
-		Location:          record.Location,
-		Duration:          record.Duration,
-		CreatedAt:         record.CreatedAt.Format(time.RFC3339),
-	}
-}
-
-// convertUserActionStatsToProto 将用户行为统计模型转换为protobuf格式
-func convertUserActionStatsToProto(stats *model.UserActionStats) *rest.UserActionStats {
-	if stats == nil {
-		return nil
-	}
-
-	return &rest.UserActionStats{
-		UserId:         stats.UserID,
-		ActionType:     convertActionTypeToProto(stats.ActionType),
-		TotalCount:     stats.TotalCount,
-		TodayCount:     stats.TodayCount,
-		WeekCount:      stats.WeekCount,
-		MonthCount:     stats.MonthCount,
-		LastActionTime: stats.LastActionTime.Format(time.RFC3339),
-	}
-}
-
-// convertObjectHotStatsToProto 将对象热度统计模型转换为protobuf格式
-func convertObjectHotStatsToProto(stats *model.ObjectHotStats) *rest.ObjectHotStats {
-	if stats == nil {
-		return nil
-	}
-
-	return &rest.ObjectHotStats{
-		HistoryObjectType: convertObjectTypeToProto(stats.ObjectType),
-		ObjectId:          stats.ObjectID,
-		ObjectTitle:       stats.ObjectTitle,
-		ViewCount:         stats.ViewCount,
-		LikeCount:         stats.LikeCount,
-		FavoriteCount:     stats.FavoriteCount,
-		ShareCount:        stats.ShareCount,
-		CommentCount:      stats.CommentCount,
-		HotScore:          stats.HotScore,
-		LastActiveTime:    stats.LastActiveTime.Format(time.RFC3339),
-	}
-}
-
-// convertUserActivityStatsToProto 将用户活跃度统计模型转换为protobuf格式
-func convertUserActivityStatsToProto(stats *model.UserActivityStats) *rest.UserActivityStats {
-	if stats == nil {
-		return nil
-	}
-
-	return &rest.UserActivityStats{
-		UserId:         stats.UserID,
-		Date:           stats.Date.Format("2006-01-02"),
-		TotalActions:   stats.TotalActions,
-		UniqueObjects:  stats.UniqueObjects,
-		OnlineDuration: stats.OnlineDuration,
-		ActivityScore:  stats.ActivityScore,
-	}
-}
-
-// convertActionTypeToProto 将行为类型转换为protobuf枚举
-func convertActionTypeToProto(actionType string) rest.ActionType {
-	switch actionType {
-	case model.ActionTypeView:
-		return rest.ActionType_ACTION_TYPE_VIEW
-	case model.ActionTypeLike:
-		return rest.ActionType_ACTION_TYPE_LIKE
-	case model.ActionTypeFavorite:
-		return rest.ActionType_ACTION_TYPE_FAVORITE
-	case model.ActionTypeShare:
-		return rest.ActionType_ACTION_TYPE_SHARE
-	case model.ActionTypeComment:
-		return rest.ActionType_ACTION_TYPE_COMMENT
-	case model.ActionTypeFollow:
-		return rest.ActionType_ACTION_TYPE_FOLLOW
-	case model.ActionTypeLogin:
-		return rest.ActionType_ACTION_TYPE_LOGIN
-	case model.ActionTypeSearch:
-		return rest.ActionType_ACTION_TYPE_SEARCH
-	case model.ActionTypeDownload:
-		return rest.ActionType_ACTION_TYPE_DOWNLOAD
-	case model.ActionTypePurchase:
-		return rest.ActionType_ACTION_TYPE_PURCHASE
-	default:
-		return rest.ActionType_ACTION_TYPE_UNSPECIFIED
-	}
-}
-
-// convertActionTypeFromProto 将protobuf枚举转换为行为类型
-func convertActionTypeFromProto(actionType rest.ActionType) string {
-	switch actionType {
-	case rest.ActionType_ACTION_TYPE_VIEW:
-		return model.ActionTypeView
-	case rest.ActionType_ACTION_TYPE_LIKE:
-		return model.ActionTypeLike
-	case rest.ActionType_ACTION_TYPE_FAVORITE:
-		return model.ActionTypeFavorite
-	case rest.ActionType_ACTION_TYPE_SHARE:
-		return model.ActionTypeShare
-	case rest.ActionType_ACTION_TYPE_COMMENT:
-		return model.ActionTypeComment
-	case rest.ActionType_ACTION_TYPE_FOLLOW:
-		return model.ActionTypeFollow
-	case rest.ActionType_ACTION_TYPE_LOGIN:
-		return model.ActionTypeLogin
-	case rest.ActionType_ACTION_TYPE_SEARCH:
-		return model.ActionTypeSearch
-	case rest.ActionType_ACTION_TYPE_DOWNLOAD:
-		return model.ActionTypeDownload
-	case rest.ActionType_ACTION_TYPE_PURCHASE:
-		return model.ActionTypePurchase
-	default:
-		return ""
-	}
-}
-
-// convertObjectTypeToProto 将对象类型转换为protobuf枚举
-func convertObjectTypeToProto(objectType string) rest.HistoryObjectType {
-	switch objectType {
-	case model.ObjectTypePost:
-		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_POST
-	case model.ObjectTypeArticle:
-		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_ARTICLE
-	case model.ObjectTypeVideo:
-		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_VIDEO
-	case model.ObjectTypeUser:
-		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_USER
-	case model.ObjectTypeProduct:
-		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_PRODUCT
-	case model.ObjectTypeGroup:
-		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_GROUP
-	default:
-		return rest.HistoryObjectType_HISTORY_OBJECT_TYPE_UNSPECIFIED
-	}
-}
-
-// convertObjectTypeFromProto 将protobuf枚举转换为对象类型
-func convertObjectTypeFromProto(objectType rest.HistoryObjectType) string {
-	switch objectType {
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_POST:
-		return model.ObjectTypePost
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_ARTICLE:
-		return model.ObjectTypeArticle
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_VIDEO:
-		return model.ObjectTypeVideo
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_USER:
-		return model.ObjectTypeUser
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_PRODUCT:
-		return model.ObjectTypeProduct
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_GROUP:
-		return model.ObjectTypeGroup
-	default:
-		return ""
-	}
+	return h.converter.BuildSuccessGetUserActivityStatsResponse(stats), nil
 }

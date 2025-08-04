@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"goim-social/api/rest"
+	"goim-social/apps/api-gateway-service/converter"
 	"goim-social/apps/api-gateway-service/service"
 	"goim-social/pkg/logger"
 )
@@ -11,15 +12,17 @@ import (
 // GRPCHandler gRPC处理器
 type GRPCHandler struct {
 	rest.UnimplementedConnectServiceServer
-	svc *service.Service
-	log logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	log       logger.Logger
 }
 
 // NewGRPCHandler 创建gRPC处理器
 func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
-		svc: svc,
-		log: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		log:       log,
 	}
 }
 
@@ -30,12 +33,8 @@ func (h *GRPCHandler) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRe
 	status, err := h.svc.OnlineStatus(ctx, req.UserIds)
 	if err != nil {
 		h.log.Error(ctx, "gRPC OnlineStatus failed", logger.F("error", err.Error()))
-		return &rest.OnlineStatusResponse{
-			Status: make(map[int64]bool),
-		}, err
+		return h.converter.BuildEmptyOnlineStatusResponse(), err
 	}
 
-	return &rest.OnlineStatusResponse{
-		Status: status,
-	}, nil
+	return h.converter.BuildOnlineStatusResponse(status), nil
 }
