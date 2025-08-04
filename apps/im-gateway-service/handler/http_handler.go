@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"goim-social/apps/im-gateway-service/converter"
 	"goim-social/apps/im-gateway-service/service"
 	"goim-social/pkg/logger"
 
@@ -11,15 +12,17 @@ import (
 
 // HTTPHandler HTTP协议处理器
 type HTTPHandler struct {
-	svc *service.Service
-	log logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	log       logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc: svc,
-		log: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		log:       log,
 	}
 }
 
@@ -39,14 +42,17 @@ func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.log.Error(ctx, "Invalid online status request", logger.F("error", err.Error()))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response := h.converter.BuildHTTPInvalidRequestResponse(err.Error())
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 	status, err := h.svc.OnlineStatus(ctx, req.UserIDs)
 	if err != nil {
 		h.log.Error(ctx, "Online status failed", logger.F("error", err.Error()))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response := h.converter.BuildHTTPErrorOnlineStatusResponse(err.Error())
+		c.JSON(http.StatusInternalServerError, response)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": status})
+	response := h.converter.BuildHTTPOnlineStatusResponse(status)
+	c.JSON(http.StatusOK, response)
 }
