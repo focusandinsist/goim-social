@@ -2,6 +2,7 @@ package handler
 
 import (
 	"goim-social/api/rest"
+	"goim-social/apps/content-service/converter"
 	"goim-social/apps/content-service/model"
 	"goim-social/apps/content-service/service"
 	"goim-social/pkg/httpx"
@@ -12,15 +13,17 @@ import (
 
 // HTTPHandler HTTP处理器
 type HTTPHandler struct {
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc:    svc,
-		logger: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -57,30 +60,16 @@ func (h *HTTPHandler) CreateContent(c *gin.Context) {
 	var req rest.CreateContentRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid create content request", logger.F("error", err.Error()))
-		res := &rest.CreateContentResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorCreateContentResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换媒体文件
-	var mediaFiles []model.ContentMediaFile
-	for _, mf := range req.MediaFiles {
-		mediaFiles = append(mediaFiles, model.ContentMediaFile{
-			URL:      mf.Url,
-			Filename: mf.Filename,
-			Size:     mf.Size,
-			MimeType: mf.MimeType,
-			Width:    mf.Width,
-			Height:   mf.Height,
-			Duration: mf.Duration,
-		})
-	}
+	mediaFiles := h.converter.MediaFileProtoToModels(req.MediaFiles)
 
 	// 转换内容类型
-	contentType := convertContentTypeFromProto(req.Type)
+	contentType := h.converter.ContentTypeFromProto(req.Type)
 
 	content, err := h.svc.CreateContent(
 		ctx,
@@ -95,24 +84,15 @@ func (h *HTTPHandler) CreateContent(c *gin.Context) {
 		req.SaveAsDraft,
 	)
 
-	res := &rest.CreateContentResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "创建成功"
-		}(),
-		Content: func() *rest.Content {
-			if err != nil {
-				return nil
-			}
-			return convertContentToProto(content)
-		}(),
-	}
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Create content failed", logger.F("error", err.Error()))
+	} else {
+		message = "创建成功"
 	}
+
+	res := h.converter.BuildCreateContentResponse(err == nil, message, content)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -122,30 +102,16 @@ func (h *HTTPHandler) UpdateContent(c *gin.Context) {
 	var req rest.UpdateContentRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid update content request", logger.F("error", err.Error()))
-		res := &rest.UpdateContentResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorUpdateContentResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换媒体文件
-	var mediaFiles []model.ContentMediaFile
-	for _, mf := range req.MediaFiles {
-		mediaFiles = append(mediaFiles, model.ContentMediaFile{
-			URL:      mf.Url,
-			Filename: mf.Filename,
-			Size:     mf.Size,
-			MimeType: mf.MimeType,
-			Width:    mf.Width,
-			Height:   mf.Height,
-			Duration: mf.Duration,
-		})
-	}
+	mediaFiles := h.converter.MediaFileProtoToModels(req.MediaFiles)
 
 	// 转换内容类型
-	contentType := convertContentTypeFromProto(req.Type)
+	contentType := h.converter.ContentTypeFromProto(req.Type)
 
 	content, err := h.svc.UpdateContent(
 		ctx,
@@ -160,24 +126,15 @@ func (h *HTTPHandler) UpdateContent(c *gin.Context) {
 		req.TemplateData,
 	)
 
-	res := &rest.UpdateContentResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "更新成功"
-		}(),
-		Content: func() *rest.Content {
-			if err != nil {
-				return nil
-			}
-			return convertContentToProto(content)
-		}(),
-	}
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Update content failed", logger.F("error", err.Error()))
+	} else {
+		message = "更新成功"
 	}
+
+	res := h.converter.BuildUpdateContentResponse(err == nil, message, content)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -187,33 +144,22 @@ func (h *HTTPHandler) GetContent(c *gin.Context) {
 	var req rest.GetContentRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid get content request", logger.F("error", err.Error()))
-		res := &rest.GetContentResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorGetContentResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	content, err := h.svc.GetContent(ctx, req.ContentId, req.UserId)
-	res := &rest.GetContentResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "获取成功"
-		}(),
-		Content: func() *rest.Content {
-			if err != nil {
-				return nil
-			}
-			return convertContentToProto(content)
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Get content failed", logger.F("error", err.Error()))
+	} else {
+		message = "获取成功"
 	}
+
+	res := h.converter.BuildGetContentResponse(err == nil, message, content)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -223,27 +169,22 @@ func (h *HTTPHandler) DeleteContent(c *gin.Context) {
 	var req rest.DeleteContentRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid delete content request", logger.F("error", err.Error()))
-		res := &rest.DeleteContentResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorDeleteContentResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	err := h.svc.DeleteContent(ctx, req.ContentId, req.AuthorId)
-	res := &rest.DeleteContentResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "删除成功"
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Delete content failed", logger.F("error", err.Error()))
+	} else {
+		message = "删除成功"
 	}
+
+	res := h.converter.BuildDeleteContentResponse(err == nil, message)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -253,33 +194,22 @@ func (h *HTTPHandler) PublishContent(c *gin.Context) {
 	var req rest.PublishContentRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid publish content request", logger.F("error", err.Error()))
-		res := &rest.PublishContentResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorPublishContentResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	content, err := h.svc.PublishContent(ctx, req.ContentId, req.AuthorId)
-	res := &rest.PublishContentResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "发布成功"
-		}(),
-		Content: func() *rest.Content {
-			if err != nil {
-				return nil
-			}
-			return convertContentToProto(content)
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Publish content failed", logger.F("error", err.Error()))
+	} else {
+		message = "发布成功"
 	}
+
+	res := h.converter.BuildPublishContentResponse(err == nil, message, content)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -289,36 +219,25 @@ func (h *HTTPHandler) ChangeContentStatus(c *gin.Context) {
 	var req rest.ChangeContentStatusRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid change content status request", logger.F("error", err.Error()))
-		res := &rest.ChangeContentStatusResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorChangeContentStatusResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换状态枚举
-	newStatus := convertContentStatusFromProto(req.NewStatus)
+	newStatus := h.converter.ContentStatusFromProto(req.NewStatus)
 
 	content, err := h.svc.ChangeContentStatus(ctx, req.ContentId, req.OperatorId, newStatus, req.Reason)
-	res := &rest.ChangeContentStatusResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "状态变更成功"
-		}(),
-		Content: func() *rest.Content {
-			if err != nil {
-				return nil
-			}
-			return convertContentToProto(content)
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Change content status failed", logger.F("error", err.Error()))
+	} else {
+		message = "状态变更成功"
 	}
+
+	res := h.converter.BuildChangeContentStatusResponse(err == nil, message, content)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -328,17 +247,14 @@ func (h *HTTPHandler) SearchContent(c *gin.Context) {
 	var req rest.SearchContentRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid search content request", logger.F("error", err.Error()))
-		res := &rest.SearchContentResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorSearchContentResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	contentType := convertContentTypeFromProto(req.Type)
-	status := convertContentStatusFromProto(req.Status)
+	contentType := h.converter.ContentTypeFromProto(req.Type)
+	status := h.converter.ContentStatusFromProto(req.Status)
 
 	params := &model.SearchContentParams{
 		Keyword:   req.Keyword,
@@ -355,30 +271,15 @@ func (h *HTTPHandler) SearchContent(c *gin.Context) {
 
 	contents, total, err := h.svc.SearchContent(ctx, params)
 
-	// 转换内容列表
-	var protoContents []*rest.Content
-	if err == nil {
-		for _, content := range contents {
-			protoContents = append(protoContents, convertContentToProto(content))
-		}
+	var message string
+	if err != nil {
+		message = err.Error()
+		h.logger.Error(ctx, "Search content failed", logger.F("error", err.Error()))
+	} else {
+		message = "搜索成功"
 	}
 
-	res := &rest.SearchContentResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "搜索成功"
-		}(),
-		Contents: protoContents,
-		Total:    total,
-		Page:     req.Page,
-		PageSize: req.PageSize,
-	}
-	if err != nil {
-		h.logger.Error(ctx, "Search content failed", logger.F("error", err.Error()))
-	}
+	res := h.converter.BuildSearchContentResponse(err == nil, message, contents, total, req.Page, req.PageSize)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -388,43 +289,25 @@ func (h *HTTPHandler) GetUserContent(c *gin.Context) {
 	var req rest.GetUserContentRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid get user content request", logger.F("error", err.Error()))
-		res := &rest.GetUserContentResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorGetUserContentResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换状态枚举
-	status := convertContentStatusFromProto(req.Status)
+	status := h.converter.ContentStatusFromProto(req.Status)
 
 	contents, total, err := h.svc.GetUserContent(ctx, req.AuthorId, status, req.Page, req.PageSize)
 
-	// 转换内容列表
-	var protoContents []*rest.Content
-	if err == nil {
-		for _, content := range contents {
-			protoContents = append(protoContents, convertContentToProto(content))
-		}
+	var message string
+	if err != nil {
+		message = err.Error()
+		h.logger.Error(ctx, "Get user content failed", logger.F("error", err.Error()))
+	} else {
+		message = "获取成功"
 	}
 
-	res := &rest.GetUserContentResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "获取成功"
-		}(),
-		Contents: protoContents,
-		Total:    total,
-		Page:     req.Page,
-		PageSize: req.PageSize,
-	}
-	if err != nil {
-		h.logger.Error(ctx, "Get user content failed", logger.F("error", err.Error()))
-	}
+	res := h.converter.BuildGetUserContentResponse(err == nil, message, contents, total, req.Page, req.PageSize)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -434,63 +317,22 @@ func (h *HTTPHandler) GetContentStats(c *gin.Context) {
 	var req rest.GetContentStatsRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid get content stats request", logger.F("error", err.Error()))
-		res := &rest.GetContentStatsResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorGetContentStatsResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	stats, err := h.svc.GetContentStats(ctx, req.AuthorId)
-	res := &rest.GetContentStatsResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "获取成功"
-		}(),
-		TotalContents: func() int64 {
-			if err != nil {
-				return 0
-			}
-			return stats.TotalContents
-		}(),
-		PublishedContents: func() int64 {
-			if err != nil {
-				return 0
-			}
-			return stats.PublishedContents
-		}(),
-		DraftContents: func() int64 {
-			if err != nil {
-				return 0
-			}
-			return stats.DraftContents
-		}(),
-		PendingContents: func() int64 {
-			if err != nil {
-				return 0
-			}
-			return stats.PendingContents
-		}(),
-		TotalViews: func() int64 {
-			if err != nil {
-				return 0
-			}
-			return stats.TotalViews
-		}(),
-		TotalLikes: func() int64 {
-			if err != nil {
-				return 0
-			}
-			return stats.TotalLikes
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Get content stats failed", logger.F("error", err.Error()))
+	} else {
+		message = "获取成功"
 	}
+
+	res := h.converter.BuildGetContentStatsResponse(err == nil, message, stats)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -500,33 +342,22 @@ func (h *HTTPHandler) CreateTag(c *gin.Context) {
 	var req rest.CreateTagRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid create tag request", logger.F("error", err.Error()))
-		res := &rest.CreateTagResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorCreateTagResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	tag, err := h.svc.CreateTag(ctx, req.Name)
-	res := &rest.CreateTagResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "创建成功"
-		}(),
-		Tag: func() *rest.ContentTag {
-			if err != nil {
-				return nil
-			}
-			return convertTagToProto(tag)
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Create tag failed", logger.F("error", err.Error()))
+	} else {
+		message = "创建成功"
 	}
+
+	res := h.converter.BuildCreateTagResponse(err == nil, message, tag)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -536,38 +367,22 @@ func (h *HTTPHandler) GetTags(c *gin.Context) {
 	var req rest.GetTagsRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid get tags request", logger.F("error", err.Error()))
-		res := &rest.GetTagsResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorGetTagsResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	tags, total, err := h.svc.GetTags(ctx, req.Keyword, req.Page, req.PageSize)
 
-	// 转换标签列表
-	var protoTags []*rest.ContentTag
-	if err == nil {
-		for _, tag := range tags {
-			protoTags = append(protoTags, convertTagToProto(tag))
-		}
+	var message string
+	if err != nil {
+		message = err.Error()
+		h.logger.Error(ctx, "Get tags failed", logger.F("error", err.Error()))
+	} else {
+		message = "获取成功"
 	}
 
-	res := &rest.GetTagsResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "获取成功"
-		}(),
-		Tags:  protoTags,
-		Total: total,
-	}
-	if err != nil {
-		h.logger.Error(ctx, "Get tags failed", logger.F("error", err.Error()))
-	}
+	res := h.converter.BuildGetTagsResponse(err == nil, message, tags, total)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -577,33 +392,22 @@ func (h *HTTPHandler) CreateTopic(c *gin.Context) {
 	var req rest.CreateTopicRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid create topic request", logger.F("error", err.Error()))
-		res := &rest.CreateTopicResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorCreateTopicResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	topic, err := h.svc.CreateTopic(ctx, req.Name, req.Description, req.CoverImage)
-	res := &rest.CreateTopicResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "创建成功"
-		}(),
-		Topic: func() *rest.ContentTopic {
-			if err != nil {
-				return nil
-			}
-			return convertTopicToProto(topic)
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.logger.Error(ctx, "Create topic failed", logger.F("error", err.Error()))
+	} else {
+		message = "创建成功"
 	}
+
+	res := h.converter.BuildCreateTopicResponse(err == nil, message, topic)
 	httpx.WriteObject(c, res, err)
 }
 
@@ -613,37 +417,21 @@ func (h *HTTPHandler) GetTopics(c *gin.Context) {
 	var req rest.GetTopicsRequest
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error(ctx, "Invalid get topics request", logger.F("error", err.Error()))
-		res := &rest.GetTopicsResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
+		res := h.converter.BuildErrorGetTopicsResponse("Invalid request format")
 		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	topics, total, err := h.svc.GetTopics(ctx, req.Keyword, req.HotOnly, req.Page, req.PageSize)
 
-	// 转换话题列表
-	var protoTopics []*rest.ContentTopic
-	if err == nil {
-		for _, topic := range topics {
-			protoTopics = append(protoTopics, convertTopicToProto(topic))
-		}
+	var message string
+	if err != nil {
+		message = err.Error()
+		h.logger.Error(ctx, "Get topics failed", logger.F("error", err.Error()))
+	} else {
+		message = "获取成功"
 	}
 
-	res := &rest.GetTopicsResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "获取成功"
-		}(),
-		Topics: protoTopics,
-		Total:  total,
-	}
-	if err != nil {
-		h.logger.Error(ctx, "Get topics failed", logger.F("error", err.Error()))
-	}
+	res := h.converter.BuildGetTopicsResponse(err == nil, message, topics, total)
 	httpx.WriteObject(c, res, err)
 }
