@@ -2,21 +2,20 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"os/exec"
+	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-
-	"bytes"
-	"encoding/json"
-	"net/http"
-	"os/exec"
-	"os/signal"
-	"runtime"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -268,7 +267,7 @@ func main() {
 // fetchGroupInfo fetches group information from the API
 func (c *GroupChatClient) fetchGroupInfo() error {
 	// 直接调用群组服务，而不是通过API网关
-	url := fmt.Sprintf("http://localhost:21002/api/v1/group/info")
+	url := "http://localhost:21002/api/v1/group/info"
 
 	reqData := map[string]interface{}{
 		"group_id": c.groupID,

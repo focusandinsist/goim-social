@@ -14,28 +14,23 @@ func (h *HTTPHandler) InviteToGroup(c *gin.Context) {
 	var req rest.InviteToGroupRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid invite to group request", logger.F("error", err.Error()))
-		res := &rest.InviteToGroupResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildInviteToGroupResponse(false, "Invalid request format")
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	err := h.svc.InviteToGroup(ctx, req.GroupId, req.InviterId, req.UserId, "welcome")
-	res := &rest.InviteToGroupResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "邀请发送成功"
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Invite to group failed", logger.F("error", err.Error()))
+	} else {
+		message = "邀请发送成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildInviteToGroupResponse(err == nil, message)
+	httpx.WriteObject(c, resp, err)
 }
 
 // PublishAnnouncement 发布群公告
@@ -44,28 +39,23 @@ func (h *HTTPHandler) PublishAnnouncement(c *gin.Context) {
 	var req rest.PublishAnnouncementRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid publish announcement request", logger.F("error", err.Error()))
-		res := &rest.PublishAnnouncementResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildPublishAnnouncementResponse(false, "Invalid request format")
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	err := h.svc.PublishAnnouncement(ctx, req.GroupId, req.UserId, req.Content)
-	res := &rest.PublishAnnouncementResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "发布群公告成功"
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Publish announcement failed", logger.F("error", err.Error()))
+	} else {
+		message = "发布群公告成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildPublishAnnouncementResponse(err == nil, message)
+	httpx.WriteObject(c, resp, err)
 }
 
 // GetUserGroups 获取用户群组列表
@@ -74,51 +64,21 @@ func (h *HTTPHandler) GetUserGroups(c *gin.Context) {
 	var req rest.GetUserGroupsRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid get user groups request", logger.F("error", err.Error()))
-		res := &rest.GetUserGroupsResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildGetUserGroupsResponse(false, "Invalid request format", nil, 0, 0, 0)
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	groups, total, err := h.svc.GetUserGroups(ctx, req.UserId, req.Page, req.PageSize)
-	res := &rest.GetUserGroupsResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "获取用户群组列表成功"
-		}(),
-		Groups: func() []*rest.GroupInfo {
-			if err != nil {
-				return []*rest.GroupInfo{}
-			}
-			var pbGroups []*rest.GroupInfo
-			for _, group := range groups {
-				pbGroups = append(pbGroups, &rest.GroupInfo{
-					Id:           group.ID,
-					Name:         group.Name,
-					Description:  group.Description,
-					Avatar:       group.Avatar,
-					OwnerId:      group.OwnerID,
-					MemberCount:  group.MemberCount,
-					MaxMembers:   group.MaxMembers,
-					IsPublic:     group.IsPublic,
-					Announcement: group.Announcement,
-					CreatedAt:    group.CreatedAt.Unix(),
-					UpdatedAt:    group.UpdatedAt.Unix(),
-				})
-			}
-			return pbGroups
-		}(),
-		Total:    int32(total),
-		Page:     req.Page,
-		PageSize: req.PageSize,
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Get user groups failed", logger.F("error", err.Error()))
+	} else {
+		message = "获取用户群组列表成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildGetUserGroupsResponse(err == nil, message, groups, total, req.Page, req.PageSize)
+	httpx.WriteObject(c, resp, err)
 }

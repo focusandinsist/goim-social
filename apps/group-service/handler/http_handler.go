@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"goim-social/api/rest"
+	"goim-social/apps/group-service/converter"
 	"goim-social/apps/group-service/service"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
@@ -11,15 +12,17 @@ import (
 
 // HTTPHandler HTTP协议处理器
 type HTTPHandler struct {
-	svc *service.Service
-	log logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	log       logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc: svc,
-		log: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		log:       log,
 	}
 }
 
@@ -46,53 +49,23 @@ func (h *HTTPHandler) SearchGroups(c *gin.Context) {
 	var req rest.SearchGroupRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid search groups request", logger.F("error", err.Error()))
-		res := &rest.SearchGroupResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildSearchGroupResponse(false, "Invalid request format", nil, 0, 0, 0)
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	groups, total, err := h.svc.SearchGroups(ctx, req.Keyword, req.Page, req.PageSize)
-	res := &rest.SearchGroupResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "搜索成功"
-		}(),
-		Groups: func() []*rest.GroupInfo {
-			if err != nil {
-				return []*rest.GroupInfo{}
-			}
-			var pbGroups []*rest.GroupInfo
-			for _, group := range groups {
-				pbGroups = append(pbGroups, &rest.GroupInfo{
-					Id:           group.ID,
-					Name:         group.Name,
-					Description:  group.Description,
-					Avatar:       group.Avatar,
-					OwnerId:      group.OwnerID,
-					MemberCount:  group.MemberCount,
-					MaxMembers:   group.MaxMembers,
-					IsPublic:     group.IsPublic,
-					Announcement: group.Announcement,
-					CreatedAt:    group.CreatedAt.Unix(),
-					UpdatedAt:    group.UpdatedAt.Unix(),
-				})
-			}
-			return pbGroups
-		}(),
-		Total:    int32(total),
-		Page:     req.Page,
-		PageSize: req.PageSize,
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Search groups failed", logger.F("error", err.Error()))
+	} else {
+		message = "搜索成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildSearchGroupResponse(err == nil, message, groups, total, req.Page, req.PageSize)
+	httpx.WriteObject(c, resp, err)
 }
 
 // CreateGroup 创建群组
@@ -101,46 +74,23 @@ func (h *HTTPHandler) CreateGroup(c *gin.Context) {
 	var req rest.CreateGroupRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid create group request", logger.F("error", err.Error()))
-		res := &rest.CreateGroupResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildCreateGroupResponse(false, "Invalid request format", nil)
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	group, err := h.svc.CreateGroup(ctx, req.Name, req.Description, req.Avatar, req.OwnerId, req.IsPublic, req.MaxMembers, req.MemberIds)
-	res := &rest.CreateGroupResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "创建群组成功"
-		}(),
-		Group: func() *rest.GroupInfo {
-			if group != nil {
-				return &rest.GroupInfo{
-					Id:           group.ID,
-					Name:         group.Name,
-					Description:  group.Description,
-					Avatar:       group.Avatar,
-					OwnerId:      group.OwnerID,
-					MemberCount:  group.MemberCount,
-					MaxMembers:   group.MaxMembers,
-					IsPublic:     group.IsPublic,
-					Announcement: group.Announcement,
-					CreatedAt:    group.CreatedAt.Unix(),
-					UpdatedAt:    group.UpdatedAt.Unix(),
-				}
-			}
-			return nil
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Create group failed", logger.F("error", err.Error()))
+	} else {
+		message = "创建群组成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildCreateGroupResponse(err == nil, message, group)
+	httpx.WriteObject(c, resp, err)
 }
 
 // GetGroupInfo 获取群组信息
@@ -149,62 +99,23 @@ func (h *HTTPHandler) GetGroupInfo(c *gin.Context) {
 	var req rest.GetGroupInfoRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid get group info request", logger.F("error", err.Error()))
-		res := &rest.GetGroupInfoResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildGetGroupInfoResponse(false, "Invalid request format", nil, nil)
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	group, members, err := h.svc.GetGroupInfo(ctx, req.GroupId, req.UserId)
-	res := &rest.GetGroupInfoResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "获取群组信息成功"
-		}(),
-		Group: func() *rest.GroupInfo {
-			if group != nil {
-				return &rest.GroupInfo{
-					Id:           group.ID,
-					Name:         group.Name,
-					Description:  group.Description,
-					Avatar:       group.Avatar,
-					OwnerId:      group.OwnerID,
-					MemberCount:  group.MemberCount,
-					MaxMembers:   group.MaxMembers,
-					IsPublic:     group.IsPublic,
-					Announcement: group.Announcement,
-					CreatedAt:    group.CreatedAt.Unix(),
-					UpdatedAt:    group.UpdatedAt.Unix(),
-				}
-			}
-			return nil
-		}(),
-		Members: func() []*rest.GroupMemberInfo {
-			if err != nil {
-				return []*rest.GroupMemberInfo{}
-			}
-			var pbMembers []*rest.GroupMemberInfo
-			for _, member := range members {
-				pbMembers = append(pbMembers, &rest.GroupMemberInfo{
-					UserId:   member.UserID,
-					GroupId:  member.GroupID,
-					Role:     member.Role,
-					Nickname: member.Nickname,
-					JoinedAt: member.JoinedAt.Unix(),
-				})
-			}
-			return pbMembers
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Get group info failed", logger.F("error", err.Error()))
+	} else {
+		message = "获取群组信息成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildGetGroupInfoResponse(err == nil, message, group, members)
+	httpx.WriteObject(c, resp, err)
 }
 
 // DisbandGroup 解散群组
@@ -213,28 +124,23 @@ func (h *HTTPHandler) DisbandGroup(c *gin.Context) {
 	var req rest.DisbandGroupRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid disband group request", logger.F("error", err.Error()))
-		res := &rest.DisbandGroupResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildDisbandGroupResponse(false, "Invalid request format")
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	err := h.svc.DisbandGroup(ctx, req.GroupId, req.UserId)
-	res := &rest.DisbandGroupResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "解散群组成功"
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Disband group failed", logger.F("error", err.Error()))
+	} else {
+		message = "解散群组成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildDisbandGroupResponse(err == nil, message)
+	httpx.WriteObject(c, resp, err)
 }
 
 // JoinGroup 加入群组
@@ -243,28 +149,23 @@ func (h *HTTPHandler) JoinGroup(c *gin.Context) {
 	var req rest.JoinGroupRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid join group request", logger.F("error", err.Error()))
-		res := &rest.JoinGroupResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildJoinGroupResponse(false, "Invalid request format")
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	err := h.svc.JoinGroup(ctx, req.GroupId, req.UserId, req.Reason)
-	res := &rest.JoinGroupResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "加入群组成功"
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Join group failed", logger.F("error", err.Error()))
+	} else {
+		message = "加入群组成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildJoinGroupResponse(err == nil, message)
+	httpx.WriteObject(c, resp, err)
 }
 
 // LeaveGroup 退出群组
@@ -273,28 +174,23 @@ func (h *HTTPHandler) LeaveGroup(c *gin.Context) {
 	var req rest.LeaveGroupRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid leave group request", logger.F("error", err.Error()))
-		res := &rest.LeaveGroupResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildLeaveGroupResponse(false, "Invalid request format")
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	err := h.svc.LeaveGroup(ctx, req.GroupId, req.UserId)
-	res := &rest.LeaveGroupResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "退出群组成功"
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Leave group failed", logger.F("error", err.Error()))
+	} else {
+		message = "退出群组成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildLeaveGroupResponse(err == nil, message)
+	httpx.WriteObject(c, resp, err)
 }
 
 // KickMember 踢出成员
@@ -303,26 +199,21 @@ func (h *HTTPHandler) KickMember(c *gin.Context) {
 	var req rest.KickMemberRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid kick member request", logger.F("error", err.Error()))
-		res := &rest.KickMemberResponse{
-			Success: false,
-			Message: "Invalid request format",
-		}
-		httpx.WriteObject(c, res, err)
+		resp := h.converter.BuildKickMemberResponse(false, "Invalid request format")
+		httpx.WriteObject(c, resp, err)
 		return
 	}
 
 	err := h.svc.KickMember(ctx, req.GroupId, req.OperatorId, req.TargetUserId)
-	res := &rest.KickMemberResponse{
-		Success: err == nil,
-		Message: func() string {
-			if err != nil {
-				return err.Error()
-			}
-			return "踢出成员成功"
-		}(),
-	}
+
+	var message string
 	if err != nil {
+		message = err.Error()
 		h.log.Error(ctx, "Kick member failed", logger.F("error", err.Error()))
+	} else {
+		message = "踢出成员成功"
 	}
-	httpx.WriteObject(c, res, err)
+
+	resp := h.converter.BuildKickMemberResponse(err == nil, message)
+	httpx.WriteObject(c, resp, err)
 }
