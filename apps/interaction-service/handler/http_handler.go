@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"goim-social/api/rest"
+	"goim-social/apps/interaction-service/converter"
 	"goim-social/apps/interaction-service/service"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
@@ -13,15 +14,17 @@ import (
 
 // HTTPHandler HTTP处理器
 type HTTPHandler struct {
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc:    svc,
-		logger: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -63,8 +66,8 @@ func (h *HTTPHandler) DoInteraction(c *gin.Context) {
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
-	interactionType := convertInteractionTypeFromProto(req.InteractionType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
 
 	interaction, err := h.svc.DoInteraction(
 		ctx,
@@ -87,7 +90,7 @@ func (h *HTTPHandler) DoInteraction(c *gin.Context) {
 			if err != nil || interaction == nil {
 				return nil
 			}
-			return convertInteractionToProto(interaction)
+			return h.converter.InteractionModelToProto(interaction)
 		}(),
 	}
 	if err != nil {
@@ -111,8 +114,8 @@ func (h *HTTPHandler) UndoInteraction(c *gin.Context) {
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
-	interactionType := convertInteractionTypeFromProto(req.InteractionType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
 
 	err := h.svc.UndoInteraction(
 		ctx,
@@ -152,8 +155,8 @@ func (h *HTTPHandler) CheckInteraction(c *gin.Context) {
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
-	interactionType := convertInteractionTypeFromProto(req.InteractionType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
 
 	hasInteraction, interaction, err := h.svc.CheckInteraction(
 		ctx,
@@ -172,7 +175,7 @@ func (h *HTTPHandler) CheckInteraction(c *gin.Context) {
 			return "查询成功"
 		}(),
 		HasInteraction: hasInteraction,
-		Interaction:    convertInteractionToProto(interaction),
+		Interaction:    h.converter.InteractionModelToProto(interaction),
 	}
 	if err != nil {
 		h.logger.Error(ctx, "Check interaction failed", logger.F("error", err.Error()))
@@ -195,8 +198,8 @@ func (h *HTTPHandler) BatchCheckInteraction(c *gin.Context) {
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
-	interactionType := convertInteractionTypeFromProto(req.InteractionType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
 
 	interactions, err := h.svc.BatchCheckInteraction(
 		ctx,
@@ -237,7 +240,7 @@ func (h *HTTPHandler) GetObjectStats(c *gin.Context) {
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
 
 	stats, err := h.svc.GetObjectStats(ctx, req.ObjectId, objectType)
 
@@ -253,7 +256,7 @@ func (h *HTTPHandler) GetObjectStats(c *gin.Context) {
 			if err != nil || stats == nil {
 				return nil
 			}
-			return convertStatsToProto(stats)
+			return h.converter.InteractionStatsModelToProto(stats)
 		}(),
 	}
 	if err != nil {
@@ -277,14 +280,14 @@ func (h *HTTPHandler) GetBatchObjectStats(c *gin.Context) {
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
 
 	stats, err := h.svc.GetBatchObjectStats(ctx, req.ObjectIds, objectType)
 
 	var protoStats []*rest.InteractionStats
 	if err == nil {
 		for _, stat := range stats {
-			protoStats = append(protoStats, convertStatsToProto(stat))
+			protoStats = append(protoStats, h.converter.InteractionStatsModelToProto(stat))
 		}
 	}
 

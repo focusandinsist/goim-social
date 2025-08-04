@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"goim-social/api/rest"
+	"goim-social/apps/interaction-service/converter"
 	"goim-social/apps/interaction-service/dao"
 	"goim-social/apps/interaction-service/model"
 	"goim-social/pkg/kafka"
@@ -17,19 +18,21 @@ import (
 
 // Service 互动服务
 type Service struct {
-	dao    dao.InteractionDAO
-	redis  *redis.RedisClient
-	kafka  *kafka.Producer
-	logger logger.Logger
+	dao       dao.InteractionDAO
+	redis     *redis.RedisClient
+	kafka     *kafka.Producer
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewService 创建互动服务实例
 func NewService(interactionDAO dao.InteractionDAO, redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logger) *Service {
 	return &Service{
-		dao:    interactionDAO,
-		redis:  redis,
-		kafka:  kafka,
-		logger: log,
+		dao:       interactionDAO,
+		redis:     redis,
+		kafka:     kafka,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -208,7 +211,7 @@ func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType
 				// 转换为model格式
 				stats := &model.InteractionStats{
 					ObjectID:      protoStats.ObjectId,
-					ObjectType:    convertObjectTypeFromProto(protoStats.InteractionObjectType),
+					ObjectType:    s.converter.ObjectTypeFromProto(protoStats.InteractionObjectType),
 					LikeCount:     protoStats.LikeCount,
 					FavoriteCount: protoStats.FavoriteCount,
 					ShareCount:    protoStats.ShareCount,
@@ -229,7 +232,7 @@ func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType
 	if s.redis != nil {
 		protoStats := &rest.InteractionStats{
 			ObjectId:              stats.ObjectID,
-			InteractionObjectType: convertObjectTypeToProto(stats.ObjectType),
+			InteractionObjectType: s.converter.ObjectTypeToProto(stats.ObjectType),
 			LikeCount:             stats.LikeCount,
 			FavoriteCount:         stats.FavoriteCount,
 			ShareCount:            stats.ShareCount,
@@ -371,8 +374,8 @@ func (s *Service) publishInteractionEvent(ctx context.Context, eventType string,
 		EventType:       eventType,
 		UserId:          interaction.UserID,
 		ObjectId:        interaction.ObjectID,
-		ObjectType:      convertObjectTypeToProto(interaction.ObjectType),
-		InteractionType: convertInteractionTypeToProto(interaction.InteractionType),
+		ObjectType:      s.converter.ObjectTypeToProto(interaction.ObjectType),
+		InteractionType: s.converter.InteractionTypeToProto(interaction.InteractionType),
 		Metadata:        interaction.Metadata,
 		Timestamp:       time.Now().Unix(),
 	}
@@ -494,48 +497,4 @@ func (s *Service) BatchGetInteractionSummary(ctx context.Context, objectIDs []in
 	}
 
 	return summaries, nil
-}
-
-// convertObjectTypeFromProto 将protobuf枚举转换为对象类型
-func convertObjectTypeFromProto(objectType rest.InteractionObjectType) string {
-	switch objectType {
-	case rest.InteractionObjectType_OBJECT_TYPE_POST:
-		return model.ObjectTypePost
-	case rest.InteractionObjectType_OBJECT_TYPE_COMMENT:
-		return model.ObjectTypeComment
-	case rest.InteractionObjectType_OBJECT_TYPE_USER:
-		return model.ObjectTypeUser
-	default:
-		return ""
-	}
-}
-
-// convertObjectTypeToProto 将对象类型转换为protobuf枚举
-func convertObjectTypeToProto(objectType string) rest.InteractionObjectType {
-	switch objectType {
-	case model.ObjectTypePost:
-		return rest.InteractionObjectType_OBJECT_TYPE_POST
-	case model.ObjectTypeComment:
-		return rest.InteractionObjectType_OBJECT_TYPE_COMMENT
-	case model.ObjectTypeUser:
-		return rest.InteractionObjectType_OBJECT_TYPE_USER
-	default:
-		return rest.InteractionObjectType_OBJECT_TYPE_UNSPECIFIED
-	}
-}
-
-// convertInteractionTypeToProto 将互动类型转换为protobuf枚举
-func convertInteractionTypeToProto(interactionType string) rest.InteractionType {
-	switch interactionType {
-	case model.InteractionTypeLike:
-		return rest.InteractionType_INTERACTION_TYPE_LIKE
-	case model.InteractionTypeFavorite:
-		return rest.InteractionType_INTERACTION_TYPE_FAVORITE
-	case model.InteractionTypeShare:
-		return rest.InteractionType_INTERACTION_TYPE_SHARE
-	case model.InteractionTypeRepost:
-		return rest.InteractionType_INTERACTION_TYPE_REPOST
-	default:
-		return rest.InteractionType_INTERACTION_TYPE_UNSPECIFIED
-	}
 }
