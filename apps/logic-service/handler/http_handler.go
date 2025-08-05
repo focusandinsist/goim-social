@@ -8,6 +8,7 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/logic-service/converter"
 	"goim-social/apps/logic-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/utils"
 )
@@ -54,6 +55,12 @@ func (h *HTTPHandler) RouteMessage(c *gin.Context) {
 		response := h.converter.BuildHTTPErrorResponse("请求参数错误: " + err.Error())
 		c.JSON(http.StatusBadRequest, response)
 		return
+	}
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.From)
+	if req.GroupID > 0 {
+		ctx = tracecontext.WithGroupID(ctx, req.GroupID)
 	}
 
 	// 转换为WSMessage

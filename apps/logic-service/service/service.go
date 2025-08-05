@@ -7,16 +7,20 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"goim-social/api/rest"
 	"goim-social/apps/logic-service/model"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
 	"goim-social/pkg/sessionlocator"
 	"goim-social/pkg/snowflake"
+	"goim-social/pkg/telemetry"
 )
 
 // Service Logic服务 - 业务编排层
@@ -100,9 +104,29 @@ func NewService(redis *redis.RedisClient, kafkaProducer *kafka.Producer, log log
 
 // ProcessMessage 处理消息 - 核心业务编排逻辑
 func (s *Service) ProcessMessage(ctx context.Context, msg *rest.WSMessage) (*model.MessageResult, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "logic.service.ProcessMessage")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("message.id", msg.MessageId),
+		attribute.Int64("message.from", msg.From),
+		attribute.Int64("message.to", msg.To),
+		attribute.Int64("message.group_id", msg.GroupId),
+		attribute.String("message.content", msg.Content),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, msg.From)
+	if msg.GroupId > 0 {
+		ctx = tracecontext.WithGroupID(ctx, msg.GroupId)
+	}
+
 	// 如果MessageID为0，使用Snowflake生成新的MessageID
 	if msg.MessageId == 0 {
 		msg.MessageId = snowflake.GenerateID()
+		span.SetAttributes(attribute.Int64("message.generated_id", msg.MessageId))
 	}
 
 	s.logger.Info(ctx, "Logic服务开始处理消息",
@@ -112,19 +136,48 @@ func (s *Service) ProcessMessage(ctx context.Context, msg *rest.WSMessage) (*mod
 		logger.F("groupID", msg.GroupId))
 
 	// 1. 消息路由决策
+	var result *model.MessageResult
+	var err error
+
 	if msg.GroupId > 0 {
 		// 群聊消息
-		return s.processGroupMessage(ctx, msg)
+		span.SetAttributes(attribute.String("message.type", "group"))
+		result, err = s.processGroupMessage(ctx, msg)
 	} else if msg.To > 0 {
 		// 单聊消息
-		return s.processPrivateMessage(ctx, msg)
+		span.SetAttributes(attribute.String("message.type", "private"))
+		result, err = s.processPrivateMessage(ctx, msg)
 	} else {
+		span.SetStatus(codes.Error, "invalid message target")
 		return nil, fmt.Errorf("无效的消息目标")
 	}
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to process message")
+		return nil, err
+	}
+
+	span.SetAttributes(
+		attribute.Int("result.success_count", result.SuccessCount),
+		attribute.Int("result.failure_count", result.FailureCount),
+	)
+	span.SetStatus(codes.Ok, "message processed successfully")
+	return result, nil
 }
 
 // processGroupMessage 处理群聊消息
 func (s *Service) processGroupMessage(ctx context.Context, msg *rest.WSMessage) (*model.MessageResult, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "logic.service.processGroupMessage")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("group.id", msg.GroupId),
+		attribute.Int64("message.from", msg.From),
+	)
+
 	s.logger.Info(ctx, "处理群聊消息", logger.F("groupID", msg.GroupId))
 
 	// 1. 权限验证 - 检查用户是否在群组中
@@ -194,6 +247,16 @@ func (s *Service) processGroupMessage(ctx context.Context, msg *rest.WSMessage) 
 
 // processPrivateMessage 处理私聊消息
 func (s *Service) processPrivateMessage(ctx context.Context, msg *rest.WSMessage) (*model.MessageResult, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "logic.service.processPrivateMessage")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("message.to", msg.To),
+		attribute.Int64("message.from", msg.From),
+	)
+
 	s.logger.Info(ctx, "处理私聊消息", logger.F("to", msg.To))
 
 	// 1. 权限验证 - 检查好友关系
@@ -393,13 +456,42 @@ func (s *Service) ValidateUserPermission(ctx context.Context, userID int64) erro
 
 // GetMessageHistory 获取消息历史
 func (s *Service) GetMessageHistory(ctx context.Context, userID, targetID, groupID int64, page, size int32) (*rest.GetHistoryResponse, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "logic.service.GetMessageHistory")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("user.id", userID),
+		attribute.Int64("target.id", targetID),
+		attribute.Int64("group.id", groupID),
+		attribute.Int("page", int(page)),
+		attribute.Int("size", int(size)),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+	if groupID > 0 {
+		ctx = tracecontext.WithGroupID(ctx, groupID)
+	}
+
 	// 直接调用Message服务获取历史消息
-	return s.messageClient.GetHistoryMessages(ctx, &rest.GetHistoryRequest{
+	resp, err := s.messageClient.GetHistoryMessages(ctx, &rest.GetHistoryRequest{
 		UserId:  userID,
 		GroupId: groupID,
 		Page:    page,
 		Size:    size,
 	})
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get message history")
+		return nil, err
+	}
+
+	span.SetAttributes(attribute.Int("result.message_count", len(resp.Messages)))
+	span.SetStatus(codes.Ok, "message history retrieved successfully")
+	return resp, nil
 }
 
 // HandleMessageAck 处理消息ACK确认
