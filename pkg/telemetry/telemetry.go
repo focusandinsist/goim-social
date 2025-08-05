@@ -31,8 +31,31 @@ func DefaultConfig(serviceName string) *Config {
 		ServiceName:    serviceName,
 		ServiceVersion: "1.0.0",
 		Environment:    "development",
+		ExporterType:   "noop", // 默认不输出，避免控制台污染
+		SampleRate:     1.0,
+	}
+}
+
+// DevelopmentConfig 返回开发环境配置（会输出到控制台）
+func DevelopmentConfig(serviceName string) *Config {
+	return &Config{
+		ServiceName:    serviceName,
+		ServiceVersion: "1.0.0",
+		Environment:    "development",
 		ExporterType:   "stdout",
 		SampleRate:     1.0, // 开发环境全采样
+	}
+}
+
+// ProductionConfig 返回生产环境配置
+func ProductionConfig(serviceName string) *Config {
+	return &Config{
+		ServiceName:    serviceName,
+		ServiceVersion: "1.0.0",
+		Environment:    "production",
+		ExporterType:   "jaeger", // 生产环境使用Jaeger
+		JaegerEndpoint: "http://localhost:14268/api/traces",
+		SampleRate:     0.1, // 生产环境10%采样
 	}
 }
 
@@ -94,7 +117,7 @@ func NewProvider(config *Config) (*Provider, error) {
 		config:         config,
 	}
 
-	log.Printf("OpenTelemetry initialized for service: %s, exporter: %s", 
+	log.Printf("OpenTelemetry initialized for service: %s, exporter: %s",
 		config.ServiceName, config.ExporterType)
 
 	return provider, nil
@@ -107,6 +130,9 @@ func createExporter(config *Config) (sdktrace.SpanExporter, error) {
 		return stdouttrace.New(
 			stdouttrace.WithPrettyPrint(),
 		)
+	case "noop":
+		// 返回一个不做任何操作的导出器
+		return &noopExporter{}, nil
 	case "jaeger":
 		// TODO: 实现Jaeger导出器
 		return nil, fmt.Errorf("jaeger exporter not implemented yet")
@@ -114,10 +140,21 @@ func createExporter(config *Config) (sdktrace.SpanExporter, error) {
 		// TODO: 实现OTLP导出器
 		return nil, fmt.Errorf("otlp exporter not implemented yet")
 	default:
-		return stdouttrace.New(
-			stdouttrace.WithPrettyPrint(),
-		)
+		// 默认使用noop，避免意外的控制台输出
+		return &noopExporter{}, nil
 	}
+}
+
+// noopExporter 不做任何操作的导出器
+type noopExporter struct{}
+
+func (e *noopExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	// 不做任何操作，直接返回成功
+	return nil
+}
+
+func (e *noopExporter) Shutdown(ctx context.Context) error {
+	return nil
 }
 
 // GetTracer 获取Tracer

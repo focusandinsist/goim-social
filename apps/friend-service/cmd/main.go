@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,18 @@ func main() {
 	serviceName := "friend-service"
 
 	// 初始化OpenTelemetry
-	otelConfig := telemetry.DefaultConfig(serviceName)
+	// 根据环境变量选择配置
+	var otelConfig *telemetry.Config
+	if os.Getenv("OTEL_DEBUG") == "true" {
+		// 调试模式：输出到控制台
+		otelConfig = telemetry.DevelopmentConfig(serviceName)
+		log.Printf("OpenTelemetry debug mode enabled - traces will be printed to console")
+	} else {
+		// 默认模式：不输出，只记录到日志
+		otelConfig = telemetry.DefaultConfig(serviceName)
+		log.Printf("OpenTelemetry quiet mode - traces recorded but not printed")
+	}
+
 	if err := telemetry.InitGlobal(otelConfig); err != nil {
 		log.Fatalf("Failed to initialize OpenTelemetry: %v", err)
 	}
