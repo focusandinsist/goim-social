@@ -9,12 +9,16 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"goim-social/api/rest"
 	"goim-social/apps/message-service/model"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/database"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/redis"
+	"goim-social/pkg/telemetry"
 )
 
 // Service Message服务
@@ -35,6 +39,25 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 
 // SaveMessage 保存消息到数据库
 func (s *Service) SaveMessage(ctx context.Context, msg *model.Message) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "message.service.SaveMessage")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("message.id", msg.MessageID),
+		attribute.Int64("message.from", msg.From),
+		attribute.Int64("message.to", msg.To),
+		attribute.Int64("message.group_id", msg.GroupID),
+		attribute.String("message.content", msg.Content),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, msg.From)
+	if msg.GroupID > 0 {
+		ctx = tracecontext.WithGroupID(ctx, msg.GroupID)
+	}
+
 	collection := s.db.GetCollection("messages")
 
 	if msg.CreatedAt.IsZero() {
@@ -44,14 +67,35 @@ func (s *Service) SaveMessage(ctx context.Context, msg *model.Message) error {
 
 	_, err := collection.InsertOne(ctx, msg)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to save message")
 		return fmt.Errorf("保存消息失败: %v", err)
 	}
 
+	span.SetStatus(codes.Ok, "message saved successfully")
 	return nil
 }
 
 // GetMessageHistory 获取消息历史
 func (s *Service) GetMessageHistory(ctx context.Context, userID, groupID int64, page, size int) ([]*model.Message, int64, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "message.service.GetMessageHistory")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("user.id", userID),
+		attribute.Int64("group.id", groupID),
+		attribute.Int("page", page),
+		attribute.Int("size", size),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+	if groupID > 0 {
+		ctx = tracecontext.WithGroupID(ctx, groupID)
+	}
+
 	collection := s.db.GetCollection("messages")
 
 	// 构建查询条件
@@ -59,6 +103,7 @@ func (s *Service) GetMessageHistory(ctx context.Context, userID, groupID int64, 
 	if groupID > 0 {
 		// 群聊消息：查询该群组的所有消息
 		filter = bson.M{"group_id": groupID}
+		span.SetAttributes(attribute.String("query.type", "group"))
 	} else {
 		// 私聊消息：查询用户参与的对话
 		// 这里需要另一个参数来指定对话的另一方
@@ -74,11 +119,14 @@ func (s *Service) GetMessageHistory(ctx context.Context, userID, groupID int64, 
 				},
 			},
 		}
+		span.SetAttributes(attribute.String("query.type", "private"))
 	}
 
 	// 获取总数
 	total, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to count messages")
 		return nil, 0, fmt.Errorf("统计消息数量失败: %v", err)
 	}
 
@@ -93,6 +141,8 @@ func (s *Service) GetMessageHistory(ctx context.Context, userID, groupID int64, 
 
 	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to query messages")
 		return nil, 0, fmt.Errorf("查询消息失败: %v", err)
 	}
 	defer cursor.Close(ctx)
@@ -107,6 +157,11 @@ func (s *Service) GetMessageHistory(ctx context.Context, userID, groupID int64, 
 		messages = append(messages, &msg)
 	}
 
+	span.SetAttributes(
+		attribute.Int64("result.total", total),
+		attribute.Int("result.count", len(messages)),
+	)
+	span.SetStatus(codes.Ok, "message history retrieved successfully")
 	return messages, total, nil
 }
 
@@ -232,6 +287,16 @@ func (s *Service) SendMessage(ctx context.Context, req *rest.SendMessageRequest)
 
 // GetUnreadMessages 获取未读消息
 func (s *Service) GetUnreadMessages(ctx context.Context, userID int64) ([]*model.Message, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "message.service.GetUnreadMessages")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(attribute.Int64("user.id", userID))
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+
 	collection := s.db.GetCollection("messages")
 
 	// 查询未读消息
@@ -244,6 +309,8 @@ func (s *Service) GetUnreadMessages(ctx context.Context, userID int64) ([]*model
 
 	cursor, err := collection.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}}))
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to query unread messages")
 		return nil, fmt.Errorf("查询未读消息失败: %v", err)
 	}
 	defer cursor.Close(ctx)
@@ -258,6 +325,8 @@ func (s *Service) GetUnreadMessages(ctx context.Context, userID int64) ([]*model
 		messages = append(messages, &msg)
 	}
 
+	span.SetAttributes(attribute.Int("result.count", len(messages)))
+	span.SetStatus(codes.Ok, "unread messages retrieved successfully")
 	return messages, nil
 }
 

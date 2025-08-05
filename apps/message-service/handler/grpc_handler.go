@@ -7,6 +7,7 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/message-service/converter"
 	"goim-social/apps/message-service/service"
+	tracecontext "goim-social/pkg/context"
 )
 
 // GRPCHandler gRPC处理器
@@ -27,6 +28,13 @@ func NewGRPCHandler(service *service.Service) *GRPCHandler {
 // SendWSMessage 发送并持久化消息
 func (g *GRPCHandler) SendWSMessage(ctx context.Context, req *rest.SendWSMessageRequest) (*rest.SendWSMessageResponse, error) {
 	msg := req.Msg
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, msg.From)
+	if msg.GroupId > 0 {
+		ctx = tracecontext.WithGroupID(ctx, msg.GroupId)
+	}
+
 	log.Printf("Message服务接收消息: From=%d, To=%d, GroupID=%d, Content=%s",
 		msg.From, msg.To, msg.GroupId, msg.Content)
 
@@ -56,6 +64,12 @@ func (g *GRPCHandler) SendWSMessage(ctx context.Context, req *rest.SendWSMessage
 
 // GetHistoryMessages 获取历史消息
 func (g *GRPCHandler) GetHistoryMessages(ctx context.Context, req *rest.GetHistoryRequest) (*rest.GetHistoryResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+	if req.GroupId > 0 {
+		ctx = tracecontext.WithGroupID(ctx, req.GroupId)
+	}
+
 	log.Printf("获取历史消息: UserID=%d, GroupID=%d, Page=%d, Size=%d",
 		req.UserId, req.GroupId, req.Page, req.Size)
 
@@ -71,6 +85,9 @@ func (g *GRPCHandler) GetHistoryMessages(ctx context.Context, req *rest.GetHisto
 
 // MarkMessagesAsRead 标记消息已读gRPC接口
 func (g *GRPCHandler) MarkMessagesAsRead(ctx context.Context, req *rest.MarkMessagesReadRequest) (*rest.MarkMessagesReadResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	log.Printf("Message服务接收标记已读请求: UserID=%d, MessageIDs=%v", req.UserId, req.MessageIds)
 
 	// 调用service层标记消息已读
