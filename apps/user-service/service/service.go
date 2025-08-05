@@ -64,7 +64,7 @@ func (s *Service) Register(ctx context.Context, req *rest.RegisterRequest) (*res
 	}
 
 	return &rest.RegisterResponse{
-		User: &rest.UserResponse{
+		User: &rest.UserInfo{
 			Id:       user.ID,
 			Username: user.Username,
 			Email:    user.Email,
@@ -100,7 +100,7 @@ func (s *Service) Login(ctx context.Context, req *rest.LoginRequest) (*rest.Logi
 
 	return &rest.LoginResponse{
 		Token: token,
-		User: &rest.UserResponse{
+		User: &rest.UserInfo{
 			Id:       user.ID,
 			Username: user.Username,
 			Email:    user.Email,
@@ -113,17 +113,11 @@ func (s *Service) Login(ctx context.Context, req *rest.LoginRequest) (*rest.Logi
 }
 
 // GetUserByID 根据ID获取用户
-func (s *Service) GetUserByID(ctx context.Context, userID int64) (*rest.UserResponse, error) {
+func (s *Service) GetUserByID(ctx context.Context, userID int64) (*model.User, error) {
 	user, err := s.dao.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &rest.UserResponse{
-		Id:       user.ID,
-		Username: user.Username,
-		Email:    user.Email,
-		Nickname: user.Nickname,
-		Avatar:   user.Avatar,
-	}, nil
+	return user, nil
 }

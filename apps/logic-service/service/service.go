@@ -22,7 +22,8 @@ import (
 // Service Logic服务 - 业务编排层
 type Service struct {
 	redis          *redis.RedisClient
-	kafka          *kafka.Producer
+	kafka          *kafka.Producer         // 异步Producer（用于推送）
+	reliableKafka  *kafka.ReliableProducer // 同步Producer（用于持久化保障）
 	logger         logger.Logger
 	instanceID     string                  // 服务实例ID
 	sessionLocator *sessionlocator.Locator // 会话定位器
@@ -34,7 +35,12 @@ type Service struct {
 }
 
 // NewService 创建Logic服务实例
-func NewService(redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logger, groupAddr, messageAddr, friendAddr, userAddr string) (*Service, error) {
+func NewService(redis *redis.RedisClient, kafkaProducer *kafka.Producer, log logger.Logger, kafkaBrokers []string, groupAddr, messageAddr, friendAddr, userAddr string) (*Service, error) {
+	// 初始化高可靠性同步Producer（用于持久化保障）
+	reliableKafka, err := kafka.InitReliableProducer(kafkaBrokers)
+	if err != nil {
+		return nil, fmt.Errorf("初始化可靠Kafka Producer失败: %v", err)
+	}
 	// 连接Group服务
 	groupConn, err := grpc.NewClient(groupAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -74,7 +80,8 @@ func NewService(redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logg
 
 	service := &Service{
 		redis:          redis,
-		kafka:          kafka,
+		kafka:          kafkaProducer,
+		reliableKafka:  reliableKafka,
 		logger:         log,
 		instanceID:     instanceID,
 		sessionLocator: sessionLocator,
@@ -144,15 +151,13 @@ func (s *Service) processGroupMessage(ctx context.Context, msg *rest.WSMessage) 
 		return nil, err
 	}
 
-	// 3. 消息持久化 (异步)
-	go func() {
-		_, err := s.messageClient.SendWSMessage(context.Background(), &rest.SendWSMessageRequest{
-			Msg: msg,
-		})
-		if err != nil {
-			s.logger.Error(context.Background(), "消息持久化失败", logger.F("error", err.Error()))
-		}
-	}()
+	// 3. 消息持久化保障 - 同步写入Kafka确保安全落地
+	if err := s.ensureMessagePersistence(ctx, msg); err != nil {
+		s.logger.Error(ctx, "消息持久化保障失败",
+			logger.F("messageID", msg.MessageId),
+			logger.F("error", err.Error()))
+		return nil, fmt.Errorf("消息持久化失败: %v", err)
+	}
 
 	// 4. 消息扇出 - 发送给所有群成员
 	successCount := 0
@@ -195,15 +200,13 @@ func (s *Service) processPrivateMessage(ctx context.Context, msg *rest.WSMessage
 	// TODO: 实现好友关系验证，暂时跳过验证
 	s.logger.Info(ctx, "处理私聊消息，暂时跳过好友关系验证", logger.F("from", msg.From), logger.F("to", msg.To))
 
-	// 2. 消息持久化 (异步)
-	go func() {
-		_, err := s.messageClient.SendWSMessage(context.Background(), &rest.SendWSMessageRequest{
-			Msg: msg,
-		})
-		if err != nil {
-			s.logger.Error(context.Background(), "消息持久化失败", logger.F("error", err.Error()))
-		}
-	}()
+	// 2. 消息持久化保障 - 同步写入Kafka确保安全落地
+	if err := s.ensureMessagePersistence(ctx, msg); err != nil {
+		s.logger.Error(ctx, "消息持久化保障失败",
+			logger.F("messageID", msg.MessageId),
+			logger.F("error", err.Error()))
+		return nil, fmt.Errorf("消息持久化失败: %v", err)
+	}
 
 	// 3. 消息投递
 	err := s.publishMessageToQueue(ctx, msg.To, msg)
@@ -375,7 +378,7 @@ func (s *Service) GetCleanerStatus(ctx context.Context) map[string]interface{} {
 func (s *Service) ValidateUserPermission(ctx context.Context, userID int64) error {
 	// 调用User服务验证用户状态
 	userResp, err := s.userClient.GetUser(ctx, &rest.GetUserRequest{
-		UserId: fmt.Sprintf("%d", userID),
+		UserId: userID,
 	})
 	if err != nil {
 		return fmt.Errorf("获取用户信息失败: %v", err)
@@ -472,6 +475,38 @@ func (s *Service) validateAckPermission(ctx context.Context, userID, messageID i
 	s.logger.Debug(ctx, "ACK权限验证通过",
 		logger.F("userID", userID),
 		logger.F("messageID", messageID))
+
+	return nil
+}
+
+// ensureMessagePersistence 确保消息持久化, 同步写入专门的持久化Topic
+func (s *Service) ensureMessagePersistence(ctx context.Context, msg *rest.WSMessage) error {
+	s.logger.Info(ctx, "开始消息持久化保障",
+		logger.F("messageID", msg.MessageId),
+		logger.F("from", msg.From),
+		logger.F("to", msg.To),
+		logger.F("groupID", msg.GroupId))
+
+	// 构造持久化归档命令
+	persistenceCommand := &rest.MessageEvent{
+		Type:      "archive_message", // 归档命令类型
+		Message:   msg,
+		Timestamp: time.Now().Unix(),
+	}
+
+	// 使用高可靠性同步Producer写入专门的持久化Topic
+	// 这个Topic有独立的配置：更高副本数、更长保留期、独立监控
+	if err := s.reliableKafka.PublishMessageSync("message_persistence_log", persistenceCommand); err != nil {
+		s.logger.Error(ctx, "消息持久化保障失败",
+			logger.F("messageID", msg.MessageId),
+			logger.F("topic", "message_persistence_log"),
+			logger.F("error", err.Error()))
+		return fmt.Errorf("消息持久化保障失败: %v", err)
+	}
+
+	s.logger.Info(ctx, "消息归档命令已安全写入持久化Topic（已确认）",
+		logger.F("messageID", msg.MessageId),
+		logger.F("topic", "message_persistence_log"))
 
 	return nil
 }

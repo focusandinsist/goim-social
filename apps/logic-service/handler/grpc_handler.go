@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"goim-social/api/rest"
+	"goim-social/apps/logic-service/converter"
 	"goim-social/apps/logic-service/service"
 	"goim-social/pkg/logger"
 )
@@ -11,15 +12,17 @@ import (
 // GRPCHandler gRPC处理器
 type GRPCHandler struct {
 	rest.UnimplementedLogicServiceServer
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewGRPCHandler 创建gRPC处理器
 func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
-		svc:    svc,
-		logger: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -36,24 +39,14 @@ func (h *GRPCHandler) SendMessage(ctx context.Context, req *rest.SendLogicMessag
 	if err != nil {
 		h.logger.Error(ctx, "gRPC处理消息失败",
 			logger.F("error", err.Error()))
-		return &rest.SendLogicMessageResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorSendLogicMessageResponse(err.Error()), nil
 	}
 
 	h.logger.Info(ctx, "gRPC消息处理成功",
 		logger.F("messageID", result.MessageID),
 		logger.F("successCount", result.SuccessCount))
 
-	return &rest.SendLogicMessageResponse{
-		Success:      result.Success,
-		Message:      result.Message,
-		MessageId:    result.MessageID,
-		SuccessCount: int32(result.SuccessCount),
-		FailureCount: int32(result.FailureCount),
-		FailedUsers:  result.FailedUsers,
-	}, nil
+	return h.converter.BuildSuccessSendLogicMessageResponse(result), nil
 }
 
 // HandleMessageAck 处理消息ACK确认gRPC接口
@@ -70,18 +63,12 @@ func (h *GRPCHandler) HandleMessageAck(ctx context.Context, req *rest.MessageAck
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId),
 			logger.F("messageID", req.MessageId))
-		return &rest.MessageAckResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorMessageAckResponse(err.Error()), nil
 	}
 
 	h.logger.Info(ctx, "gRPC消息ACK处理成功",
 		logger.F("userID", req.UserId),
 		logger.F("messageID", req.MessageId))
 
-	return &rest.MessageAckResponse{
-		Success: true,
-		Message: "ACK处理成功",
-	}, nil
+	return h.converter.BuildSuccessMessageAckResponse(), nil
 }

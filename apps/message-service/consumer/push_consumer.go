@@ -58,14 +58,7 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 		}
 	}()
 
-	// 幂等性检查：检查推送是否已处理
-	ctx := context.Background()
-	if p.isPushProcessed(ctx, msg.Partition, msg.Offset) {
-		log.Printf("推送已处理，跳过: partition=%d, offset=%d", msg.Partition, msg.Offset)
-		return nil
-	}
-
-	// 解析protobuf消息事件
+	// 直接处理消息，幂等性由客户端维护
 	var event rest.MessageEvent
 	if err := proto.Unmarshal(msg.Value, &event); err != nil {
 		log.Printf("解析protobuf消息事件失败: %v, 原始消息: %s", err, string(msg.Value))
@@ -76,38 +69,16 @@ func (p *PushConsumer) HandleMessage(msg *sarama.ConsumerMessage) error {
 	switch event.Type {
 	case "new_message":
 		if err := p.handleNewMessage(event.Message); err != nil {
-			log.Printf("处理新消息失败: %v", err)
+			log.Printf("处理新消息推送失败: %v", err)
 			return nil // 返回nil避免重试
 		}
 
-		// 标记推送已处理
-		if err := p.markPushProcessed(ctx, msg.Partition, msg.Offset); err != nil {
-			log.Printf("标记推送已处理失败: %v", err)
-		}
-
-		log.Printf("处理新消息成功: %v", event.Message.Content)
+		log.Printf("消息推送完成: MessageID=%d", event.Message.MessageId)
 		return nil
 	default:
 		log.Printf("未知的消息事件类型: %s", event.Type)
 		return nil
 	}
-}
-
-// isPushProcessed 检查推送是否已处理（幂等性检查）
-func (p *PushConsumer) isPushProcessed(ctx context.Context, partition int32, offset int64) bool {
-	key := fmt.Sprintf("kafka:push:%d:%d", partition, offset)
-	exists, err := p.redis.Exists(ctx, key)
-	if err != nil {
-		log.Printf("检查推送处理状态失败: %v", err)
-		return false // 出错时假设未处理，允许重试
-	}
-	return exists > 0 // Redis Exists返回存在的key数量
-}
-
-// markPushProcessed 标记推送已处理
-func (p *PushConsumer) markPushProcessed(ctx context.Context, partition int32, offset int64) error {
-	key := fmt.Sprintf("kafka:push:%d:%d", partition, offset)
-	return p.redis.Set(ctx, key, "processed", time.Hour) // 1小时过期
 }
 
 // handleNewMessage 处理新消息推送

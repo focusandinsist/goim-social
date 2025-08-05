@@ -7,23 +7,26 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"goim-social/api/rest"
+	"goim-social/apps/history-service/converter"
 	"goim-social/apps/history-service/model"
 	"goim-social/apps/history-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 )
 
 // HTTPHandler HTTP处理器
 type HTTPHandler struct {
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, logger logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc:    svc,
-		logger: logger,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    logger,
 	}
 }
 
@@ -56,13 +59,13 @@ func (h *HTTPHandler) CreateHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	actionType := convertActionTypeFromProto(req.ActionType)
-	objectType := convertHistoryObjectTypeFromProto(req.HistoryObjectType)
+	actionType := h.converter.ActionTypeFromProto(req.ActionType)
+	objectType := h.converter.ObjectTypeFromProto(req.HistoryObjectType)
 
 	params := &model.CreateHistoryParams{
 		UserID:      req.UserId,
@@ -92,13 +95,13 @@ func (h *HTTPHandler) CreateHistory(c *gin.Context) {
 			if err != nil {
 				return nil
 			}
-			return convertHistoryRecordToProto(record)
+			return h.converter.HistoryRecordModelToProto(record)
 		}(),
 	}
 	if err != nil {
 		h.logger.Error(ctx, "Create history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // BatchCreateHistory 批量创建历史记录
@@ -111,7 +114,7 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -119,8 +122,8 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 	for i := range req.Records {
 		r := req.Records[i] // 避免range var copies lock问题
 		// 转换枚举类型
-		actionType := convertActionTypeFromProto(r.ActionType)
-		objectType := convertHistoryObjectTypeFromProto(r.HistoryObjectType)
+		actionType := h.converter.ActionTypeFromProto(r.ActionType)
+		objectType := h.converter.ObjectTypeFromProto(r.HistoryObjectType)
 
 		params := &model.CreateHistoryParams{
 			UserID:      r.UserId,
@@ -156,7 +159,7 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 			}
 			var protoRecords []*rest.HistoryRecord
 			for _, record := range records {
-				protoRecords = append(protoRecords, convertHistoryRecordToProto(record))
+				protoRecords = append(protoRecords, h.converter.HistoryRecordModelToProto(record))
 			}
 			return protoRecords
 		}(),
@@ -164,7 +167,7 @@ func (h *HTTPHandler) BatchCreateHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Batch create history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetUserHistory 获取用户历史记录
@@ -177,13 +180,13 @@ func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	actionType := convertActionTypeFromProto(req.ActionType)
-	objectType := convertHistoryObjectTypeFromProto(req.HistoryObjectType)
+	actionType := h.converter.ActionTypeFromProto(req.ActionType)
+	objectType := h.converter.ObjectTypeFromProto(req.HistoryObjectType)
 
 	params := &model.GetUserHistoryParams{
 		UserID:     req.UserId,
@@ -211,7 +214,7 @@ func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
 	var protoRecords []*rest.HistoryRecord
 	if err == nil {
 		for _, record := range records {
-			protoRecords = append(protoRecords, convertHistoryRecordToProto(record))
+			protoRecords = append(protoRecords, h.converter.HistoryRecordModelToProto(record))
 		}
 	}
 
@@ -231,7 +234,7 @@ func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Get user history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetObjectHistoryRequest 获取对象历史记录请求
@@ -311,7 +314,7 @@ func (h *HTTPHandler) DeleteHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
@@ -339,7 +342,7 @@ func (h *HTTPHandler) DeleteHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Delete history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // ClearUserHistory 清空用户历史记录
@@ -352,13 +355,13 @@ func (h *HTTPHandler) ClearUserHistory(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	actionType := convertActionTypeFromProto(req.ActionType)
-	objectType := convertHistoryObjectTypeFromProto(req.HistoryObjectType)
+	actionType := h.converter.ActionTypeFromProto(req.ActionType)
+	objectType := h.converter.ObjectTypeFromProto(req.HistoryObjectType)
 
 	params := &model.ClearUserHistoryParams{
 		UserID:     req.UserId,
@@ -392,7 +395,7 @@ func (h *HTTPHandler) ClearUserHistory(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Clear user history failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetUserActionStatsRequest 获取用户行为统计请求
@@ -525,24 +528,4 @@ func (h *HTTPHandler) GetUserActivityStats(c *gin.Context) {
 		"message": "获取成功",
 		"data":    stats,
 	})
-}
-
-// convertHistoryObjectTypeFromProto 将protobuf枚举转换为对象类型
-func convertHistoryObjectTypeFromProto(objectType rest.HistoryObjectType) string {
-	switch objectType {
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_POST:
-		return "post"
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_ARTICLE:
-		return "article"
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_VIDEO:
-		return "video"
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_USER:
-		return "user"
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_PRODUCT:
-		return "product"
-	case rest.HistoryObjectType_HISTORY_OBJECT_TYPE_GROUP:
-		return "group"
-	default:
-		return "post"
-	}
 }

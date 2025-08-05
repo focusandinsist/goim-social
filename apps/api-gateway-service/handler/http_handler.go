@@ -2,24 +2,27 @@ package handler
 
 import (
 	"goim-social/api/rest"
+	"goim-social/apps/api-gateway-service/converter"
 	"goim-social/apps/api-gateway-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 // HTTPHandler HTTP协议处理器
 type HTTPHandler struct {
-	svc *service.Service
-	log logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	log       logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc: svc,
-		log: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		log:       log,
 	}
 }
 
@@ -47,22 +50,18 @@ func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 	var req rest.OnlineStatusRequest
 	if err := c.Bind(&req); err != nil {
 		h.log.Error(ctx, "Invalid online status request", logger.F("error", err.Error()))
-		res := &rest.OnlineStatusResponse{
-			Status: make(map[int64]bool),
-		}
-		utils.WriteObject(c, res, err)
+		res := h.converter.BuildEmptyOnlineStatusResponse()
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 通过gRPC调用IM Gateway服务
 	status, err := h.svc.GetOnlineStatusFromIMGateway(ctx, req.UserIds)
-	res := &rest.OnlineStatusResponse{
-		Status: status,
-	}
+	res := h.converter.BuildOnlineStatusResponse(status)
 	if err != nil {
 		h.log.Error(ctx, "Online status failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // DynamicRoute 动态路由处理器 - 核心功能！
@@ -88,11 +87,7 @@ func (h *HTTPHandler) GetServices(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	services := h.svc.GetAllServices()
-
-	res := map[string]interface{}{
-		"services": services,
-		"count":    len(services),
-	}
+	res := h.converter.BuildHTTPServicesResponse(services)
 
 	h.log.Info(ctx, "Get services request", logger.F("count", len(services)))
 	c.JSON(200, res)
@@ -100,10 +95,6 @@ func (h *HTTPHandler) GetServices(c *gin.Context) {
 
 // HealthCheck 健康检查
 func (h *HTTPHandler) HealthCheck(c *gin.Context) {
-	res := map[string]interface{}{
-		"status":    "healthy",
-		"timestamp": "2024-01-01T00:00:00Z", // 简化处理
-		"version":   "1.0.0",
-	}
+	res := h.converter.BuildHTTPHealthResponse("1.0.0")
 	c.JSON(200, res)
 }

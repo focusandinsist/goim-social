@@ -4,24 +4,27 @@ import (
 	"net/http"
 
 	"goim-social/api/rest"
+	"goim-social/apps/interaction-service/converter"
 	"goim-social/apps/interaction-service/service"
+	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-	"goim-social/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 // HTTPHandler HTTP处理器
 type HTTPHandler struct {
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewHTTPHandler 创建HTTP处理器
 func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 	return &HTTPHandler{
-		svc:    svc,
-		logger: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -58,13 +61,13 @@ func (h *HTTPHandler) DoInteraction(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
-	interactionType := convertInteractionTypeFromProto(req.InteractionType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
 
 	interaction, err := h.svc.DoInteraction(
 		ctx,
@@ -87,13 +90,13 @@ func (h *HTTPHandler) DoInteraction(c *gin.Context) {
 			if err != nil || interaction == nil {
 				return nil
 			}
-			return convertInteractionToProto(interaction)
+			return h.converter.InteractionModelToProto(interaction)
 		}(),
 	}
 	if err != nil {
 		h.logger.Error(ctx, "Do interaction failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // UndoInteraction 取消互动
@@ -106,13 +109,13 @@ func (h *HTTPHandler) UndoInteraction(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
-	interactionType := convertInteractionTypeFromProto(req.InteractionType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
 
 	err := h.svc.UndoInteraction(
 		ctx,
@@ -134,7 +137,7 @@ func (h *HTTPHandler) UndoInteraction(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Undo interaction failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // CheckInteraction 检查互动状态
@@ -147,13 +150,13 @@ func (h *HTTPHandler) CheckInteraction(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
-	interactionType := convertInteractionTypeFromProto(req.InteractionType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
 
 	hasInteraction, interaction, err := h.svc.CheckInteraction(
 		ctx,
@@ -172,12 +175,12 @@ func (h *HTTPHandler) CheckInteraction(c *gin.Context) {
 			return "查询成功"
 		}(),
 		HasInteraction: hasInteraction,
-		Interaction:    convertInteractionToProto(interaction),
+		Interaction:    h.converter.InteractionModelToProto(interaction),
 	}
 	if err != nil {
 		h.logger.Error(ctx, "Check interaction failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // BatchCheckInteraction 批量检查互动状态
@@ -190,13 +193,13 @@ func (h *HTTPHandler) BatchCheckInteraction(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
-	interactionType := convertInteractionTypeFromProto(req.InteractionType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
 
 	interactions, err := h.svc.BatchCheckInteraction(
 		ctx,
@@ -219,7 +222,7 @@ func (h *HTTPHandler) BatchCheckInteraction(c *gin.Context) {
 	if err != nil {
 		h.logger.Error(ctx, "Batch check interaction failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
+	httpx.WriteObject(c, res, err)
 }
 
 // GetObjectStats 获取对象统计
@@ -232,12 +235,12 @@ func (h *HTTPHandler) GetObjectStats(c *gin.Context) {
 			Success: false,
 			Message: "Invalid request format",
 		}
-		utils.WriteObject(c, res, err)
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
 	// 转换枚举类型
-	objectType := convertObjectTypeFromProto(req.InteractionObjectType)
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
 
 	stats, err := h.svc.GetObjectStats(ctx, req.ObjectId, objectType)
 
@@ -253,49 +256,55 @@ func (h *HTTPHandler) GetObjectStats(c *gin.Context) {
 			if err != nil || stats == nil {
 				return nil
 			}
-			return convertStatsToProto(stats)
+			return h.converter.InteractionStatsModelToProto(stats)
 		}(),
 	}
 	if err != nil {
 		h.logger.Error(ctx, "Get object stats failed", logger.F("error", err.Error()))
 	}
-	utils.WriteObject(c, res, err)
-}
-
-// GetBatchObjectStatsRequest 批量获取对象统计请求
-type GetBatchObjectStatsRequest struct {
-	ObjectIDs  []int64 `json:"object_ids" binding:"required"`
-	ObjectType string  `json:"object_type" binding:"required"`
+	httpx.WriteObject(c, res, err)
 }
 
 // GetBatchObjectStats 批量获取对象统计
 func (h *HTTPHandler) GetBatchObjectStats(c *gin.Context) {
-	var req GetBatchObjectStatsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "参数错误: " + err.Error(),
-		})
+	ctx := c.Request.Context()
+	var req rest.GetBatchObjectStatsRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid get batch object stats request", logger.F("error", err.Error()))
+		res := &rest.GetBatchObjectStatsResponse{
+			Success: false,
+			Message: "Invalid request format",
+		}
+		httpx.WriteObject(c, res, err)
 		return
 	}
 
-	stats, err := h.svc.GetBatchObjectStats(c.Request.Context(), req.ObjectIDs, req.ObjectType)
+	// 转换枚举类型
+	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
+
+	stats, err := h.svc.GetBatchObjectStats(ctx, req.ObjectIds, objectType)
+
+	var protoStats []*rest.InteractionStats
+	if err == nil {
+		for _, stat := range stats {
+			protoStats = append(protoStats, h.converter.InteractionStatsModelToProto(stat))
+		}
+	}
+
+	res := &rest.GetBatchObjectStatsResponse{
+		Success: err == nil,
+		Message: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return "获取成功"
+		}(),
+		Stats: protoStats,
+	}
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "Failed to get batch object stats",
-			logger.F("error", err.Error()),
-			logger.F("objectIDs", req.ObjectIDs))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
+		h.logger.Error(ctx, "Get batch object stats failed", logger.F("error", err.Error()))
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "获取成功",
-		"data":    stats,
-	})
+	httpx.WriteObject(c, res, err)
 }
 
 // GetInteractionSummaryRequest 获取互动汇总请求

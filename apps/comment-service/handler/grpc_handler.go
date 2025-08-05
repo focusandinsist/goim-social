@@ -2,9 +2,9 @@ package handler
 
 import (
 	"context"
-	"time"
 
 	"goim-social/api/rest"
+	"goim-social/apps/comment-service/converter"
 	"goim-social/apps/comment-service/model"
 	"goim-social/apps/comment-service/service"
 	"goim-social/pkg/logger"
@@ -13,15 +13,17 @@ import (
 // GRPCHandler gRPC处理器
 type GRPCHandler struct {
 	rest.UnimplementedCommentServiceServer
-	svc    *service.Service
-	logger logger.Logger
+	svc       *service.Service
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewGRPCHandler 创建gRPC处理器
 func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
-		svc:    svc,
-		logger: log,
+		svc:       svc,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -29,7 +31,7 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 func (h *GRPCHandler) CreateComment(ctx context.Context, req *rest.CreateCommentRequest) (*rest.CreateCommentResponse, error) {
 	params := &model.CreateCommentParams{
 		ObjectID:        req.ObjectId,
-		ObjectType:      convertObjectTypeFromProto(req.ObjectType),
+		ObjectType:      h.converter.ObjectTypeFromProto(req.ObjectType),
 		UserID:          req.UserId,
 		UserName:        req.UserName,
 		UserAvatar:      req.UserAvatar,
@@ -46,17 +48,10 @@ func (h *GRPCHandler) CreateComment(ctx context.Context, req *rest.CreateComment
 		h.logger.Error(ctx, "Failed to create comment via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId))
-		return &rest.CreateCommentResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildErrorCreateCommentResponse(err.Error()), nil
 	}
 
-	return &rest.CreateCommentResponse{
-		Success: true,
-		Message: "评论创建成功",
-		Comment: convertCommentToProto(comment),
-	}, nil
+	return h.converter.BuildSuccessCreateCommentResponse(comment), nil
 }
 
 // UpdateComment 更新评论
@@ -78,11 +73,7 @@ func (h *GRPCHandler) UpdateComment(ctx context.Context, req *rest.UpdateComment
 		}, nil
 	}
 
-	return &rest.UpdateCommentResponse{
-		Success: true,
-		Message: "评论更新成功",
-		Comment: convertCommentToProto(comment),
-	}, nil
+	return h.converter.BuildSuccessUpdateCommentResponse(comment), nil
 }
 
 // DeleteComment 删除评论
@@ -104,10 +95,7 @@ func (h *GRPCHandler) DeleteComment(ctx context.Context, req *rest.DeleteComment
 		}, nil
 	}
 
-	return &rest.DeleteCommentResponse{
-		Success: true,
-		Message: "评论删除成功",
-	}, nil
+	return h.converter.BuildSuccessDeleteCommentResponse(), nil
 }
 
 // GetComment 获取评论
@@ -123,18 +111,14 @@ func (h *GRPCHandler) GetComment(ctx context.Context, req *rest.GetCommentReques
 		}, nil
 	}
 
-	return &rest.GetCommentResponse{
-		Success: true,
-		Message: "获取成功",
-		Comment: convertCommentToProto(comment),
-	}, nil
+	return h.converter.BuildSuccessGetCommentResponse(comment), nil
 }
 
 // GetComments 获取评论列表
 func (h *GRPCHandler) GetComments(ctx context.Context, req *rest.GetCommentsRequest) (*rest.GetCommentsResponse, error) {
 	params := &model.GetCommentsParams{
 		ObjectID:       req.ObjectId,
-		ObjectType:     convertObjectTypeFromProto(req.ObjectType),
+		ObjectType:     h.converter.ObjectTypeFromProto(req.ObjectType),
 		ParentID:       req.ParentId,
 		SortBy:         req.SortBy,
 		SortOrder:      req.SortOrder,
@@ -149,32 +133,17 @@ func (h *GRPCHandler) GetComments(ctx context.Context, req *rest.GetCommentsRequ
 		h.logger.Error(ctx, "Failed to get comments via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("objectID", req.ObjectId))
-		return &rest.GetCommentsResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildGetCommentsResponse(false, err.Error(), nil, 0, req.Page, req.PageSize), nil
 	}
 
-	var protoComments []*rest.Comment
-	for _, comment := range comments {
-		protoComments = append(protoComments, convertCommentToProto(comment))
-	}
-
-	return &rest.GetCommentsResponse{
-		Success:  true,
-		Message:  "获取成功",
-		Comments: protoComments,
-		Total:    total,
-		Page:     req.Page,
-		PageSize: req.PageSize,
-	}, nil
+	return h.converter.BuildSuccessGetCommentsResponse(comments, total, req.Page, req.PageSize), nil
 }
 
 // GetUserComments 获取用户评论
 func (h *GRPCHandler) GetUserComments(ctx context.Context, req *rest.GetUserCommentsRequest) (*rest.GetUserCommentsResponse, error) {
 	params := &model.GetUserCommentsParams{
 		UserID:   req.UserId,
-		Status:   convertCommentStatusFromProto(req.Status),
+		Status:   h.converter.CommentStatusFromProto(req.Status),
 		Page:     req.Page,
 		PageSize: req.PageSize,
 	}
@@ -184,25 +153,10 @@ func (h *GRPCHandler) GetUserComments(ctx context.Context, req *rest.GetUserComm
 		h.logger.Error(ctx, "Failed to get user comments via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId))
-		return &rest.GetUserCommentsResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildGetUserCommentsResponse(false, err.Error(), nil, 0, req.Page, req.PageSize), nil
 	}
 
-	var protoComments []*rest.Comment
-	for _, comment := range comments {
-		protoComments = append(protoComments, convertCommentToProto(comment))
-	}
-
-	return &rest.GetUserCommentsResponse{
-		Success:  true,
-		Message:  "获取成功",
-		Comments: protoComments,
-		Total:    total,
-		Page:     req.Page,
-		PageSize: req.PageSize,
-	}, nil
+	return h.converter.BuildSuccessGetUserCommentsResponse(comments, total, req.Page, req.PageSize), nil
 }
 
 // ModerateComment 审核评论
@@ -210,7 +164,7 @@ func (h *GRPCHandler) ModerateComment(ctx context.Context, req *rest.ModerateCom
 	params := &model.ModerateCommentParams{
 		CommentID:   req.CommentId,
 		ModeratorID: req.ModeratorId,
-		NewStatus:   convertCommentStatusFromProto(req.NewStatus),
+		NewStatus:   h.converter.CommentStatusFromProto(req.NewStatus),
 		Reason:      req.Reason,
 	}
 
@@ -219,17 +173,10 @@ func (h *GRPCHandler) ModerateComment(ctx context.Context, req *rest.ModerateCom
 		h.logger.Error(ctx, "Failed to moderate comment via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("commentID", req.CommentId))
-		return &rest.ModerateCommentResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildModerateCommentResponse(false, err.Error(), nil), nil
 	}
 
-	return &rest.ModerateCommentResponse{
-		Success: true,
-		Message: "审核成功",
-		Comment: convertCommentToProto(comment),
-	}, nil
+	return h.converter.BuildModerateCommentResponse(true, "审核成功", comment), nil
 }
 
 // PinComment 置顶评论
@@ -256,168 +203,33 @@ func (h *GRPCHandler) PinComment(ctx context.Context, req *rest.PinCommentReques
 		message = "取消置顶成功"
 	}
 
-	return &rest.PinCommentResponse{
-		Success: true,
-		Message: message,
-	}, nil
+	return h.converter.BuildPinCommentResponse(true, message), nil
 }
 
 // GetCommentStats 获取评论统计
 func (h *GRPCHandler) GetCommentStats(ctx context.Context, req *rest.GetCommentStatsRequest) (*rest.GetCommentStatsResponse, error) {
-	stats, err := h.svc.GetCommentStats(ctx, req.ObjectId, convertObjectTypeFromProto(req.ObjectType))
+	objectType := h.converter.ObjectTypeFromProto(req.ObjectType)
+	stats, err := h.svc.GetCommentStats(ctx, req.ObjectId, objectType)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get comment stats via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("objectID", req.ObjectId))
-		return &rest.GetCommentStatsResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildGetCommentStatsResponse(false, err.Error(), nil), nil
 	}
 
-	return &rest.GetCommentStatsResponse{
-		Success: true,
-		Message: "获取成功",
-		Stats:   convertCommentStatsToProto(stats),
-	}, nil
+	return h.converter.BuildGetCommentStatsResponse(true, "获取成功", stats), nil
 }
 
 // GetBatchCommentStats 批量获取评论统计
 func (h *GRPCHandler) GetBatchCommentStats(ctx context.Context, req *rest.GetBatchCommentStatsRequest) (*rest.GetBatchCommentStatsResponse, error) {
-	statsList, err := h.svc.GetBatchCommentStats(ctx, req.ObjectIds, convertObjectTypeFromProto(req.ObjectType))
+	objectType := h.converter.ObjectTypeFromProto(req.ObjectType)
+	statsList, err := h.svc.GetBatchCommentStats(ctx, req.ObjectIds, objectType)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get batch comment stats via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("objectIDs", req.ObjectIds))
-		return &rest.GetBatchCommentStatsResponse{
-			Success: false,
-			Message: err.Error(),
-		}, nil
+		return h.converter.BuildGetBatchCommentStatsResponse(false, err.Error(), nil), nil
 	}
 
-	var protoStats []*rest.CommentStats
-	for _, stats := range statsList {
-		protoStats = append(protoStats, convertCommentStatsToProto(stats))
-	}
-
-	return &rest.GetBatchCommentStatsResponse{
-		Success: true,
-		Message: "获取成功",
-		Stats:   protoStats,
-	}, nil
-}
-
-// 转换函数
-
-// convertCommentToProto 将评论模型转换为protobuf格式
-func convertCommentToProto(comment *model.Comment) *rest.Comment {
-	if comment == nil {
-		return nil
-	}
-
-	protoComment := &rest.Comment{
-		Id:              comment.ID,
-		ObjectId:        comment.ObjectID,
-		ObjectType:      convertObjectTypeToProto(comment.ObjectType),
-		UserId:          comment.UserID,
-		UserName:        comment.UserName,
-		UserAvatar:      comment.UserAvatar,
-		Content:         comment.Content,
-		ParentId:        comment.ParentID,
-		RootId:          comment.RootID,
-		ReplyToUserId:   comment.ReplyToUserID,
-		ReplyToUserName: comment.ReplyToUserName,
-		Status:          convertCommentStatusToProto(comment.Status),
-		LikeCount:       comment.LikeCount,
-		ReplyCount:      comment.ReplyCount,
-		IsPinned:        comment.IsPinned,
-		IsHot:           comment.IsHot,
-		IpAddress:       comment.IPAddress,
-		UserAgent:       comment.UserAgent,
-		CreatedAt:       comment.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:       comment.UpdatedAt.Format(time.RFC3339),
-	}
-
-	return protoComment
-}
-
-// convertCommentStatsToProto 将评论统计模型转换为protobuf格式
-func convertCommentStatsToProto(stats *model.CommentStats) *rest.CommentStats {
-	if stats == nil {
-		return nil
-	}
-
-	return &rest.CommentStats{
-		ObjectId:      stats.ObjectID,
-		ObjectType:    convertObjectTypeToProto(stats.ObjectType),
-		TotalCount:    stats.TotalCount,
-		ApprovedCount: stats.ApprovedCount,
-		PendingCount:  stats.PendingCount,
-		TodayCount:    stats.TodayCount,
-		HotCount:      stats.HotCount,
-	}
-}
-
-// convertObjectTypeToProto 将对象类型转换为protobuf枚举
-func convertObjectTypeToProto(objectType string) rest.CommentObjectType {
-	switch objectType {
-	case model.ObjectTypePost:
-		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_POST
-	case model.ObjectTypeArticle:
-		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_ARTICLE
-	case model.ObjectTypeVideo:
-		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_VIDEO
-	case model.ObjectTypeProduct:
-		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_PRODUCT
-	default:
-		return rest.CommentObjectType_COMMENT_OBJECT_TYPE_UNSPECIFIED
-	}
-}
-
-// convertObjectTypeFromProto 将protobuf枚举转换为对象类型
-func convertObjectTypeFromProto(objectType rest.CommentObjectType) string {
-	switch objectType {
-	case rest.CommentObjectType_COMMENT_OBJECT_TYPE_POST:
-		return model.ObjectTypePost
-	case rest.CommentObjectType_COMMENT_OBJECT_TYPE_ARTICLE:
-		return model.ObjectTypeArticle
-	case rest.CommentObjectType_COMMENT_OBJECT_TYPE_VIDEO:
-		return model.ObjectTypeVideo
-	case rest.CommentObjectType_COMMENT_OBJECT_TYPE_PRODUCT:
-		return model.ObjectTypeProduct
-	default:
-		return ""
-	}
-}
-
-// convertCommentStatusToProto 将评论状态转换为protobuf枚举
-func convertCommentStatusToProto(status string) rest.CommentStatus {
-	switch status {
-	case model.CommentStatusPending:
-		return rest.CommentStatus_COMMENT_STATUS_PENDING
-	case model.CommentStatusApproved:
-		return rest.CommentStatus_COMMENT_STATUS_APPROVED
-	case model.CommentStatusRejected:
-		return rest.CommentStatus_COMMENT_STATUS_REJECTED
-	case model.CommentStatusDeleted:
-		return rest.CommentStatus_COMMENT_STATUS_DELETED
-	default:
-		return rest.CommentStatus_COMMENT_STATUS_UNSPECIFIED
-	}
-}
-
-// convertCommentStatusFromProto 将protobuf枚举转换为评论状态
-func convertCommentStatusFromProto(status rest.CommentStatus) string {
-	switch status {
-	case rest.CommentStatus_COMMENT_STATUS_PENDING:
-		return model.CommentStatusPending
-	case rest.CommentStatus_COMMENT_STATUS_APPROVED:
-		return model.CommentStatusApproved
-	case rest.CommentStatus_COMMENT_STATUS_REJECTED:
-		return model.CommentStatusRejected
-	case rest.CommentStatus_COMMENT_STATUS_DELETED:
-		return model.CommentStatusDeleted
-	default:
-		return ""
-	}
+	return h.converter.BuildGetBatchCommentStatsResponse(true, "获取成功", statsList), nil
 }

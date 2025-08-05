@@ -2,32 +2,37 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
+	"goim-social/api/rest"
+	"goim-social/apps/interaction-service/converter"
 	"goim-social/apps/interaction-service/dao"
 	"goim-social/apps/interaction-service/model"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Service 互动服务
 type Service struct {
-	dao    dao.InteractionDAO
-	redis  *redis.RedisClient
-	kafka  *kafka.Producer
-	logger logger.Logger
+	dao       dao.InteractionDAO
+	redis     *redis.RedisClient
+	kafka     *kafka.Producer
+	converter *converter.Converter
+	logger    logger.Logger
 }
 
 // NewService 创建互动服务实例
 func NewService(interactionDAO dao.InteractionDAO, redis *redis.RedisClient, kafka *kafka.Producer, log logger.Logger) *Service {
 	return &Service{
-		dao:    interactionDAO,
-		redis:  redis,
-		kafka:  kafka,
-		logger: log,
+		dao:       interactionDAO,
+		redis:     redis,
+		kafka:     kafka,
+		converter: converter.NewConverter(),
+		logger:    log,
 	}
 }
 
@@ -200,9 +205,19 @@ func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType
 	cacheKey := model.GetStatsKey(objectID, objectType)
 	if s.redis != nil {
 		if cached, err := s.redis.Get(ctx, cacheKey); err == nil && cached != "" {
-			var stats model.InteractionStats
-			if json.Unmarshal([]byte(cached), &stats) == nil {
-				return &stats, nil
+			// 使用protobuf反序列化
+			protoStats := &rest.InteractionStats{}
+			if proto.Unmarshal([]byte(cached), protoStats) == nil {
+				// 转换为model格式
+				stats := &model.InteractionStats{
+					ObjectID:      protoStats.ObjectId,
+					ObjectType:    s.converter.ObjectTypeFromProto(protoStats.InteractionObjectType),
+					LikeCount:     protoStats.LikeCount,
+					FavoriteCount: protoStats.FavoriteCount,
+					ShareCount:    protoStats.ShareCount,
+					RepostCount:   protoStats.RepostCount,
+				}
+				return stats, nil
 			}
 		}
 	}
@@ -213,9 +228,17 @@ func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType
 		return nil, err
 	}
 
-	// 缓存结果
+	// 缓存结果 - 使用protobuf序列化
 	if s.redis != nil {
-		if data, err := json.Marshal(stats); err == nil {
+		protoStats := &rest.InteractionStats{
+			ObjectId:              stats.ObjectID,
+			InteractionObjectType: s.converter.ObjectTypeToProto(stats.ObjectType),
+			LikeCount:             stats.LikeCount,
+			FavoriteCount:         stats.FavoriteCount,
+			ShareCount:            stats.ShareCount,
+			RepostCount:           stats.RepostCount,
+		}
+		if data, err := proto.Marshal(protoStats); err == nil {
 			s.redis.Set(ctx, cacheKey, string(data), time.Duration(model.CacheExpireStats)*time.Second)
 		}
 	}
@@ -346,35 +369,25 @@ func (s *Service) publishInteractionEvent(ctx context.Context, eventType string,
 		return
 	}
 
-	event := &model.InteractionEvent{
+	// 构建protobuf事件消息
+	event := &rest.InteractionEvent{
 		EventType:       eventType,
-		UserID:          interaction.UserID,
-		ObjectID:        interaction.ObjectID,
-		ObjectType:      interaction.ObjectType,
-		InteractionType: interaction.InteractionType,
+		UserId:          interaction.UserID,
+		ObjectId:        interaction.ObjectID,
+		ObjectType:      s.converter.ObjectTypeToProto(interaction.ObjectType),
+		InteractionType: s.converter.InteractionTypeToProto(interaction.InteractionType),
 		Metadata:        interaction.Metadata,
-		Timestamp:       time.Now(),
-	}
-
-	// TODO：后续改为protobuf序列化
-	eventData, err := json.Marshal(event)
-	if err != nil {
-		s.logger.Error(ctx, "Failed to marshal interaction event",
-			logger.F("error", err.Error()),
-			logger.F("event", event))
-		return
+		Timestamp:       time.Now().Unix(),
 	}
 
 	// 异步发送事件
 	go func() {
-		topic := "interaction-events"
-		key := fmt.Sprintf("%d:%d:%s", event.UserID, event.ObjectID, event.InteractionType)
-
-		if err := s.kafka.SendMessage(topic, []byte(key), eventData); err != nil {
-			s.logger.Error(context.Background(), "Failed to send interaction event",
+		if err := s.kafka.PublishMessage("interaction-events", event); err != nil {
+			s.logger.Error(context.Background(), "Failed to publish interaction event",
 				logger.F("error", err.Error()),
-				logger.F("topic", topic),
-				logger.F("key", key))
+				logger.F("eventType", eventType),
+				logger.F("userID", interaction.UserID),
+				logger.F("objectID", interaction.ObjectID))
 		}
 	}()
 }
