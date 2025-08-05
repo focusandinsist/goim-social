@@ -13,6 +13,7 @@ import (
 
 	"goim-social/api/rest"
 	"goim-social/apps/im-gateway-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )
 
@@ -42,10 +43,12 @@ func (ws *WSHandler) RegisterRoutes(r *gin.Engine) {
 
 // HandleConnection 处理WebSocket连接
 func (ws *WSHandler) HandleConnection(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	// 从 header 获取 token
 	token := c.GetHeader("Authorization")
 	if token == "" {
-		ws.log.Error(c.Request.Context(), "Missing authorization token")
+		ws.log.Error(ctx, "Missing authorization token")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "缺少认证 token"})
 		return
 	}
@@ -53,17 +56,21 @@ func (ws *WSHandler) HandleConnection(c *gin.Context) {
 	// 从headers中获取userID
 	userIDStr := c.GetHeader("User-ID")
 	if userIDStr == "" {
-		ws.log.Error(c.Request.Context(), "Missing User-ID header")
+		ws.log.Error(ctx, "Missing User-ID header")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少User-ID header"})
 		return
 	}
 
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		ws.log.Error(c.Request.Context(), "Invalid User-ID format", logger.F("userID", userIDStr), logger.F("error", err.Error()))
+		ws.log.Error(ctx, "Invalid User-ID format", logger.F("userID", userIDStr), logger.F("error", err.Error()))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的User-ID格式"})
 		return
 	}
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+	c.Request = c.Request.WithContext(ctx)
 
 	// 验证token
 	ws.log.Info(c.Request.Context(), "Validating token", logger.F("token", token), logger.F("userID", userID))
