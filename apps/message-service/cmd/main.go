@@ -29,12 +29,21 @@ func main() {
 	ctx := context.Background()
 	cfg := app.GetConfig()
 
-	// 启动存储消费者
+	// 启动存储消费者（处理uplink_messages中的原始消息）
 	storageConsumer := consumer.NewStorageConsumer(app.GetMongoDB(), app.GetRedisClient())
 	go func() {
 		log.Println("启动存储消费者...")
 		if err := storageConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
 			log.Fatalf("Failed to start storage consumer: %v", err)
+		}
+	}()
+
+	// 启动持久化消费者（处理message_persistence_log中的归档命令）
+	persistenceConsumer := consumer.NewPersistenceConsumer(app.GetMongoDB(), app.GetRedisClient())
+	go func() {
+		log.Println("启动持久化消费者...")
+		if err := persistenceConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
+			log.Fatalf("Failed to start persistence consumer: %v", err)
 		}
 	}()
 
