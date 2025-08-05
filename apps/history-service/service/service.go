@@ -6,12 +6,17 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+
 	"goim-social/api/rest"
 	"goim-social/apps/history-service/dao"
 	"goim-social/apps/history-service/model"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
+	"goim-social/pkg/telemetry"
 )
 
 // Service 历史记录服务
@@ -34,8 +39,25 @@ func NewService(historyDAO dao.HistoryDAO, redis *redis.RedisClient, kafka *kafk
 
 // CreateHistory 创建历史记录
 func (s *Service) CreateHistory(ctx context.Context, params *model.CreateHistoryParams) (*model.HistoryRecord, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "history.service.CreateHistory")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("user.id", params.UserID),
+		attribute.String("action.type", params.ActionType),
+		attribute.String("object.type", params.ObjectType),
+		attribute.Int64("object.id", params.ObjectID),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, params.UserID)
+
 	// 参数验证
 	if err := s.validateCreateHistoryParams(params); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "parameter validation failed")
 		return nil, err
 	}
 
@@ -57,31 +79,57 @@ func (s *Service) CreateHistory(ctx context.Context, params *model.CreateHistory
 	}
 
 	// 创建历史记录
+	_, dbSpan := telemetry.StartSpan(ctx, "history.service.CreateHistoryDB")
 	if err := s.dao.CreateHistory(ctx, record); err != nil {
+		dbSpan.RecordError(err)
+		dbSpan.SetStatus(codes.Error, "failed to create history record")
+		dbSpan.End()
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create history record")
 		return nil, fmt.Errorf("创建历史记录失败: %v", err)
 	}
+	dbSpan.SetStatus(codes.Ok, "history record created in database")
+	dbSpan.End()
 
 	// 清除相关缓存
+	_, cacheSpan := telemetry.StartSpan(ctx, "history.service.ClearCache")
 	s.clearHistoryCache(ctx, params.UserID, params.ObjectType, params.ObjectID)
+	cacheSpan.SetStatus(codes.Ok, "cache cleared")
+	cacheSpan.End()
 
 	// 发送事件
+	_, eventSpan := telemetry.StartSpan(ctx, "history.service.PublishEvent")
 	s.publishEvent(ctx, model.EventHistoryCreated, record)
+	eventSpan.SetStatus(codes.Ok, "event published")
+	eventSpan.End()
 
 	s.logger.Info(ctx, "History record created successfully",
 		logger.F("recordID", record.ID),
 		logger.F("userID", record.UserID),
 		logger.F("actionType", record.ActionType))
 
+	span.SetStatus(codes.Ok, "history record created successfully")
 	return record, nil
 }
 
 // BatchCreateHistory 批量创建历史记录
 func (s *Service) BatchCreateHistory(ctx context.Context, paramsList []*model.CreateHistoryParams) ([]*model.HistoryRecord, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "history.service.BatchCreateHistory")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int("batch.size", len(paramsList)),
+	)
+
 	if len(paramsList) == 0 {
+		span.SetStatus(codes.Error, "empty batch list")
 		return nil, fmt.Errorf("批量创建列表不能为空")
 	}
 
 	if len(paramsList) > model.MaxBatchCreateSize {
+		span.SetStatus(codes.Error, "batch size exceeds limit")
 		return nil, fmt.Errorf("批量创建数量超过限制: %d", model.MaxBatchCreateSize)
 	}
 
@@ -133,8 +181,23 @@ func (s *Service) BatchCreateHistory(ctx context.Context, paramsList []*model.Cr
 
 // GetUserHistory 获取用户历史记录
 func (s *Service) GetUserHistory(ctx context.Context, params *model.GetUserHistoryParams) ([]*model.HistoryRecord, int64, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "history.service.GetUserHistory")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("user.id", params.UserID),
+		attribute.Int("page", int(params.Page)),
+		attribute.Int("page_size", int(params.PageSize)),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, params.UserID)
+
 	// 参数验证
 	if params.UserID <= 0 {
+		span.SetStatus(codes.Error, "invalid user ID")
 		return nil, 0, fmt.Errorf("用户ID无效")
 	}
 
@@ -151,22 +214,48 @@ func (s *Service) GetUserHistory(ctx context.Context, params *model.GetUserHisto
 
 	// 验证行为类型和对象类型
 	if params.ActionType != "" && !model.IsValidActionType(params.ActionType) {
+		span.SetStatus(codes.Error, "invalid action type")
 		return nil, 0, fmt.Errorf("无效的行为类型: %s", params.ActionType)
 	}
 	if params.ObjectType != "" && !model.IsValidObjectType(params.ObjectType) {
+		span.SetStatus(codes.Error, "invalid object type")
 		return nil, 0, fmt.Errorf("无效的对象类型: %s", params.ObjectType)
 	}
 
-	return s.dao.GetUserHistory(ctx, params)
+	// 查询用户历史记录
+	records, total, err := s.dao.GetUserHistory(ctx, params)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get user history")
+		return nil, 0, err
+	}
+
+	span.SetAttributes(attribute.Int("result.count", len(records)))
+	span.SetStatus(codes.Ok, "user history retrieved successfully")
+	return records, total, nil
 }
 
 // GetObjectHistory 获取对象历史记录
 func (s *Service) GetObjectHistory(ctx context.Context, params *model.GetObjectHistoryParams) ([]*model.HistoryRecord, int64, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "history.service.GetObjectHistory")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("object.id", params.ObjectID),
+		attribute.String("object.type", params.ObjectType),
+		attribute.Int("page", int(params.Page)),
+		attribute.Int("page_size", int(params.PageSize)),
+	)
+
 	// 参数验证
 	if params.ObjectID <= 0 {
+		span.SetStatus(codes.Error, "invalid object ID")
 		return nil, 0, fmt.Errorf("对象ID无效")
 	}
 	if !model.IsValidObjectType(params.ObjectType) {
+		span.SetStatus(codes.Error, "invalid object type")
 		return nil, 0, fmt.Errorf("无效的对象类型: %s", params.ObjectType)
 	}
 
@@ -183,27 +272,57 @@ func (s *Service) GetObjectHistory(ctx context.Context, params *model.GetObjectH
 
 	// 验证行为类型
 	if params.ActionType != "" && !model.IsValidActionType(params.ActionType) {
+		span.SetStatus(codes.Error, "invalid action type")
 		return nil, 0, fmt.Errorf("无效的行为类型: %s", params.ActionType)
 	}
 
-	return s.dao.GetObjectHistory(ctx, params)
+	// 查询对象历史记录
+	records, total, err := s.dao.GetObjectHistory(ctx, params)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get object history")
+		return nil, 0, err
+	}
+
+	span.SetAttributes(attribute.Int("result.count", len(records)))
+	span.SetStatus(codes.Ok, "object history retrieved successfully")
+	return records, total, nil
 }
 
 // DeleteHistory 删除历史记录
 func (s *Service) DeleteHistory(ctx context.Context, params *model.DeleteHistoryParams) (int32, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "history.service.DeleteHistory")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("user.id", params.UserID),
+		attribute.Int("record_ids.count", len(params.RecordIDs)),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, params.UserID)
+
 	// 参数验证
 	if params.UserID <= 0 {
+		span.SetStatus(codes.Error, "invalid user ID")
 		return 0, fmt.Errorf("用户ID无效")
 	}
 	if len(params.RecordIDs) == 0 {
+		span.SetStatus(codes.Error, "empty record IDs list")
 		return 0, fmt.Errorf("记录ID列表不能为空")
 	}
 	if len(params.RecordIDs) > model.MaxBatchDeleteSize {
+		span.SetStatus(codes.Error, "batch delete size exceeds limit")
 		return 0, fmt.Errorf("批量删除数量超过限制: %d", model.MaxBatchDeleteSize)
 	}
 
+	// 执行删除操作
 	deletedCount, err := s.dao.DeleteHistory(ctx, params.UserID, params.RecordIDs)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to delete history records")
 		return 0, fmt.Errorf("删除历史记录失败: %v", err)
 	}
 
@@ -214,6 +333,8 @@ func (s *Service) DeleteHistory(ctx context.Context, params *model.DeleteHistory
 		logger.F("userID", params.UserID),
 		logger.F("deletedCount", deletedCount))
 
+	span.SetAttributes(attribute.Int("deleted.count", int(deletedCount)))
+	span.SetStatus(codes.Ok, "history records deleted successfully")
 	return deletedCount, nil
 }
 

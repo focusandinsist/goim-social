@@ -10,6 +10,7 @@ import (
 	"goim-social/apps/history-service/converter"
 	"goim-social/apps/history-service/model"
 	"goim-social/apps/history-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
 )
@@ -62,6 +63,9 @@ func (h *HTTPHandler) CreateHistory(c *gin.Context) {
 		httpx.WriteObject(c, res, err)
 		return
 	}
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
 
 	// 转换枚举类型
 	actionType := h.converter.ActionTypeFromProto(req.ActionType)
@@ -183,6 +187,9 @@ func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
 		httpx.WriteObject(c, res, err)
 		return
 	}
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
 
 	// 转换枚举类型
 	actionType := h.converter.ActionTypeFromProto(req.ActionType)

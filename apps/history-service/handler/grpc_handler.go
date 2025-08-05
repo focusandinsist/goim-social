@@ -8,6 +8,7 @@ import (
 	"goim-social/apps/history-service/converter"
 	"goim-social/apps/history-service/model"
 	"goim-social/apps/history-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )
 
@@ -30,6 +31,9 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 
 // CreateHistory 创建历史记录
 func (h *GRPCHandler) CreateHistory(ctx context.Context, req *rest.CreateHistoryRequest) (*rest.CreateHistoryResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	params := &model.CreateHistoryParams{
 		UserID:      req.UserId,
 		ActionType:  h.converter.ActionTypeFromProto(req.ActionType),
@@ -90,6 +94,9 @@ func (h *GRPCHandler) BatchCreateHistory(ctx context.Context, req *rest.BatchCre
 
 // GetUserHistory 获取用户历史记录
 func (h *GRPCHandler) GetUserHistory(ctx context.Context, req *rest.GetUserHistoryRequest) (*rest.GetUserHistoryResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	params := &model.GetUserHistoryParams{
 		UserID:     req.UserId,
 		ActionType: h.converter.ActionTypeFromProto(req.ActionType),
