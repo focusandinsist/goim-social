@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"goim-social/api/rest"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
 )
@@ -143,6 +144,9 @@ func (h *HTTPHandler) ApplyFriend(c *gin.Context) {
 		httpx.WriteObject(c, res, err)
 		return
 	}
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
 
 	err := h.svc.ApplyFriend(ctx, req.UserId, req.FriendId, req.Remark)
 

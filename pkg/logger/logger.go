@@ -5,8 +5,11 @@ import (
 	"log"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	tracecontext "goim-social/pkg/context"
 )
 
 // Logger 日志接口
@@ -95,11 +98,34 @@ func (l *logger) WithContext(ctx context.Context) Logger {
 
 // log 内部日志方法
 func (l *logger) log(ctx context.Context, level zapcore.Level, msg string, fields ...Field) {
-	zapFields := make([]zap.Field, 0, len(fields)+2)
+	zapFields := make([]zap.Field, 0, len(fields)+10) // 预分配更多空间
 
-	// 添加请求ID
-	if requestID := getRequestID(ctx); requestID != "" {
-		zapFields = append(zapFields, zap.String("request_id", requestID))
+	// 添加OpenTelemetry trace信息
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		spanCtx := span.SpanContext()
+		zapFields = append(zapFields,
+			zap.String("trace_id", spanCtx.TraceID().String()),
+			zap.String("span_id", spanCtx.SpanID().String()),
+		)
+	}
+
+	// 添加业务追踪信息
+	traceCtx := tracecontext.ExtractTraceContext(ctx)
+	for key, value := range traceCtx.ToMap() {
+		zapFields = append(zapFields, zap.Any(key, value))
+	}
+
+	// 添加服务信息
+	if serviceName := tracecontext.GetServiceName(ctx); serviceName != "" {
+		zapFields = append(zapFields, zap.String("service_name", serviceName))
+	}
+	if serviceID := tracecontext.GetServiceID(ctx); serviceID != "" {
+		zapFields = append(zapFields, zap.String("service_id", serviceID))
+	}
+
+	// 添加客户端信息
+	if clientIP := tracecontext.GetClientIP(ctx); clientIP != "" {
+		zapFields = append(zapFields, zap.String("client_ip", clientIP))
 	}
 
 	// 添加时间戳
@@ -126,16 +152,37 @@ func (l *logger) log(ctx context.Context, level zapcore.Level, msg string, field
 
 // extractFields 从上下文提取字段
 func (l *logger) extractFields(ctx context.Context) []zap.Field {
-	fields := make([]zap.Field, 0)
+	fields := make([]zap.Field, 0, 10)
 
-	// 提取用户ID
-	if userID := getUserID(ctx); userID != "" {
-		fields = append(fields, zap.String("user_id", userID))
+	// 添加OpenTelemetry trace信息
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		spanCtx := span.SpanContext()
+		fields = append(fields,
+			zap.String("trace_id", spanCtx.TraceID().String()),
+			zap.String("span_id", spanCtx.SpanID().String()),
+		)
 	}
 
-	// 提取服务名
+	// 添加业务追踪信息
+	traceCtx := tracecontext.ExtractTraceContext(ctx)
+	for key, value := range traceCtx.ToMap() {
+		fields = append(fields, zap.Any(key, value))
+	}
+
+	// 添加服务信息
+	if serviceName := tracecontext.GetServiceName(ctx); serviceName != "" {
+		fields = append(fields, zap.String("service_name", serviceName))
+	}
+	if serviceID := tracecontext.GetServiceID(ctx); serviceID != "" {
+		fields = append(fields, zap.String("service_id", serviceID))
+	}
+
+	// 兼容旧的方法
+	if userID := getUserID(ctx); userID != "" {
+		fields = append(fields, zap.String("user_id_legacy", userID))
+	}
 	if serviceName := getServiceName(ctx); serviceName != "" {
-		fields = append(fields, zap.String("service", serviceName))
+		fields = append(fields, zap.String("service_legacy", serviceName))
 	}
 
 	return fields
