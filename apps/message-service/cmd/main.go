@@ -39,7 +39,7 @@ func main() {
 	}()
 
 	// 启动持久化消费者（处理message_persistence_log中的归档命令）
-	persistenceConsumer := consumer.NewPersistenceConsumer(app.GetMongoDB(), app.GetRedisClient())
+	persistenceConsumer := consumer.NewPersistenceConsumer(app.GetMongoDB())
 	go func() {
 		log.Println("启动持久化消费者...")
 		if err := persistenceConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
