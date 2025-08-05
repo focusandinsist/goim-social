@@ -6,6 +6,7 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/api-gateway-service/converter"
 	"goim-social/apps/api-gateway-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )
 
@@ -28,6 +29,11 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 
 // OnlineStatus gRPC在线状态查询
 func (h *GRPCHandler) OnlineStatus(ctx context.Context, req *rest.OnlineStatusRequest) (*rest.OnlineStatusResponse, error) {
+	// 将业务信息添加到context（如果有用户ID的话）
+	if len(req.UserIds) > 0 {
+		ctx = tracecontext.WithUserID(ctx, req.UserIds[0])
+	}
+
 	h.log.Info(ctx, "gRPC OnlineStatus request", logger.F("userIDs", req.UserIds))
 
 	status, err := h.svc.OnlineStatus(ctx, req.UserIds)

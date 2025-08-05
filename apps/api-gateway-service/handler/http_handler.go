@@ -1,13 +1,14 @@
 package handler
 
 import (
+	"github.com/gin-gonic/gin"
+
 	"goim-social/api/rest"
 	"goim-social/apps/api-gateway-service/converter"
 	"goim-social/apps/api-gateway-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-
-	"github.com/gin-gonic/gin"
 )
 
 // HTTPHandler HTTP协议处理器
@@ -67,6 +68,14 @@ func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 // DynamicRoute 动态路由处理器 - 核心功能！
 func (h *HTTPHandler) DynamicRoute(c *gin.Context) {
 	ctx := c.Request.Context()
+
+	// 从认证中间件获取用户ID（如果有的话）
+	if userID, exists := c.Get("userID"); exists {
+		if uid, ok := userID.(int64); ok {
+			ctx = tracecontext.WithUserID(ctx, uid)
+			c.Request = c.Request.WithContext(ctx)
+		}
+	}
 
 	// 记录请求日志
 	h.log.Info(ctx, "Dynamic route request",
