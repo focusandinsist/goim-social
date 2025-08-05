@@ -30,7 +30,7 @@ func main() {
 	cfg := app.GetConfig()
 
 	// 启动存储消费者（处理uplink_messages中的原始消息）
-	storageConsumer := consumer.NewStorageConsumer(app.GetMongoDB(), app.GetRedisClient())
+	storageConsumer := consumer.NewStorageConsumer(app.GetMongoDB())
 	go func() {
 		log.Println("启动存储消费者...")
 		if err := storageConsumer.Start(ctx, cfg.Kafka.Brokers); err != nil {
