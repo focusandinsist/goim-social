@@ -155,7 +155,7 @@ func (s *StorageConsumer) handleNewMessage(msg *rest.WSMessage) error {
 	}
 
 	// 先尝试简单的插入操作，如果重复则忽略
-	collection := s.db.GetCollection("message")
+	collection := s.db.GetCollection("messages")
 
 	// 检查消息是否已存在
 	var existingMsg model.Message
@@ -206,7 +206,7 @@ func (s *StorageConsumer) handlePersistenceMessage(msg *rest.WSMessage) error {
 	}
 
 	// 先尝试简单的插入操作，如果重复则忽略（幂等性保护）
-	collection := s.db.GetCollection("message")
+	collection := s.db.GetCollection("messages")
 
 	// 检查消息是否已存在
 	var existingMsg model.Message
