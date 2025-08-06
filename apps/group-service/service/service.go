@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+
 	"goim-social/apps/group-service/dao"
 	"goim-social/apps/group-service/model"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
+	"goim-social/pkg/telemetry"
 )
 
 // Service 群组服务
@@ -32,10 +37,29 @@ func NewService(groupDAO dao.GroupDAO, redis *redis.RedisClient, kafka *kafka.Pr
 
 // CreateGroup 创建群组
 func (s *Service) CreateGroup(ctx context.Context, name, description, avatar string, ownerID int64, isPublic bool, maxMembers int32, memberIDs []int64) (*model.Group, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "group.service.CreateGroup")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.String("group.name", name),
+		attribute.String("group.description", description),
+		attribute.Int64("group.owner_id", ownerID),
+		attribute.Bool("group.is_public", isPublic),
+		attribute.Int("group.max_members", int(maxMembers)),
+		attribute.Int("group.initial_member_count", len(memberIDs)),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, ownerID)
+
 	if name == "" {
+		span.SetStatus(codes.Error, "group name is empty")
 		return nil, fmt.Errorf("群组名称不能为空")
 	}
 	if ownerID <= 0 {
+		span.SetStatus(codes.Error, "invalid owner ID")
 		return nil, fmt.Errorf("群主ID无效")
 	}
 	if maxMembers <= 0 {
@@ -56,9 +80,20 @@ func (s *Service) CreateGroup(ctx context.Context, name, description, avatar str
 		UpdatedAt:    time.Now(),
 	}
 
+	// 数据库操作span
+	_, dbSpan := telemetry.StartSpan(ctx, "group.service.CreateGroup.Database")
 	if err := s.dao.CreateGroup(ctx, group); err != nil {
+		dbSpan.RecordError(err)
+		dbSpan.SetStatus(codes.Error, "failed to create group")
+		dbSpan.End()
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create group")
 		return nil, fmt.Errorf("创建群组失败: %v", err)
 	}
+
+	// 设置群组ID到context和span
+	ctx = tracecontext.WithGroupID(ctx, group.ID)
+	span.SetAttributes(attribute.Int64("group.id", group.ID))
 
 	// 添加群主为成员
 	ownerMember := &model.GroupMember{
@@ -69,6 +104,11 @@ func (s *Service) CreateGroup(ctx context.Context, name, description, avatar str
 		JoinedAt: time.Now(),
 	}
 	if err := s.dao.AddMember(ctx, ownerMember); err != nil {
+		dbSpan.RecordError(err)
+		dbSpan.SetStatus(codes.Error, "failed to add owner as member")
+		dbSpan.End()
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to add owner as member")
 		return nil, fmt.Errorf("添加群主失败: %v", err)
 	}
 
@@ -106,6 +146,17 @@ func (s *Service) CreateGroup(ctx context.Context, name, description, avatar str
 			logger.F("error", err.Error()))
 	}
 
+	dbSpan.SetStatus(codes.Ok, "group created successfully")
+	dbSpan.End()
+
+	// 记录成功日志
+	s.logger.Info(ctx, "Group created successfully",
+		logger.F("groupID", group.ID),
+		logger.F("groupName", name),
+		logger.F("ownerID", ownerID),
+		logger.F("memberCount", memberCount))
+
+	span.SetStatus(codes.Ok, "group created successfully")
 	return group, nil
 }
 
@@ -184,25 +235,54 @@ func (s *Service) DisbandGroup(ctx context.Context, groupID, userID int64) error
 
 // JoinGroup 加入群组
 func (s *Service) JoinGroup(ctx context.Context, groupID, userID int64, reason string) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "group.service.JoinGroup")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("group.id", groupID),
+		attribute.Int64("user.id", userID),
+		attribute.String("join.reason", reason),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+	ctx = tracecontext.WithGroupID(ctx, groupID)
+
 	group, err := s.dao.GetGroup(ctx, groupID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "group not found")
 		return fmt.Errorf("群组不存在: %v", err)
 	}
 
+	span.SetAttributes(
+		attribute.String("group.name", group.Name),
+		attribute.Bool("group.is_public", group.IsPublic),
+		attribute.Int("group.member_count", int(group.MemberCount)),
+		attribute.Int("group.max_members", int(group.MaxMembers)),
+	)
+
 	isMember, err := s.dao.IsMember(ctx, groupID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to check membership")
 		return fmt.Errorf("检查成员身份失败: %v", err)
 	}
 	if isMember {
+		span.SetStatus(codes.Error, "user is already a member")
 		return fmt.Errorf("已是群成员")
 	}
 
 	if group.MemberCount >= group.MaxMembers {
+		span.SetStatus(codes.Error, "group is full")
 		return fmt.Errorf("群组已满")
 	}
 
 	// 如果是公开群，直接加入
 	if group.IsPublic {
+		_, joinSpan := telemetry.StartSpan(ctx, "group.service.JoinGroup.DirectJoin")
 		member := &model.GroupMember{
 			GroupID:  groupID,
 			UserID:   userID,
@@ -211,6 +291,11 @@ func (s *Service) JoinGroup(ctx context.Context, groupID, userID int64, reason s
 			JoinedAt: time.Now(),
 		}
 		if err := s.dao.AddMember(ctx, member); err != nil {
+			joinSpan.RecordError(err)
+			joinSpan.SetStatus(codes.Error, "failed to add member")
+			joinSpan.End()
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to add member")
 			return fmt.Errorf("加入群组失败: %v", err)
 		}
 
@@ -224,10 +309,20 @@ func (s *Service) JoinGroup(ctx context.Context, groupID, userID int64, reason s
 				logger.F("error", err.Error()))
 		}
 
+		joinSpan.SetStatus(codes.Ok, "user joined group successfully")
+		joinSpan.End()
+
+		s.logger.Info(ctx, "User joined public group successfully",
+			logger.F("groupID", groupID),
+			logger.F("userID", userID),
+			logger.F("groupName", group.Name))
+
+		span.SetStatus(codes.Ok, "user joined public group successfully")
 		return nil
 	}
 
 	// 私有群需要申请
+	span.SetAttributes(attribute.String("join.type", "request_required"))
 	return s.createJoinRequest(ctx, groupID, userID, reason)
 }
 
@@ -338,24 +433,49 @@ func (s *Service) KickMember(ctx context.Context, groupID, operatorID, targetUse
 
 // InviteToGroup 邀请加入群组
 func (s *Service) InviteToGroup(ctx context.Context, groupID, inviterID, inviteeID int64, message string) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "group.service.InviteToGroup")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("group.id", groupID),
+		attribute.Int64("inviter.id", inviterID),
+		attribute.Int64("invitee.id", inviteeID),
+		attribute.String("invite.message", message),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, inviterID)
+	ctx = tracecontext.WithGroupID(ctx, groupID)
+
 	inviter, err := s.dao.GetMember(ctx, groupID, inviterID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get inviter info")
 		return fmt.Errorf("获取邀请者信息失败: %v", err)
 	}
 	if inviter == nil {
+		span.SetStatus(codes.Error, "inviter is not a group member")
 		return fmt.Errorf("邀请者不是群成员")
 	}
 
+	span.SetAttributes(attribute.String("inviter.role", inviter.Role))
+
 	isMember, err := s.dao.IsMember(ctx, groupID, inviteeID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to check invitee membership")
 		return fmt.Errorf("检查被邀请者身份失败: %v", err)
 	}
 	if isMember {
+		span.SetStatus(codes.Error, "invitee is already a group member")
 		return fmt.Errorf("被邀请者已是群成员")
 	}
 
 	existingInvitation, err := s.dao.GetInvitation(ctx, groupID, inviteeID)
 	if err == nil && existingInvitation != nil && existingInvitation.Status == model.InvitationStatusPending {
+		span.SetStatus(codes.Error, "pending invitation already exists")
 		return fmt.Errorf("已有待处理的邀请")
 	}
 
@@ -370,18 +490,50 @@ func (s *Service) InviteToGroup(ctx context.Context, groupID, inviterID, invitee
 		UpdatedAt: time.Now(),
 	}
 
-	return s.dao.CreateInvitation(ctx, invitation)
+	if err := s.dao.CreateInvitation(ctx, invitation); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create invitation")
+		return err
+	}
+
+	s.logger.Info(ctx, "Group invitation created successfully",
+		logger.F("groupID", groupID),
+		logger.F("inviterID", inviterID),
+		logger.F("inviteeID", inviteeID))
+
+	span.SetStatus(codes.Ok, "invitation created successfully")
+	return nil
 }
 
 // PublishAnnouncement 发布群公告
 func (s *Service) PublishAnnouncement(ctx context.Context, groupID, userID int64, content string) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "group.service.PublishAnnouncement")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("group.id", groupID),
+		attribute.Int64("user.id", userID),
+		attribute.Int("announcement.length", len(content)),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+	ctx = tracecontext.WithGroupID(ctx, groupID)
+
 	member, err := s.dao.GetMember(ctx, groupID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get member info")
 		return fmt.Errorf("获取成员信息失败: %v", err)
 	}
 	if member == nil || (member.Role != model.RoleOwner && member.Role != model.RoleAdmin) {
+		span.SetStatus(codes.Error, "insufficient permissions")
 		return fmt.Errorf("权限不足")
 	}
+
+	span.SetAttributes(attribute.String("user.role", member.Role))
 
 	// 更新群公告
 	group := &model.Group{
@@ -390,18 +542,43 @@ func (s *Service) PublishAnnouncement(ctx context.Context, groupID, userID int64
 		UpdatedAt:    time.Now(),
 	}
 
-	return s.dao.UpdateGroup(ctx, group)
+	if err := s.dao.UpdateGroup(ctx, group); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to update group announcement")
+		return err
+	}
+
+	s.logger.Info(ctx, "Group announcement published successfully",
+		logger.F("groupID", groupID),
+		logger.F("userID", userID),
+		logger.F("contentLength", len(content)))
+
+	span.SetStatus(codes.Ok, "announcement published successfully")
+	return nil
 }
 
 // GetGroupMemberIDs 获取群组成员ID列表（用于群消息推送）
 func (s *Service) GetGroupMemberIDs(ctx context.Context, groupID int64) ([]int64, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "group.service.GetGroupMemberIDs")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(attribute.Int64("group.id", groupID))
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithGroupID(ctx, groupID)
+
 	if groupID <= 0 {
+		span.SetStatus(codes.Error, "invalid group ID")
 		return nil, fmt.Errorf("群组ID无效")
 	}
 
 	// 获取群成员列表
 	members, err := s.dao.GetGroupMembers(ctx, groupID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get group members")
 		return nil, fmt.Errorf("获取群成员失败: %v", err)
 	}
 
@@ -411,37 +588,73 @@ func (s *Service) GetGroupMemberIDs(ctx context.Context, groupID int64) ([]int64
 		memberIDs = append(memberIDs, member.UserID)
 	}
 
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int("group.member_count", len(memberIDs)),
+		attribute.Int64Slice("group.member_ids", memberIDs),
+	)
+
 	s.logger.Info(ctx, "获取群成员ID列表成功",
 		logger.F("groupID", groupID),
 		logger.F("memberCount", len(memberIDs)),
 		logger.F("memberIDs", memberIDs))
 
+	span.SetStatus(codes.Ok, "group member IDs retrieved successfully")
 	return memberIDs, nil
 }
 
 // ValidateGroupMember 验证用户是否为群成员（用于群消息发送权限验证）
 func (s *Service) ValidateGroupMember(ctx context.Context, groupID, userID int64) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "group.service.ValidateGroupMember")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("group.id", groupID),
+		attribute.Int64("user.id", userID),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+	ctx = tracecontext.WithGroupID(ctx, groupID)
+
 	if groupID <= 0 {
+		span.SetStatus(codes.Error, "invalid group ID")
 		return fmt.Errorf("群组ID无效")
 	}
 	if userID <= 0 {
+		span.SetStatus(codes.Error, "invalid user ID")
 		return fmt.Errorf("用户ID无效")
 	}
 
 	// 检查群组是否存在
-	_, err := s.dao.GetGroup(ctx, groupID)
+	group, err := s.dao.GetGroup(ctx, groupID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "group not found")
 		return fmt.Errorf("群组不存在: %v", err)
 	}
+
+	span.SetAttributes(attribute.String("group.name", group.Name))
 
 	// 检查用户是否是群成员
 	isMember, err := s.dao.IsMember(ctx, groupID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to check membership")
 		return fmt.Errorf("检查成员身份失败: %v", err)
 	}
 	if !isMember {
+		span.SetStatus(codes.Error, "user is not a group member")
 		return fmt.Errorf("用户不是群成员")
 	}
 
+	s.logger.Info(ctx, "Group member validation successful",
+		logger.F("groupID", groupID),
+		logger.F("userID", userID),
+		logger.F("groupName", group.Name))
+
+	span.SetStatus(codes.Ok, "user is a valid group member")
 	return nil
 }
