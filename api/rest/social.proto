@@ -110,7 +110,10 @@ message ListFriendApplyRequest {
 
 // 查询好友申请列表响应
 message ListFriendApplyResponse {
-  repeated FriendApplyInfo applies = 1;
+  bool success = 1;
+  string message = 2;
+  repeated FriendApplyInfo applies = 3;
+  int32 total = 4;
 }
 
 // 设置好友别名请求

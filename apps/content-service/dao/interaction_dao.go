@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"gorm.io/gorm"
 	"goim-social/apps/content-service/model"
+	"gorm.io/gorm"
 )
 
 // ==================== 互动相关方法实现 ====================
@@ -18,7 +18,7 @@ func (d *contentDAO) CreateInteraction(ctx context.Context, interaction *model.I
 // DeleteInteraction 删除互动
 func (d *contentDAO) DeleteInteraction(ctx context.Context, userID, targetID int64, targetType, interactionType string) error {
 	return d.db.GetDB().WithContext(ctx).
-		Where("user_id = ? AND target_id = ? AND target_type = ? AND interaction_type = ?", 
+		Where("user_id = ? AND target_id = ? AND target_type = ? AND interaction_type = ?",
 			userID, targetID, targetType, interactionType).
 		Delete(&model.Interaction{}).Error
 }
@@ -27,10 +27,10 @@ func (d *contentDAO) DeleteInteraction(ctx context.Context, userID, targetID int
 func (d *contentDAO) GetInteraction(ctx context.Context, userID, targetID int64, targetType, interactionType string) (*model.Interaction, error) {
 	var interaction model.Interaction
 	err := d.db.GetDB().WithContext(ctx).
-		Where("user_id = ? AND target_id = ? AND target_type = ? AND interaction_type = ?", 
+		Where("user_id = ? AND target_id = ? AND target_type = ? AND interaction_type = ?",
 			userID, targetID, targetType, interactionType).
 		First(&interaction).Error
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (d *contentDAO) BatchCheckInteractions(ctx context.Context, userID int64, t
 	}
 
 	err := d.db.GetDB().WithContext(ctx).
-		Where("user_id = ? AND target_id IN ? AND target_type = ? AND interaction_type = ?", 
+		Where("user_id = ? AND target_id IN ? AND target_type = ? AND interaction_type = ?",
 			userID, targetIDs, targetType, interactionType).
 		Find(&interactions).Error
 
@@ -118,7 +118,7 @@ func (d *contentDAO) GetInteractionStats(ctx context.Context, targetID int64, ta
 // BatchGetInteractionStats 批量获取互动统计
 func (d *contentDAO) BatchGetInteractionStats(ctx context.Context, targetIDs []int64, targetType string) ([]*model.InteractionStats, error) {
 	var stats []*model.InteractionStats
-	
+
 	err := d.db.GetDB().WithContext(ctx).
 		Where("target_id IN ? AND target_type = ?", targetIDs, targetType).
 		Find(&stats).Error
@@ -147,12 +147,6 @@ func (d *contentDAO) BatchGetInteractionStats(ctx context.Context, targetIDs []i
 
 // UpdateInteractionStats 更新互动统计
 func (d *contentDAO) UpdateInteractionStats(ctx context.Context, targetID int64, targetType, interactionType string, delta int64) error {
-	// 使用 UPSERT 操作
-	stats := &model.InteractionStats{
-		TargetID:   targetID,
-		TargetType: targetType,
-	}
-
 	// 根据互动类型更新对应字段
 	var updateColumn string
 	switch interactionType {
@@ -175,8 +169,8 @@ func (d *contentDAO) UpdateInteractionStats(ctx context.Context, targetID int64,
 			VALUES (?, ?, ?, NOW()) 
 			ON CONFLICT (target_id, target_type) 
 			DO UPDATE SET %s = interaction_stats.%s + ?, updated_at = NOW()
-		`, updateColumn, updateColumn, updateColumn), 
-		targetID, targetType, delta, delta).Error
+		`, updateColumn, updateColumn, updateColumn),
+			targetID, targetType, delta, delta).Error
 }
 
 // IncrementInteractionCount 增加互动计数

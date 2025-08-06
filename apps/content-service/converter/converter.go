@@ -465,3 +465,375 @@ func (c *Converter) BuildErrorCreateTopicResponse(message string) *rest.CreateTo
 func (c *Converter) BuildErrorGetTopicsResponse(message string) *rest.GetTopicsResponse {
 	return c.BuildGetTopicsResponse(false, message, nil, 0)
 }
+
+// ==================== 评论相关转换方法 ====================
+
+// CommentModelToProto 将评论Model转换为Protobuf
+func (c *Converter) CommentModelToProto(comment *model.Comment) *rest.Comment {
+	if comment == nil {
+		return nil
+	}
+
+	return &rest.Comment{
+		Id:              comment.ID,
+		TargetId:        comment.TargetID,
+		TargetType:      c.stringToTargetType(comment.TargetType),
+		UserId:          comment.UserID,
+		UserName:        comment.UserName,
+		UserAvatar:      comment.UserAvatar,
+		Content:         comment.Content,
+		ParentId:        comment.ParentID,
+		RootId:          comment.RootID,
+		ReplyToUserId:   comment.ReplyToUserID,
+		ReplyToUserName: comment.ReplyToUserName,
+		Status:          c.stringToCommentStatus(comment.Status),
+		LikeCount:       int32(comment.LikeCount),
+		ReplyCount:      int32(comment.ReplyCount),
+		IsPinned:        comment.IsPinned,
+		IsHot:           comment.IsHot,
+		CreatedAt:       comment.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       comment.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+// stringToTargetType 将字符串转换为TargetType枚举
+func (c *Converter) stringToTargetType(targetType string) rest.TargetType {
+	switch targetType {
+	case "content":
+		return rest.TargetType_TARGET_TYPE_CONTENT
+	case "comment":
+		return rest.TargetType_TARGET_TYPE_COMMENT
+	case "user":
+		return rest.TargetType_TARGET_TYPE_USER
+	default:
+		return rest.TargetType_TARGET_TYPE_UNSPECIFIED
+	}
+}
+
+// stringToCommentStatus 将字符串转换为CommentStatus枚举
+func (c *Converter) stringToCommentStatus(status string) rest.CommentStatus {
+	switch status {
+	case "pending":
+		return rest.CommentStatus_COMMENT_STATUS_PENDING
+	case "approved":
+		return rest.CommentStatus_COMMENT_STATUS_APPROVED
+	case "rejected":
+		return rest.CommentStatus_COMMENT_STATUS_REJECTED
+	case "deleted":
+		return rest.CommentStatus_COMMENT_STATUS_DELETED
+	default:
+		return rest.CommentStatus_COMMENT_STATUS_UNSPECIFIED
+	}
+}
+
+// TargetTypeToString 将TargetType枚举转换为字符串
+func (c *Converter) TargetTypeToString(targetType rest.TargetType) string {
+	switch targetType {
+	case rest.TargetType_TARGET_TYPE_CONTENT:
+		return "content"
+	case rest.TargetType_TARGET_TYPE_COMMENT:
+		return "comment"
+	case rest.TargetType_TARGET_TYPE_USER:
+		return "user"
+	default:
+		return ""
+	}
+}
+
+// BuildCreateCommentResponse 构建创建评论响应
+func (c *Converter) BuildCreateCommentResponse(success bool, message string, comment *model.Comment) *rest.CreateCommentResponse {
+	return &rest.CreateCommentResponse{
+		Success: success,
+		Message: message,
+		Comment: c.CommentModelToProto(comment),
+	}
+}
+
+// BuildDeleteCommentResponse 构建删除评论响应
+func (c *Converter) BuildDeleteCommentResponse(success bool, message string) *rest.DeleteCommentResponse {
+	return &rest.DeleteCommentResponse{
+		Success: success,
+		Message: message,
+	}
+}
+
+// BuildGetCommentsResponse 构建获取评论列表响应
+func (c *Converter) BuildGetCommentsResponse(success bool, message string, comments []*model.Comment, total int64) *rest.GetCommentsResponse {
+	var commentProtos []*rest.Comment
+	if comments != nil {
+		commentProtos = make([]*rest.Comment, len(comments))
+		for i, comment := range comments {
+			commentProtos[i] = c.CommentModelToProto(comment)
+		}
+	}
+
+	return &rest.GetCommentsResponse{
+		Success:  success,
+		Message:  message,
+		Comments: commentProtos,
+		Total:    total,
+	}
+}
+
+// BuildGetCommentRepliesResponse 构建获取评论回复响应
+func (c *Converter) BuildGetCommentRepliesResponse(success bool, message string, replies []*model.Comment, total int64) *rest.GetCommentRepliesResponse {
+	var replyProtos []*rest.Comment
+	if replies != nil {
+		replyProtos = make([]*rest.Comment, len(replies))
+		for i, reply := range replies {
+			replyProtos[i] = c.CommentModelToProto(reply)
+		}
+	}
+
+	return &rest.GetCommentRepliesResponse{
+		Success: success,
+		Message: message,
+		Replies: replyProtos,
+		Total:   total,
+	}
+}
+
+// 错误响应构建方法
+func (c *Converter) BuildErrorCreateCommentResponse(message string) *rest.CreateCommentResponse {
+	return c.BuildCreateCommentResponse(false, message, nil)
+}
+
+func (c *Converter) BuildErrorDeleteCommentResponse(message string) *rest.DeleteCommentResponse {
+	return c.BuildDeleteCommentResponse(false, message)
+}
+
+func (c *Converter) BuildErrorGetCommentsResponse(message string) *rest.GetCommentsResponse {
+	return c.BuildGetCommentsResponse(false, message, nil, 0)
+}
+
+func (c *Converter) BuildErrorGetCommentRepliesResponse(message string) *rest.GetCommentRepliesResponse {
+	return c.BuildGetCommentRepliesResponse(false, message, nil, 0)
+}
+
+// ==================== 互动相关转换方法 ====================
+
+// InteractionModelToProto 将互动Model转换为Protobuf
+func (c *Converter) InteractionModelToProto(interaction *model.Interaction) *rest.Interaction {
+	if interaction == nil {
+		return nil
+	}
+
+	return &rest.Interaction{
+		Id:              interaction.ID,
+		UserId:          interaction.UserID,
+		TargetId:        interaction.TargetID,
+		TargetType:      c.stringToTargetType(interaction.TargetType),
+		InteractionType: c.stringToInteractionType(interaction.InteractionType),
+		Metadata:        interaction.Metadata,
+		CreatedAt:       interaction.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       interaction.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+// InteractionStatsModelToProto 将互动统计Model转换为Protobuf
+func (c *Converter) InteractionStatsModelToProto(stats *model.InteractionStats) *rest.InteractionStats {
+	if stats == nil {
+		return nil
+	}
+
+	return &rest.InteractionStats{
+		TargetId:      stats.TargetID,
+		TargetType:    c.stringToTargetType(stats.TargetType),
+		LikeCount:     stats.LikeCount,
+		FavoriteCount: stats.FavoriteCount,
+		ShareCount:    stats.ShareCount,
+		RepostCount:   stats.RepostCount,
+	}
+}
+
+// stringToInteractionType 将字符串转换为InteractionType枚举
+func (c *Converter) stringToInteractionType(interactionType string) rest.InteractionType {
+	switch interactionType {
+	case "like":
+		return rest.InteractionType_INTERACTION_TYPE_LIKE
+	case "favorite":
+		return rest.InteractionType_INTERACTION_TYPE_FAVORITE
+	case "share":
+		return rest.InteractionType_INTERACTION_TYPE_SHARE
+	case "repost":
+		return rest.InteractionType_INTERACTION_TYPE_REPOST
+	default:
+		return rest.InteractionType_INTERACTION_TYPE_UNSPECIFIED
+	}
+}
+
+// InteractionTypeToString 将InteractionType枚举转换为字符串
+func (c *Converter) InteractionTypeToString(interactionType rest.InteractionType) string {
+	switch interactionType {
+	case rest.InteractionType_INTERACTION_TYPE_LIKE:
+		return "like"
+	case rest.InteractionType_INTERACTION_TYPE_FAVORITE:
+		return "favorite"
+	case rest.InteractionType_INTERACTION_TYPE_SHARE:
+		return "share"
+	case rest.InteractionType_INTERACTION_TYPE_REPOST:
+		return "repost"
+	default:
+		return ""
+	}
+}
+
+// BuildDoInteractionResponse 构建执行互动响应
+func (c *Converter) BuildDoInteractionResponse(success bool, message string, interaction *model.Interaction) *rest.DoInteractionResponse {
+	return &rest.DoInteractionResponse{
+		Success:     success,
+		Message:     message,
+		Interaction: c.InteractionModelToProto(interaction),
+	}
+}
+
+// BuildUndoInteractionResponse 构建取消互动响应
+func (c *Converter) BuildUndoInteractionResponse(success bool, message string) *rest.UndoInteractionResponse {
+	return &rest.UndoInteractionResponse{
+		Success: success,
+		Message: message,
+	}
+}
+
+// BuildCheckInteractionResponse 构建检查互动状态响应
+func (c *Converter) BuildCheckInteractionResponse(success bool, message string, exists bool, interaction *model.Interaction) *rest.CheckInteractionResponse {
+	return &rest.CheckInteractionResponse{
+		Success:        success,
+		Message:        message,
+		HasInteraction: exists,
+		Interaction:    c.InteractionModelToProto(interaction),
+	}
+}
+
+// BuildGetInteractionStatsResponse 构建获取互动统计响应
+func (c *Converter) BuildGetInteractionStatsResponse(success bool, message string, stats *model.InteractionStats) *rest.GetInteractionStatsResponse {
+	return &rest.GetInteractionStatsResponse{
+		Success: success,
+		Message: message,
+		Stats:   c.InteractionStatsModelToProto(stats),
+	}
+}
+
+// 错误响应构建方法
+func (c *Converter) BuildErrorDoInteractionResponse(message string) *rest.DoInteractionResponse {
+	return c.BuildDoInteractionResponse(false, message, nil)
+}
+
+func (c *Converter) BuildErrorUndoInteractionResponse(message string) *rest.UndoInteractionResponse {
+	return c.BuildUndoInteractionResponse(false, message)
+}
+
+func (c *Converter) BuildErrorCheckInteractionResponse(message string) *rest.CheckInteractionResponse {
+	return c.BuildCheckInteractionResponse(false, message, false, nil)
+}
+
+func (c *Converter) BuildErrorGetInteractionStatsResponse(message string) *rest.GetInteractionStatsResponse {
+	return c.BuildGetInteractionStatsResponse(false, message, nil)
+}
+
+// ==================== 聚合查询相关转换方法 ====================
+
+// ContentDetailResultToProto 将内容详情结果转换为Protobuf
+func (c *Converter) ContentDetailResultToProto(detail *model.ContentDetailResult) *rest.ContentDetail {
+	if detail == nil {
+		return nil
+	}
+
+	var topComments []*rest.Comment
+	if detail.TopComments != nil {
+		topComments = make([]*rest.Comment, len(detail.TopComments))
+		for i, comment := range detail.TopComments {
+			topComments[i] = c.CommentModelToProto(comment)
+		}
+	}
+
+	// 转换用户互动状态
+	userInteractions := make(map[string]bool)
+	if detail.UserInteractions != nil {
+		userInteractions = detail.UserInteractions
+	}
+
+	return &rest.ContentDetail{
+		Content:          c.ContentModelToProto(detail.Content),
+		TopComments:      topComments,
+		InteractionStats: c.InteractionStatsModelToProto(detail.InteractionStats),
+		UserInteractions: userInteractions,
+	}
+}
+
+// ContentFeedItemToProto 将内容流项目转换为Protobuf
+func (c *Converter) ContentFeedItemToProto(item *model.ContentFeedItem) *rest.ContentFeedItem {
+	if item == nil {
+		return nil
+	}
+
+	// 转换用户互动状态
+	userInteractions := make(map[string]bool)
+	if item.UserInteractions != nil {
+		userInteractions = item.UserInteractions
+	}
+
+	return &rest.ContentFeedItem{
+		Content:             c.ContentModelToProto(item.Content),
+		InteractionStats:    c.InteractionStatsModelToProto(item.InteractionStats),
+		UserInteractions:    userInteractions,
+		CommentPreviewCount: item.CommentPreview,
+	}
+}
+
+// BuildGetContentDetailResponse 构建获取内容详情响应
+func (c *Converter) BuildGetContentDetailResponse(success bool, message string, detail *model.ContentDetailResult) *rest.GetContentDetailResponse {
+	return &rest.GetContentDetailResponse{
+		Success: success,
+		Message: message,
+		Detail:  c.ContentDetailResultToProto(detail),
+	}
+}
+
+// BuildGetContentFeedResponse 构建获取内容流响应
+func (c *Converter) BuildGetContentFeedResponse(success bool, message string, feedItems []*model.ContentFeedItem, total int64) *rest.GetContentFeedResponse {
+	var feedItemProtos []*rest.ContentFeedItem
+	if feedItems != nil {
+		feedItemProtos = make([]*rest.ContentFeedItem, len(feedItems))
+		for i, item := range feedItems {
+			feedItemProtos[i] = c.ContentFeedItemToProto(item)
+		}
+	}
+
+	return &rest.GetContentFeedResponse{
+		Success: success,
+		Message: message,
+		Items:   feedItemProtos,
+		Total:   total,
+	}
+}
+
+// BuildGetTrendingContentResponse 构建获取热门内容响应
+func (c *Converter) BuildGetTrendingContentResponse(success bool, message string, trendingItems []*model.ContentFeedItem) *rest.GetTrendingContentResponse {
+	var trendingItemProtos []*rest.ContentFeedItem
+	if trendingItems != nil {
+		trendingItemProtos = make([]*rest.ContentFeedItem, len(trendingItems))
+		for i, item := range trendingItems {
+			trendingItemProtos[i] = c.ContentFeedItemToProto(item)
+		}
+	}
+
+	return &rest.GetTrendingContentResponse{
+		Success: success,
+		Message: message,
+		Items:   trendingItemProtos,
+	}
+}
+
+// 错误响应构建方法
+func (c *Converter) BuildErrorGetContentDetailResponse(message string) *rest.GetContentDetailResponse {
+	return c.BuildGetContentDetailResponse(false, message, nil)
+}
+
+func (c *Converter) BuildErrorGetContentFeedResponse(message string) *rest.GetContentFeedResponse {
+	return c.BuildGetContentFeedResponse(false, message, nil, 0)
+}
+
+func (c *Converter) BuildErrorGetTrendingContentResponse(message string) *rest.GetTrendingContentResponse {
+	return c.BuildGetTrendingContentResponse(false, message, nil)
+}

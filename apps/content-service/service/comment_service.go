@@ -90,7 +90,7 @@ func (s *Service) CreateComment(ctx context.Context, params CreateCommentParams)
 			span.SetStatus(codes.Error, "failed to get parent comment")
 			return nil, fmt.Errorf("获取父评论失败: %v", err)
 		}
-		
+
 		if parentComment.RootID == 0 {
 			comment.RootID = parentComment.ID // 父评论是顶级评论
 		} else {
@@ -183,8 +183,8 @@ func (s *Service) GetComments(ctx context.Context, targetID int64, targetType st
 		attribute.String("comment.target_type", targetType),
 		attribute.Int64("comment.parent_id", parentID),
 		attribute.String("comment.sort_by", sortBy),
-		attribute.Int32("comment.page", page),
-		attribute.Int32("comment.page_size", pageSize),
+		attribute.Int("comment.page", int(page)),
+		attribute.Int("comment.page_size", int(pageSize)),
 	)
 
 	// 参数验证
@@ -233,8 +233,8 @@ func (s *Service) GetCommentReplies(ctx context.Context, commentID int64, sortBy
 	span.SetAttributes(
 		attribute.Int64("comment.id", commentID),
 		attribute.String("comment.sort_by", sortBy),
-		attribute.Int32("comment.page", page),
-		attribute.Int32("comment.page_size", pageSize),
+		attribute.Int("comment.page", int(page)),
+		attribute.Int("comment.page_size", int(pageSize)),
 	)
 
 	// 参数验证
@@ -286,7 +286,7 @@ func (s *Service) validateCreateCommentParams(params CreateCommentParams) error 
 	if params.UserName == "" {
 		return fmt.Errorf("用户名不能为空")
 	}
-	
+
 	content := strings.TrimSpace(params.Content)
 	if len(content) < model.MinCommentLength {
 		return fmt.Errorf("评论内容不能为空")

@@ -25,7 +25,7 @@ func (s *Service) GetContentDetail(ctx context.Context, contentID, userID int64,
 	span.SetAttributes(
 		attribute.Int64("content.id", contentID),
 		attribute.Int64("content.user_id", userID),
-		attribute.Int32("content.comment_limit", commentLimit),
+		attribute.Int("content.comment_limit", int(commentLimit)),
 	)
 
 	// 将业务信息添加到context
@@ -93,8 +93,8 @@ func (s *Service) GetContentFeed(ctx context.Context, userID int64, contentType,
 		attribute.Int64("feed.user_id", userID),
 		attribute.String("feed.content_type", contentType),
 		attribute.String("feed.sort_by", sortBy),
-		attribute.Int32("feed.page", page),
-		attribute.Int32("feed.page_size", pageSize),
+		attribute.Int("feed.page", int(page)),
+		attribute.Int("feed.page_size", int(pageSize)),
 	)
 
 	// 将业务信息添加到context
@@ -187,7 +187,7 @@ func (s *Service) GetTrendingContent(ctx context.Context, timeRange, contentType
 	span.SetAttributes(
 		attribute.String("trending.time_range", timeRange),
 		attribute.String("trending.content_type", contentType),
-		attribute.Int32("trending.limit", limit),
+		attribute.Int("trending.limit", int(limit)),
 	)
 
 	// 参数验证和默认值设置

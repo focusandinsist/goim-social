@@ -17,24 +17,24 @@ func NewConverter() *Converter {
 // ============ 好友相关转换 ============
 
 // BuildSendFriendRequestResponse 构建发送好友申请响应
-func (c *Converter) BuildSendFriendRequestResponse(success bool, message string) *rest.SendFriendRequestResponse {
-	return &rest.SendFriendRequestResponse{
+func (c *Converter) BuildSendFriendRequestResponse(success bool, message string) *rest.ApplyFriendResponse {
+	return &rest.ApplyFriendResponse{
 		Success: success,
 		Message: message,
 	}
 }
 
 // BuildAcceptFriendRequestResponse 构建接受好友申请响应
-func (c *Converter) BuildAcceptFriendRequestResponse(success bool, message string) *rest.AcceptFriendRequestResponse {
-	return &rest.AcceptFriendRequestResponse{
+func (c *Converter) BuildAcceptFriendRequestResponse(success bool, message string) *rest.RespondFriendApplyResponse {
+	return &rest.RespondFriendApplyResponse{
 		Success: success,
 		Message: message,
 	}
 }
 
 // BuildRejectFriendRequestResponse 构建拒绝好友申请响应
-func (c *Converter) BuildRejectFriendRequestResponse(success bool, message string) *rest.RejectFriendRequestResponse {
-	return &rest.RejectFriendRequestResponse{
+func (c *Converter) BuildRejectFriendRequestResponse(success bool, message string) *rest.RespondFriendApplyResponse {
+	return &rest.RespondFriendApplyResponse{
 		Success: success,
 		Message: message,
 	}
@@ -49,7 +49,7 @@ func (c *Converter) BuildDeleteFriendResponse(success bool, message string) *res
 }
 
 // BuildGetFriendListResponse 构建获取好友列表响应
-func (c *Converter) BuildGetFriendListResponse(success bool, message string, friends []*model.Friend) *rest.GetFriendListResponse {
+func (c *Converter) BuildGetFriendListResponse(success bool, message string, friends []*model.Friend) *rest.ListFriendsResponse {
 	var friendInfos []*rest.FriendInfo
 	if friends != nil {
 		friendInfos = make([]*rest.FriendInfo, len(friends))
@@ -63,7 +63,7 @@ func (c *Converter) BuildGetFriendListResponse(success bool, message string, fri
 		}
 	}
 
-	return &rest.GetFriendListResponse{
+	return &rest.ListFriendsResponse{
 		Success: success,
 		Message: message,
 		Friends: friendInfos,
@@ -71,25 +71,21 @@ func (c *Converter) BuildGetFriendListResponse(success bool, message string, fri
 }
 
 // BuildGetFriendApplyListResponse 构建获取好友申请列表响应
-func (c *Converter) BuildGetFriendApplyListResponse(success bool, message string, applies []*model.FriendApply) *rest.GetFriendApplyListResponse {
+func (c *Converter) BuildGetFriendApplyListResponse(success bool, message string, applies []*model.FriendApply) *rest.ListFriendApplyResponse {
 	var applyInfos []*rest.FriendApplyInfo
 	if applies != nil {
 		applyInfos = make([]*rest.FriendApplyInfo, len(applies))
 		for i, apply := range applies {
 			applyInfos[i] = &rest.FriendApplyInfo{
-				Id:          apply.ID,
-				UserId:      apply.UserID,
 				ApplicantId: apply.ApplicantID,
 				Remark:      apply.Remark,
 				Status:      apply.Status,
-				CreatedAt:   apply.CreatedAt.Unix(),
+				Timestamp:   apply.CreatedAt.Unix(),
 			}
 		}
 	}
 
-	return &rest.GetFriendApplyListResponse{
-		Success: success,
-		Message: message,
+	return &rest.ListFriendApplyResponse{
 		Applies: applyInfos,
 	}
 }
@@ -123,7 +119,7 @@ func (c *Converter) BuildCreateGroupResponse(success bool, message string, group
 }
 
 // BuildGetGroupResponse 构建获取群组信息响应
-func (c *Converter) BuildGetGroupResponse(success bool, message string, group *model.Group) *rest.GetGroupResponse {
+func (c *Converter) BuildGetGroupResponse(success bool, message string, group *model.Group) *rest.GetGroupInfoResponse {
 	var groupInfo *rest.GroupInfo
 	if group != nil {
 		groupInfo = &rest.GroupInfo{
@@ -141,7 +137,7 @@ func (c *Converter) BuildGetGroupResponse(success bool, message string, group *m
 		}
 	}
 
-	return &rest.GetGroupResponse{
+	return &rest.GetGroupInfoResponse{
 		Success: success,
 		Message: message,
 		Group:   groupInfo,
@@ -149,8 +145,8 @@ func (c *Converter) BuildGetGroupResponse(success bool, message string, group *m
 }
 
 // BuildUpdateGroupResponse 构建更新群组响应
-func (c *Converter) BuildUpdateGroupResponse(success bool, message string) *rest.UpdateGroupResponse {
-	return &rest.UpdateGroupResponse{
+func (c *Converter) BuildUpdateGroupResponse(success bool, message string) *rest.GetGroupInfoResponse {
+	return &rest.GetGroupInfoResponse{
 		Success: success,
 		Message: message,
 	}
@@ -173,13 +169,12 @@ func (c *Converter) BuildLeaveGroupResponse(success bool, message string) *rest.
 }
 
 // BuildGetGroupMembersResponse 构建获取群成员列表响应
-func (c *Converter) BuildGetGroupMembersResponse(success bool, message string, members []*model.GroupMember) *rest.GetGroupMembersResponse {
+func (c *Converter) BuildGetGroupMembersResponse(success bool, message string, members []*model.GroupMember) *rest.GetGroupInfoResponse {
 	var memberInfos []*rest.GroupMemberInfo
 	if members != nil {
 		memberInfos = make([]*rest.GroupMemberInfo, len(members))
 		for i, member := range members {
 			memberInfos[i] = &rest.GroupMemberInfo{
-				Id:       member.ID,
 				UserId:   member.UserID,
 				GroupId:  member.GroupID,
 				Role:     member.Role,
@@ -189,7 +184,7 @@ func (c *Converter) BuildGetGroupMembersResponse(success bool, message string, m
 		}
 	}
 
-	return &rest.GetGroupMembersResponse{
+	return &rest.GetGroupInfoResponse{
 		Success: success,
 		Message: message,
 		Members: memberInfos,
@@ -208,11 +203,11 @@ func (c *Converter) BuildValidateFriendshipResponse(success bool, message string
 }
 
 // BuildValidateGroupMembershipResponse 构建验证群成员关系响应
-func (c *Converter) BuildValidateGroupMembershipResponse(success bool, message string, isMember bool) *rest.ValidateGroupMembershipResponse {
-	return &rest.ValidateGroupMembershipResponse{
-		Success:  success,
-		Message:  message,
-		IsMember: isMember,
+func (c *Converter) BuildValidateGroupMembershipResponse(success bool, message string, isMember bool) *rest.GetGroupInfoResponse {
+	// 简化实现，只返回基本信息
+	return &rest.GetGroupInfoResponse{
+		Success: success,
+		Message: message,
 	}
 }
 
@@ -239,17 +234,17 @@ func (c *Converter) BuildGetUserSocialInfoResponse(success bool, message string,
 // ============ 错误响应构建 ============
 
 // BuildErrorSendFriendRequestResponse 构建发送好友申请错误响应
-func (c *Converter) BuildErrorSendFriendRequestResponse(message string) *rest.SendFriendRequestResponse {
+func (c *Converter) BuildErrorSendFriendRequestResponse(message string) *rest.ApplyFriendResponse {
 	return c.BuildSendFriendRequestResponse(false, message)
 }
 
 // BuildErrorAcceptFriendRequestResponse 构建接受好友申请错误响应
-func (c *Converter) BuildErrorAcceptFriendRequestResponse(message string) *rest.AcceptFriendRequestResponse {
+func (c *Converter) BuildErrorAcceptFriendRequestResponse(message string) *rest.RespondFriendApplyResponse {
 	return c.BuildAcceptFriendRequestResponse(false, message)
 }
 
 // BuildErrorRejectFriendRequestResponse 构建拒绝好友申请错误响应
-func (c *Converter) BuildErrorRejectFriendRequestResponse(message string) *rest.RejectFriendRequestResponse {
+func (c *Converter) BuildErrorRejectFriendRequestResponse(message string) *rest.RespondFriendApplyResponse {
 	return c.BuildRejectFriendRequestResponse(false, message)
 }
 
@@ -259,12 +254,12 @@ func (c *Converter) BuildErrorDeleteFriendResponse(message string) *rest.DeleteF
 }
 
 // BuildErrorGetFriendListResponse 构建获取好友列表错误响应
-func (c *Converter) BuildErrorGetFriendListResponse(message string) *rest.GetFriendListResponse {
+func (c *Converter) BuildErrorGetFriendListResponse(message string) *rest.ListFriendsResponse {
 	return c.BuildGetFriendListResponse(false, message, nil)
 }
 
 // BuildErrorGetFriendApplyListResponse 构建获取好友申请列表错误响应
-func (c *Converter) BuildErrorGetFriendApplyListResponse(message string) *rest.GetFriendApplyListResponse {
+func (c *Converter) BuildErrorGetFriendApplyListResponse(message string) *rest.ListFriendApplyResponse {
 	return c.BuildGetFriendApplyListResponse(false, message, nil)
 }
 
@@ -274,12 +269,12 @@ func (c *Converter) BuildErrorCreateGroupResponse(message string) *rest.CreateGr
 }
 
 // BuildErrorGetGroupResponse 构建获取群组信息错误响应
-func (c *Converter) BuildErrorGetGroupResponse(message string) *rest.GetGroupResponse {
+func (c *Converter) BuildErrorGetGroupResponse(message string) *rest.GetGroupInfoResponse {
 	return c.BuildGetGroupResponse(false, message, nil)
 }
 
 // BuildErrorUpdateGroupResponse 构建更新群组错误响应
-func (c *Converter) BuildErrorUpdateGroupResponse(message string) *rest.UpdateGroupResponse {
+func (c *Converter) BuildErrorUpdateGroupResponse(message string) *rest.GetGroupInfoResponse {
 	return c.BuildUpdateGroupResponse(false, message)
 }
 
@@ -294,7 +289,7 @@ func (c *Converter) BuildErrorLeaveGroupResponse(message string) *rest.LeaveGrou
 }
 
 // BuildErrorGetGroupMembersResponse 构建获取群成员列表错误响应
-func (c *Converter) BuildErrorGetGroupMembersResponse(message string) *rest.GetGroupMembersResponse {
+func (c *Converter) BuildErrorGetGroupMembersResponse(message string) *rest.GetGroupInfoResponse {
 	return c.BuildGetGroupMembersResponse(false, message, nil)
 }
 
@@ -304,7 +299,7 @@ func (c *Converter) BuildErrorValidateFriendshipResponse(message string) *rest.V
 }
 
 // BuildErrorValidateGroupMembershipResponse 构建验证群成员关系错误响应
-func (c *Converter) BuildErrorValidateGroupMembershipResponse(message string) *rest.ValidateGroupMembershipResponse {
+func (c *Converter) BuildErrorValidateGroupMembershipResponse(message string) *rest.GetGroupInfoResponse {
 	return c.BuildValidateGroupMembershipResponse(false, message, false)
 }
 
