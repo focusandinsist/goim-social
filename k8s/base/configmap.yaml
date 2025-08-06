@@ -49,8 +49,7 @@ data:
   
   # 服务发现配置
   USER_SERVICE_HOST: "user-service.im-system.svc.cluster.local"
-  GROUP_SERVICE_HOST: "group-service.im-system.svc.cluster.local"
-  FRIEND_SERVICE_HOST: "friend-service.im-system.svc.cluster.local"
+  SOCIAL_SERVICE_HOST: "social-service.im-system.svc.cluster.local"  # 合并了 friend-service 和 group-service
   MESSAGE_SERVICE_HOST: "message-service.im-system.svc.cluster.local"
   LOGIC_SERVICE_HOST: "logic-service.im-system.svc.cluster.local"
   IM_GATEWAY_SERVICE_HOST: "im-gateway-service.im-system.svc.cluster.local"
@@ -59,6 +58,10 @@ data:
   INTERACTION_SERVICE_HOST: "interaction-service.im-system.svc.cluster.local"
   COMMENT_SERVICE_HOST: "comment-service.im-system.svc.cluster.local"
   HISTORY_SERVICE_HOST: "history-service.im-system.svc.cluster.local"
+
+  # 向后兼容配置（指向 social-service）
+  GROUP_SERVICE_HOST: "social-service.im-system.svc.cluster.local"
+  FRIEND_SERVICE_HOST: "social-service.im-system.svc.cluster.local"
   
   # 日志配置
   LOG_LEVEL: "info"

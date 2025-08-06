@@ -32,25 +32,24 @@ type Service struct {
 	instanceID     string                  // 服务实例ID
 	sessionLocator *sessionlocator.Locator // 会话定位器
 	gatewayCleaner *sessionlocator.Cleaner // 网关清理器（领导者选举）
-	groupClient    rest.GroupServiceClient
+	socialClient   rest.SocialServiceClient
 	messageClient  rest.MessageServiceClient
-	friendClient   rest.FriendEventServiceClient
 	userClient     rest.UserServiceClient
 }
 
 // NewService 创建Logic服务实例
-func NewService(redis *redis.RedisClient, kafkaProducer *kafka.Producer, log logger.Logger, kafkaBrokers []string, groupAddr, messageAddr, friendAddr, userAddr string) (*Service, error) {
+func NewService(redis *redis.RedisClient, kafkaProducer *kafka.Producer, log logger.Logger, kafkaBrokers []string, socialAddr, messageAddr, userAddr string) (*Service, error) {
 	// 初始化高可靠性同步Producer（用于持久化保障）
 	reliableKafka, err := kafka.InitReliableProducer(kafkaBrokers)
 	if err != nil {
 		return nil, fmt.Errorf("初始化可靠Kafka Producer失败: %v", err)
 	}
-	// 连接Group服务
-	groupConn, err := grpc.NewClient(groupAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// 连接Social服务（合并了原来的Group和Friend服务）
+	socialConn, err := grpc.NewClient(socialAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, fmt.Errorf("连接Group服务失败: %v", err)
+		return nil, fmt.Errorf("连接Social服务失败: %v", err)
 	}
-	groupClient := rest.NewGroupServiceClient(groupConn)
+	socialClient := rest.NewSocialServiceClient(socialConn)
 
 	// 连接Message服务
 	messageConn, err := grpc.NewClient(messageAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -58,13 +57,6 @@ func NewService(redis *redis.RedisClient, kafkaProducer *kafka.Producer, log log
 		return nil, fmt.Errorf("连接Message服务失败: %v", err)
 	}
 	messageClient := rest.NewMessageServiceClient(messageConn)
-
-	// 连接Friend服务
-	friendConn, err := grpc.NewClient(friendAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, fmt.Errorf("连接Friend服务失败: %v", err)
-	}
-	friendClient := rest.NewFriendEventServiceClient(friendConn)
 
 	// 连接User服务
 	userConn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -90,9 +82,8 @@ func NewService(redis *redis.RedisClient, kafkaProducer *kafka.Producer, log log
 		instanceID:     instanceID,
 		sessionLocator: sessionLocator,
 		gatewayCleaner: gatewayCleaner,
-		groupClient:    groupClient,
+		socialClient:   socialClient,
 		messageClient:  messageClient,
-		friendClient:   friendClient,
 		userClient:     userClient,
 	}
 
@@ -181,7 +172,7 @@ func (s *Service) processGroupMessage(ctx context.Context, msg *rest.WSMessage) 
 	s.logger.Info(ctx, "处理群聊消息", logger.F("groupID", msg.GroupId))
 
 	// 1. 权限验证 - 检查用户是否在群组中
-	memberResp, err := s.groupClient.ValidateGroupMember(ctx, &rest.ValidateGroupMemberRequest{
+	memberResp, err := s.socialClient.ValidateGroupMember(ctx, &rest.ValidateGroupMemberRequest{
 		GroupId: msg.GroupId,
 		UserId:  msg.From,
 	})
@@ -196,7 +187,7 @@ func (s *Service) processGroupMessage(ctx context.Context, msg *rest.WSMessage) 
 	}
 
 	// 2. 获取群成员列表
-	membersResp, err := s.groupClient.GetGroupMemberIDs(ctx, &rest.GetGroupMemberIDsRequest{
+	membersResp, err := s.socialClient.GetGroupMemberIDs(ctx, &rest.GetGroupMemberIDsRequest{
 		GroupId: msg.GroupId,
 	})
 	if err != nil {
@@ -260,8 +251,20 @@ func (s *Service) processPrivateMessage(ctx context.Context, msg *rest.WSMessage
 	s.logger.Info(ctx, "处理私聊消息", logger.F("to", msg.To))
 
 	// 1. 权限验证 - 检查好友关系
-	// TODO: 实现好友关系验证，暂时跳过验证
-	s.logger.Info(ctx, "处理私聊消息，暂时跳过好友关系验证", logger.F("from", msg.From), logger.F("to", msg.To))
+	friendResp, err := s.socialClient.ValidateFriendship(ctx, &rest.ValidateFriendshipRequest{
+		UserId:   msg.From,
+		FriendId: msg.To,
+	})
+	if err != nil || !friendResp.Success || !friendResp.IsFriend {
+		s.logger.Error(ctx, "用户不是好友关系", logger.F("from", msg.From), logger.F("to", msg.To))
+		return &model.MessageResult{
+			Success:      false,
+			Message:      "您与对方不是好友关系",
+			SuccessCount: 0,
+			FailureCount: 1,
+		}, nil
+	}
+	s.logger.Info(ctx, "好友关系验证通过", logger.F("from", msg.From), logger.F("to", msg.To))
 
 	// 2. 消息持久化保障 - 同步写入Kafka确保安全落地
 	if err := s.ensureMessagePersistence(ctx, msg); err != nil {
@@ -272,7 +275,7 @@ func (s *Service) processPrivateMessage(ctx context.Context, msg *rest.WSMessage
 	}
 
 	// 3. 消息投递
-	err := s.publishMessageToQueue(ctx, msg.To, msg)
+	err = s.publishMessageToQueue(ctx, msg.To, msg)
 	if err != nil {
 		s.logger.Error(ctx, "私聊消息投递失败", logger.F("error", err.Error()))
 		return &model.MessageResult{

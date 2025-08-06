@@ -141,8 +141,7 @@ deploy_services() {
     # 服务部署顺序 (按依赖关系)
     local services=(
         "user-service"
-        "group-service"
-        "friend-service"
+        "social-service"        # 合并了 friend-service 和 group-service
         "content-service"
         "interaction-service"
         "comment-service"

@@ -65,20 +65,14 @@ func main() {
 	// 获取配置
 	config := app.GetConfig()
 
-	// Group服务地址
-	groupAddr := "localhost:22002" // group服务的gRPC端口
-	if config.Logic.GroupService.Host != "" {
-		groupAddr = fmt.Sprintf("%s:%d", config.Logic.GroupService.Host, config.Logic.GroupService.Port)
-	}
+	// Social服务地址（合并了原来的Group和Friend服务）
+	socialAddr := "localhost:22001" // social服务的gRPC端口
 
 	// Message服务地址
 	messageAddr := "localhost:22004" // message服务的gRPC端口
 	if config.Logic.MessageService.Host != "" {
 		messageAddr = fmt.Sprintf("%s:%d", config.Logic.MessageService.Host, config.Logic.MessageService.Port)
 	}
-
-	// Friend服务地址
-	friendAddr := "localhost:22003" // friend服务的gRPC端口
 
 	// User服务地址
 	userAddr := "localhost:22001" // user服务的gRPC端口
@@ -89,9 +83,8 @@ func main() {
 		app.GetKafkaProducer(),
 		app.GetLogger(),
 		config.Kafka.Brokers, // 传递Kafka brokers配置
-		groupAddr,
+		socialAddr,
 		messageAddr,
-		friendAddr,
 		userAddr,
 	)
 	if err != nil {

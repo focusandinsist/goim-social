@@ -195,8 +195,7 @@ check_service_health() {
     # 定义服务健康检查端点
     local services=(
         "user-service:80:/health"
-        "group-service:80:/health"
-        "friend-service:80:/health"
+        "social-service:80:/health"     # 合并了 friend-service 和 group-service
         "message-service:80:/health"
         "logic-service:80:/health"
         "im-gateway-service:80:/health"

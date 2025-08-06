@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+// ============ 好友事件相关 ============
+
+// 好友事件类型
+enum FriendEventType {
+  ADD_FRIEND = 0;
+  DELETE_FRIEND = 1;
+}
+
+// 好友事件消息
+message FriendEvent {
+  FriendEventType type = 1;
+  int64 user_id = 2;
+  int64 friend_id = 3;
+  string remark = 4;
+  int64 timestamp = 5;
+}
+
+// 通知好友事件请求
+message NotifyFriendEventRequest {
+  FriendEvent event = 1;
+}
+
+// 通知好友事件响应
+message NotifyFriendEventResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============ 群组gRPC相关 ============
+
+// 获取群组成员ID列表请求
+message GetGroupMemberIDsRequest {
+  int64 group_id = 1;
+}
+
+// 获取群组成员ID列表响应
+message GetGroupMemberIDsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated int64 member_ids = 3;
+}
+
+// 验证群成员身份请求
+message ValidateGroupMemberRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+}
+
+// 验证群成员身份响应
+message ValidateGroupMemberResponse {
+  bool success = 1;
+  string message = 2;
+  bool is_member = 3;
+}
+
+// ============ 社交关系验证相关 ============
+
+// 验证好友关系请求
+message ValidateFriendshipRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+}
+
+// 验证好友关系响应
+message ValidateFriendshipResponse {
+  bool success = 1;
+  string message = 2;
+  bool is_friend = 3;
+}
+
+// 获取用户社交信息请求
+message GetUserSocialInfoRequest {
+  int64 user_id = 1;
+}
+
+// 用户社交信息
+message UserSocialInfo {
+  int64 user_id = 1;
+  int32 friend_count = 2;
+  int32 group_count = 3;
+  repeated int64 friend_ids = 4;
+  repeated int64 group_ids = 5;
+}
+
+// 获取用户社交信息响应
+message GetUserSocialInfoResponse {
+  bool success = 1;
+  string message = 2;
+  UserSocialInfo social_info = 3;
+}
+
+// ============ gRPC 服务定义 ============
+
+// 社交服务的gRPC接口（用于微服务间通信）
+service SocialService {
+  // 好友事件通知
+  rpc NotifyFriendEvent(NotifyFriendEventRequest) returns (NotifyFriendEventResponse);
+  
+  // 获取群组成员ID列表（用于群消息推送）
+  rpc GetGroupMemberIDs(GetGroupMemberIDsRequest) returns (GetGroupMemberIDsResponse);
+  
+  // 验证群成员身份（用于群消息发送权限验证）
+  rpc ValidateGroupMember(ValidateGroupMemberRequest) returns (ValidateGroupMemberResponse);
+  
+  // 验证好友关系（用于私聊消息发送权限验证）
+  rpc ValidateFriendship(ValidateFriendshipRequest) returns (ValidateFriendshipResponse);
+  
+  // 获取用户社交信息汇总
+  rpc GetUserSocialInfo(GetUserSocialInfoRequest) returns (GetUserSocialInfoResponse);
+}

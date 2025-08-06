@@ -59,7 +59,7 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 
 	// 初始化IM Gateway gRPC客户端
 	imGatewayAddr := "localhost:22006" // IM Gateway的gRPC端口
-	conn, err := grpc.Dial(imGatewayAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(imGatewayAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Printf("Failed to connect to IM Gateway: %v", err)
 		// 在实际项目中，这里可能需要重试机制
@@ -90,14 +90,17 @@ func (s *Service) startServiceDiscovery() {
 
 	// 模拟注册一些服务实例
 	s.registerService("user-service", "localhost", 21001)
-	s.registerService("group-service", "localhost", 21002)
-	s.registerService("friend-service", "localhost", 21003)
+	s.registerService("social-service", "localhost", 22001) // 合并了 friend-service 和 group-service
 	s.registerService("message-service", "localhost", 21004)
 	s.registerService("logic-service", "localhost", 21005)
 	s.registerService("content-service", "localhost", 21008)
 	s.registerService("interaction-service", "localhost", 21009)
 	s.registerService("comment-service", "localhost", 21010)
 	s.registerService("history-service", "localhost", 21011)
+
+	// 为了向后兼容，也注册 friend 和 group 路由到 social-service
+	s.registerService("friend", "localhost", 22001) // /api/v1/friend/* -> social-service
+	s.registerService("group", "localhost", 22001)  // /api/v1/group/* -> social-service
 
 	log.Println("API Gateway: Service discovery started")
 }

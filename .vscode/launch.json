@@ -18,39 +18,27 @@
             }
         },
         {
-            "name": "2. Group Service (HTTP:21002, gRPC:22002)",
+            "name": "2. Social Service (HTTP:22001) - 合并了 Friend & Group",
             "type": "go",
             "request": "launch",
-            "program": "./apps/group-service/cmd/main.go",
+            "program": "./apps/social-service/main.go",
             "console": "integratedTerminal",
             "env": {
-                "SERVICE_NAME": "group-service",
-                "HTTP_PORT": "21002",
-                "GRPC_PORT": "22002",
-                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=groupServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
-                "POSTGRESQL_DB": "groupServiceDB",
+                "SERVICE_NAME": "social-service",
+                "SERVER_PORT": "22001",
+                "SERVER_MODE": "debug",
+                "DB_HOST": "localhost",
+                "DB_PORT": "5432",
+                "DB_USER": "postgres",
+                "DB_PASSWORD": "postgres",
+                "DB_NAME": "goim_social",
                 "REDIS_ADDR": "localhost:6379",
-                "KAFKA_BROKERS": "localhost:9092"
+                "KAFKA_BROKERS": "localhost:9092",
+                "TELEMETRY_ENDPOINT": "http://localhost:14268/api/traces"
             }
         },
         {
-            "name": "3. Friend Service (HTTP:21003, gRPC:22003)",
-            "type": "go",
-            "request": "launch",
-            "program": "./apps/friend-service/cmd/main.go",
-            "console": "integratedTerminal",
-            "env": {
-                "SERVICE_NAME": "friend-service",
-                "HTTP_PORT": "21003",
-                "GRPC_PORT": "22003",
-                "MONGODB_URI": "mongodb://localhost:27017",
-                "MONGODB_DB": "friendDB",
-                "REDIS_ADDR": "localhost:6379",
-                "KAFKA_BROKERS": "localhost:9092"
-            }
-        },
-        {
-            "name": "4. Message Service (HTTP:21004, gRPC:22004)",
+            "name": "3. Message Service (HTTP:21004, gRPC:22004)",
             "type": "go",
             "request": "launch",
             "program": "./apps/message-service/cmd/main.go",
@@ -66,7 +54,7 @@
             }
         },
         {
-            "name": "5. Logic Service (HTTP:21005, gRPC:22005)",
+            "name": "4. Logic Service (HTTP:21005, gRPC:22005)",
             "type": "go",
             "request": "launch",
             "program": "./apps/logic-service/cmd/main.go",
@@ -75,8 +63,8 @@
                 "SERVICE_NAME": "logic-service",
                 "HTTP_PORT": "21005",
                 "GRPC_PORT": "22005",
-                "GROUP_SERVICE_HOST": "localhost",
-                "GROUP_SERVICE_PORT": "22002",
+                "SOCIAL_SERVICE_HOST": "localhost",
+                "SOCIAL_SERVICE_PORT": "22001",
                 "MESSAGE_SERVICE_HOST": "localhost",
                 "MESSAGE_SERVICE_PORT": "22004",
                 "REDIS_ADDR": "localhost:6379",
@@ -84,7 +72,7 @@
             }
         },
         {
-            "name": "6. IM Gateway Service (HTTP:21006, gRPC:22006)",
+            "name": "5. IM Gateway Service (HTTP:21006, gRPC:22006)",
             "type": "go",
             "request": "launch",
             "program": "./apps/im-gateway-service/cmd/main.go",
@@ -104,7 +92,7 @@
             }
         },
         {
-            "name": "7. API Gateway Service (HTTP:21007, gRPC:22007)",
+            "name": "6. API Gateway Service (HTTP:21007, gRPC:22007)",
             "type": "go",
             "request": "launch",
             "program": "./apps/api-gateway-service/cmd/main.go",
@@ -120,7 +108,7 @@
             }
         },
         {
-            "name": "8. Content Service (HTTP:21008, gRPC:22008)",
+            "name": "7. Content Service (HTTP:21008, gRPC:22008)",
             "type": "go",
             "request": "launch",
             "program": "./apps/content-service/cmd/main.go",
@@ -136,7 +124,7 @@
             }
         },
         {
-            "name": "9. Interaction Service (HTTP:21009, gRPC:22009)",
+            "name": "8. Interaction Service (HTTP:21009, gRPC:22009)",
             "type": "go",
             "request": "launch",
             "program": "./apps/interaction-service/cmd/main.go",
@@ -152,7 +140,7 @@
             }
         },
         {
-            "name": "10. Comment Service (HTTP:21010, gRPC:22010)",
+            "name": "9. Comment Service (HTTP:21010, gRPC:22010)",
             "type": "go",
             "request": "launch",
             "program": "./apps/comment-service/cmd/main.go",
@@ -168,7 +156,7 @@
             }
         },
         {
-            "name": "11. History Service (HTTP:21011, gRPC:22011)",
+            "name": "10. History Service (HTTP:21011, gRPC:22011)",
             "type": "go",
             "request": "launch",
             "program": "./apps/history-service/cmd/main.go",
@@ -208,12 +196,11 @@
             "name": "All Services (按依赖顺序启动)",
             "configurations": [
                 "1. User Service (HTTP:21001, gRPC:22001)",
-                "2. Group Service (HTTP:21002, gRPC:22002)",
-                "3. Friend Service (HTTP:21003, gRPC:22003)",
-                "4. Message Service (HTTP:21004, gRPC:22004)",
-                "5. Logic Service (HTTP:21005, gRPC:22005)",
-                "6. IM Gateway Service (HTTP:21006, gRPC:22006)",
-                "7. API Gateway Service (HTTP:21007, gRPC:22007)"
+                "2. Social Service (HTTP:22001) - 合并了 Friend & Group",
+                "3. Message Service (HTTP:21004, gRPC:22004)",
+                "4. Logic Service (HTTP:21005, gRPC:22005)",
+                "5. IM Gateway Service (HTTP:21006, gRPC:22006)",
+                "6. API Gateway Service (HTTP:21007, gRPC:22007)"
             ],
             "stopAll": true
         },
@@ -221,15 +208,24 @@
             "name": "Core Services (基础服务)",
             "configurations": [
                 "1. User Service (HTTP:21001, gRPC:22001)",
-                "2. Group Service (HTTP:21002, gRPC:22002)"
+                "2. Social Service (HTTP:22001) - 合并了 Friend & Group"
             ],
             "stopAll": true
         },
         {
             "name": "Business Services (业务服务)",
             "configurations": [
-                "3. Friend Service (HTTP:21003, gRPC:22003)",
-                "4. Message Service (HTTP:21004, gRPC:22004)"
+                "3. Message Service (HTTP:21004, gRPC:22004)",
+                "4. Logic Service (HTTP:21005, gRPC:22005)"
+            ],
+            "stopAll": true
+        },
+        {
+            "name": "Content Services (内容服务)",
+            "configurations": [
+                "7. Content Service (HTTP:21008, gRPC:22008)",
+                "8. Interaction Service (HTTP:21009, gRPC:22009)",
+                "9. Comment Service (HTTP:21010, gRPC:22010)"
             ],
             "stopAll": true
         }
