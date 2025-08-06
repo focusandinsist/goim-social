@@ -3,13 +3,14 @@ package handler
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+
 	"goim-social/api/rest"
 	"goim-social/apps/interaction-service/converter"
 	"goim-social/apps/interaction-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
-
-	"github.com/gin-gonic/gin"
 )
 
 // HTTPHandler HTTP处理器
@@ -65,6 +66,9 @@ func (h *HTTPHandler) DoInteraction(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	// 转换枚举类型
 	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
 	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
@@ -94,7 +98,17 @@ func (h *HTTPHandler) DoInteraction(c *gin.Context) {
 		}(),
 	}
 	if err != nil {
-		h.logger.Error(ctx, "Do interaction failed", logger.F("error", err.Error()))
+		h.logger.Error(ctx, "Do interaction failed",
+			logger.F("error", err.Error()),
+			logger.F("userID", req.UserId),
+			logger.F("objectID", req.ObjectId),
+			logger.F("interactionType", interactionType))
+	} else {
+		h.logger.Info(ctx, "Do interaction successful",
+			logger.F("interactionID", interaction.ID),
+			logger.F("userID", req.UserId),
+			logger.F("objectID", req.ObjectId),
+			logger.F("interactionType", interactionType))
 	}
 	httpx.WriteObject(c, res, err)
 }
@@ -153,6 +167,9 @@ func (h *HTTPHandler) CheckInteraction(c *gin.Context) {
 		httpx.WriteObject(c, res, err)
 		return
 	}
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
 
 	// 转换枚举类型
 	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
