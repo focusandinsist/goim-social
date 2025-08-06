@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+
 	"goim-social/apps/content-service/dao"
 	"goim-social/apps/content-service/model"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
+	"goim-social/pkg/telemetry"
 )
 
 // Service 内容服务
@@ -35,13 +40,34 @@ func (s *Service) CreateContent(ctx context.Context, authorID int64,
 	title, content, contentType string, mediaFiles []model.ContentMediaFile,
 	tagIDs, topicIDs []int64, templateData string, saveAsDraft bool) (*model.Content, error) {
 
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "content.service.CreateContent")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("content.author_id", authorID),
+		attribute.String("content.title", title),
+		attribute.String("content.type", contentType),
+		attribute.Bool("content.save_as_draft", saveAsDraft),
+		attribute.Int("content.media_files_count", len(mediaFiles)),
+		attribute.Int("content.tag_ids_count", len(tagIDs)),
+		attribute.Int("content.topic_ids_count", len(topicIDs)),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, authorID)
+
 	if authorID <= 0 {
+		span.SetStatus(codes.Error, "invalid author ID")
 		return nil, fmt.Errorf("作者ID无效")
 	}
 	if title == "" {
+		span.SetStatus(codes.Error, "title is empty")
 		return nil, fmt.Errorf("标题不能为空")
 	}
 	if !model.ValidateContentType(contentType) {
+		span.SetStatus(codes.Error, "invalid content type")
 		return nil, fmt.Errorf("内容类型无效")
 	}
 
@@ -70,8 +96,14 @@ func (s *Service) CreateContent(ctx context.Context, authorID int64,
 	}
 
 	if err := s.dao.CreateContent(ctx, newContent); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create content")
 		return nil, fmt.Errorf("创建内容失败: %v", err)
 	}
+
+	// 设置内容ID到context和span
+	ctx = tracecontext.WithContentID(ctx, newContent.ID)
+	span.SetAttributes(attribute.Int64("content.id", newContent.ID))
 
 	// 添加媒体文件
 	if len(mediaFiles) > 0 {
@@ -125,9 +157,17 @@ func (s *Service) CreateContent(ctx context.Context, authorID int64,
 		s.logger.Error(ctx, "Failed to get full content after creation",
 			logger.F("contentID", newContent.ID),
 			logger.F("error", err.Error()))
+		span.SetStatus(codes.Ok, "content created but failed to get full content")
 		return newContent, nil
 	}
 
+	s.logger.Info(ctx, "Content created successfully",
+		logger.F("contentID", newContent.ID),
+		logger.F("title", title),
+		logger.F("authorID", authorID),
+		logger.F("status", status))
+
+	span.SetStatus(codes.Ok, "content created successfully")
 	return fullContent, nil
 }
 
@@ -235,24 +275,49 @@ func (s *Service) UpdateContent(ctx context.Context, contentID, authorID int64, 
 
 // GetContent 获取内容详情
 func (s *Service) GetContent(ctx context.Context, contentID, userID int64) (*model.Content, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "content.service.GetContent")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("content.id", contentID),
+		attribute.Int64("user.id", userID),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+	ctx = tracecontext.WithContentID(ctx, contentID)
+
 	if contentID <= 0 {
+		span.SetStatus(codes.Error, "invalid content ID")
 		return nil, fmt.Errorf("内容ID无效")
 	}
 
 	// 获取内容
 	content, err := s.dao.GetContentWithRelations(ctx, contentID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "content not found")
 		return nil, fmt.Errorf("内容不存在: %v", err)
 	}
+
+	span.SetAttributes(
+		attribute.String("content.title", content.Title),
+		attribute.String("content.status", content.Status),
+		attribute.Int64("content.author_id", content.AuthorID),
+	)
 
 	// 权限检查：只有作者可以查看草稿和被拒绝的内容
 	if (content.Status == model.ContentStatusDraft || content.Status == model.ContentStatusRejected) &&
 		content.AuthorID != userID {
+		span.SetStatus(codes.Error, "permission denied for draft/rejected content")
 		return nil, fmt.Errorf("无权限查看此内容")
 	}
 
 	// 只有已发布的内容对所有人可见
 	if content.Status != model.ContentStatusPublished && content.AuthorID != userID {
+		span.SetStatus(codes.Error, "content not accessible")
 		return nil, fmt.Errorf("内容不可访问")
 	}
 
@@ -265,6 +330,12 @@ func (s *Service) GetContent(ctx context.Context, contentID, userID int64) (*mod
 		}
 	}()
 
+	s.logger.Info(ctx, "Content retrieved successfully",
+		logger.F("contentID", contentID),
+		logger.F("userID", userID),
+		logger.F("contentTitle", content.Title))
+
+	span.SetStatus(codes.Ok, "content retrieved successfully")
 	return content, nil
 }
 
@@ -302,19 +373,42 @@ func (s *Service) DeleteContent(ctx context.Context, contentID, authorID int64) 
 
 // PublishContent 发布内容
 func (s *Service) PublishContent(ctx context.Context, contentID, authorID int64) (*model.Content, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "content.service.PublishContent")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("content.id", contentID),
+		attribute.Int64("author.id", authorID),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, authorID)
+	ctx = tracecontext.WithContentID(ctx, contentID)
+
 	// 获取内容
 	content, err := s.dao.GetContent(ctx, contentID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "content not found")
 		return nil, fmt.Errorf("内容不存在: %v", err)
 	}
 
+	span.SetAttributes(
+		attribute.String("content.title", content.Title),
+		attribute.String("content.current_status", content.Status),
+	)
+
 	// 权限验证
 	if content.AuthorID != authorID {
+		span.SetStatus(codes.Error, "permission denied")
 		return nil, fmt.Errorf("无权限发布此内容")
 	}
 
 	// 状态验证
 	if !model.CanTransitionStatus(content.Status, model.ContentStatusPublished) {
+		span.SetStatus(codes.Error, "invalid status transition")
 		return nil, fmt.Errorf("当前状态不允许发布")
 	}
 
@@ -326,6 +420,8 @@ func (s *Service) PublishContent(ctx context.Context, contentID, authorID int64)
 	content.UpdatedAt = now
 
 	if err := s.dao.UpdateContent(ctx, content); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to update content")
 		return nil, fmt.Errorf("发布内容失败: %v", err)
 	}
 
@@ -350,9 +446,16 @@ func (s *Service) PublishContent(ctx context.Context, contentID, authorID int64)
 		s.logger.Error(ctx, "Failed to get full content after publish",
 			logger.F("contentID", contentID),
 			logger.F("error", err.Error()))
+		span.SetStatus(codes.Ok, "content published but failed to get full content")
 		return content, nil
 	}
 
+	s.logger.Info(ctx, "Content published successfully",
+		logger.F("contentID", contentID),
+		logger.F("authorID", authorID),
+		logger.F("title", content.Title))
+
+	span.SetStatus(codes.Ok, "content published successfully")
 	return fullContent, nil
 }
 

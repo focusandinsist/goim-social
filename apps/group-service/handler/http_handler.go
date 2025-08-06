@@ -6,6 +6,7 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/group-service/converter"
 	"goim-social/apps/group-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
 )
@@ -79,14 +80,25 @@ func (h *HTTPHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.OwnerId)
+
 	group, err := h.svc.CreateGroup(ctx, req.Name, req.Description, req.Avatar, req.OwnerId, req.IsPublic, req.MaxMembers, req.MemberIds)
 
 	var message string
 	if err != nil {
 		message = err.Error()
-		h.log.Error(ctx, "Create group failed", logger.F("error", err.Error()))
+		h.log.Error(ctx, "Create group failed",
+			logger.F("error", err.Error()),
+			logger.F("groupName", req.Name),
+			logger.F("ownerID", req.OwnerId))
 	} else {
 		message = "创建群组成功"
+		h.log.Info(ctx, "Create group successful",
+			logger.F("groupID", group.ID),
+			logger.F("groupName", req.Name),
+			logger.F("ownerID", req.OwnerId),
+			logger.F("memberCount", len(req.MemberIds)+1))
 	}
 
 	resp := h.converter.BuildCreateGroupResponse(err == nil, message, group)
@@ -104,14 +116,29 @@ func (h *HTTPHandler) GetGroupInfo(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+	ctx = tracecontext.WithGroupID(ctx, req.GroupId)
+
 	group, members, err := h.svc.GetGroupInfo(ctx, req.GroupId, req.UserId)
 
 	var message string
 	if err != nil {
 		message = err.Error()
-		h.log.Error(ctx, "Get group info failed", logger.F("error", err.Error()))
+		h.log.Error(ctx, "Get group info failed",
+			logger.F("error", err.Error()),
+			logger.F("groupID", req.GroupId),
+			logger.F("userID", req.UserId))
 	} else {
 		message = "获取群组信息成功"
+		memberCount := 0
+		if members != nil {
+			memberCount = len(members)
+		}
+		h.log.Info(ctx, "Get group info successful",
+			logger.F("groupID", req.GroupId),
+			logger.F("userID", req.UserId),
+			logger.F("memberCount", memberCount))
 	}
 
 	resp := h.converter.BuildGetGroupInfoResponse(err == nil, message, group, members)
@@ -154,14 +181,24 @@ func (h *HTTPHandler) JoinGroup(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+	ctx = tracecontext.WithGroupID(ctx, req.GroupId)
+
 	err := h.svc.JoinGroup(ctx, req.GroupId, req.UserId, req.Reason)
 
 	var message string
 	if err != nil {
 		message = err.Error()
-		h.log.Error(ctx, "Join group failed", logger.F("error", err.Error()))
+		h.log.Error(ctx, "Join group failed",
+			logger.F("error", err.Error()),
+			logger.F("groupID", req.GroupId),
+			logger.F("userID", req.UserId))
 	} else {
 		message = "加入群组成功"
+		h.log.Info(ctx, "Join group successful",
+			logger.F("groupID", req.GroupId),
+			logger.F("userID", req.UserId))
 	}
 
 	resp := h.converter.BuildJoinGroupResponse(err == nil, message)

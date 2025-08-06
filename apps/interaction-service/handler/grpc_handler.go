@@ -6,6 +6,7 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/interaction-service/converter"
 	"goim-social/apps/interaction-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )
 
@@ -28,8 +29,16 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 
 // DoInteraction 执行互动
 func (h *GRPCHandler) DoInteraction(ctx context.Context, req *rest.DoInteractionRequest) (*rest.DoInteractionResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	objectType := h.converter.ObjectTypeFromProto(req.InteractionObjectType)
 	interactionType := h.converter.InteractionTypeFromProto(req.InteractionType)
+
+	h.logger.Info(ctx, "gRPC DoInteraction request",
+		logger.F("userID", req.UserId),
+		logger.F("objectID", req.ObjectId),
+		logger.F("interactionType", interactionType))
 
 	interaction, err := h.svc.DoInteraction(
 		ctx,
@@ -43,9 +52,16 @@ func (h *GRPCHandler) DoInteraction(ctx context.Context, req *rest.DoInteraction
 		h.logger.Error(ctx, "Failed to do interaction via gRPC",
 			logger.F("error", err.Error()),
 			logger.F("userID", req.UserId),
-			logger.F("objectID", req.ObjectId))
+			logger.F("objectID", req.ObjectId),
+			logger.F("interactionType", interactionType))
 		return h.converter.BuildErrorDoInteractionResponse(err.Error()), nil
 	}
+
+	h.logger.Info(ctx, "gRPC DoInteraction successful",
+		logger.F("interactionID", interaction.ID),
+		logger.F("userID", req.UserId),
+		logger.F("objectID", req.ObjectId),
+		logger.F("interactionType", interactionType))
 
 	return h.converter.BuildSuccessDoInteractionResponse(interaction), nil
 }

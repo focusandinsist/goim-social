@@ -8,6 +8,7 @@ import (
 	rest "goim-social/api/rest"
 	"goim-social/apps/user-service/converter"
 	"goim-social/apps/user-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )
 
@@ -53,13 +54,20 @@ func (h *HTTPHandler) Register(c *gin.Context) {
 
 	user, err := h.service.Register(ctx, &req)
 	if err != nil {
-		h.logger.Error(ctx, "User registration failed", logger.F("username", req.Username), logger.F("error", err.Error()))
+		h.logger.Error(ctx, "User registration failed",
+			logger.F("username", req.Username),
+			logger.F("error", err.Error()))
 		resp := h.converter.BuildErrorRegisterResponse(err.Error())
 		c.JSON(http.StatusInternalServerError, resp)
 		return
 	}
 
-	h.logger.Info(ctx, "User registration successful", logger.F("user_id", user.User.Id), logger.F("username", user.User.Username))
+	// 将用户ID添加到context
+	ctx = tracecontext.WithUserID(ctx, user.User.Id)
+
+	h.logger.Info(ctx, "User registration successful",
+		logger.F("user_id", user.User.Id),
+		logger.F("username", user.User.Username))
 	c.JSON(http.StatusOK, user)
 }
 
@@ -79,13 +87,20 @@ func (h *HTTPHandler) Login(c *gin.Context) {
 
 	response, err := h.service.Login(ctx, &req)
 	if err != nil {
-		h.logger.Error(ctx, "User login failed", logger.F("username", req.Username), logger.F("error", err.Error()))
+		h.logger.Error(ctx, "User login failed",
+			logger.F("username", req.Username),
+			logger.F("error", err.Error()))
 		resp := h.converter.BuildErrorLoginResponse(err.Error())
 		c.JSON(http.StatusUnauthorized, resp)
 		return
 	}
 
-	h.logger.Info(ctx, "User login successful", logger.F("user_id", response.User.Id), logger.F("username", response.User.Username))
+	// 将用户ID添加到context
+	ctx = tracecontext.WithUserID(ctx, response.User.Id)
+
+	h.logger.Info(ctx, "User login successful",
+		logger.F("user_id", response.User.Id),
+		logger.F("username", response.User.Username))
 	c.JSON(http.StatusOK, response)
 }
 
@@ -101,18 +116,25 @@ func (h *HTTPHandler) GetUserByID(c *gin.Context) {
 		return
 	}
 
+	// 将用户ID添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	h.logger.Info(ctx, "Get user by ID", logger.F("user_id", req.UserId))
 
-	// TODO: 实现实际的用户查询逻辑
-	// user, err := h.service.GetUserByID(ctx, req.UserId)
-	// if err != nil {
-	//     h.logger.Error(ctx, "Get user failed", logger.F("user_id", req.UserId), logger.F("error", err.Error()))
-	//     resp := h.converter.BuildErrorGetUserResponse(err.Error())
-	//     c.JSON(http.StatusInternalServerError, resp)
-	//     return
-	// }
+	user, err := h.service.GetUserByID(ctx, req.UserId)
+	if err != nil {
+		h.logger.Error(ctx, "Get user failed",
+			logger.F("user_id", req.UserId),
+			logger.F("error", err.Error()))
+		resp := h.converter.BuildErrorGetUserResponse(err.Error())
+		c.JSON(http.StatusInternalServerError, resp)
+		return
+	}
 
-	// 临时返回成功响应
-	resp := h.converter.BuildSuccessResponse("获取用户信息成功")
+	h.logger.Info(ctx, "Get user by ID successful",
+		logger.F("user_id", req.UserId),
+		logger.F("username", user.Username))
+
+	resp := h.converter.BuildGetUserResponse(true, "获取用户成功", user)
 	c.JSON(http.StatusOK, resp)
 }

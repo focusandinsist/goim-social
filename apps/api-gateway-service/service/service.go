@@ -10,15 +10,19 @@ import (
 	"strings"
 	"sync"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
 	"goim-social/api/rest"
 	"goim-social/apps/api-gateway-service/model"
 	"goim-social/pkg/config"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/database"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/redis"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"goim-social/pkg/telemetry"
 )
 
 // ServiceInstance 服务实例信息
@@ -137,19 +141,34 @@ func (s *Service) GetServiceInstance(serviceName string) (*ServiceInstance, erro
 
 // ProxyRequest 动态路由代理请求
 func (s *Service) ProxyRequest(w http.ResponseWriter, r *http.Request) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(r.Context(), "api-gateway.proxy.RouteRequest")
+	defer span.End()
+
 	// 解析URL路径，提取服务名
 	// 期望的URL格式: /api/v1/{service-name}/{remaining-path}
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(pathParts) < 3 {
+		span.SetStatus(codes.Error, "invalid URL format")
 		http.Error(w, "Invalid URL format. Expected: /api/v1/{service-name}/{path}", http.StatusBadRequest)
 		return fmt.Errorf("invalid URL format: %s", r.URL.Path)
 	}
 
 	serviceName := pathParts[2] // 第三部分是服务名
 
+	// 设置span属性
+	span.SetAttributes(
+		attribute.String("http.method", r.Method),
+		attribute.String("http.url", r.URL.String()),
+		attribute.String("gateway.target_service", serviceName),
+		attribute.String("http.user_agent", r.Header.Get("User-Agent")),
+	)
+
 	// 获取服务实例
 	instance, err := s.GetServiceInstance(serviceName)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "service not available")
 		http.Error(w, fmt.Sprintf("Service %s not available", serviceName), http.StatusServiceUnavailable)
 		return err
 	}
@@ -164,10 +183,18 @@ func (s *Service) ProxyRequest(w http.ResponseWriter, r *http.Request) error {
 	// 保留查询参数
 	targetURL.RawQuery = r.URL.RawQuery
 
+	// 设置目标URL到span属性
+	span.SetAttributes(
+		attribute.String("gateway.target_url", targetURL.String()),
+		attribute.String("gateway.target_host", instance.Host),
+		attribute.Int("gateway.target_port", instance.Port),
+	)
+
 	// 创建反向代理
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
-	// 修改请求
+	// 修改请求，将context传递下去
+	r = r.WithContext(ctx)
 	r.URL.Host = targetURL.Host
 	r.URL.Scheme = targetURL.Scheme
 	r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
@@ -177,6 +204,7 @@ func (s *Service) ProxyRequest(w http.ResponseWriter, r *http.Request) error {
 	proxy.ServeHTTP(w, r)
 
 	log.Printf("API Gateway: Proxied %s %s to %s", r.Method, r.URL.Path, targetURL.String())
+	span.SetStatus(codes.Ok, "request proxied successfully")
 	return nil
 }
 
@@ -215,6 +243,20 @@ func (s *Service) GetOnlineStatusFromIMGateway(ctx context.Context, userIDs []in
 
 // OnlineStatus 查询用户在线状态
 func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]bool, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "api-gateway.service.OnlineStatus")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int("query.user_count", len(userIDs)),
+	)
+
+	// 将业务信息添加到context（如果有用户ID的话）
+	if len(userIDs) > 0 {
+		ctx = tracecontext.WithUserID(ctx, userIDs[0])
+	}
+
 	status := make(map[int64]bool)
 
 	for _, uid := range userIDs {
@@ -231,6 +273,16 @@ func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]
 		status[uid] = len(keys) > 0
 	}
 
+	// 统计在线用户数量
+	onlineCount := 0
+	for _, online := range status {
+		if online {
+			onlineCount++
+		}
+	}
+
+	span.SetAttributes(attribute.Int("result.online_count", onlineCount))
+	span.SetStatus(codes.Ok, "online status queried successfully")
 	return status, nil
 }
 

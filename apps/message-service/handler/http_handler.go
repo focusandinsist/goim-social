@@ -6,6 +6,7 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/message-service/converter"
 	"goim-social/apps/message-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
 )
@@ -48,6 +49,13 @@ func (h *HTTPHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	// SendMessageRequest没有From字段，这里暂时使用To字段
+	ctx = tracecontext.WithUserID(ctx, req.To)
+	if req.GroupId > 0 {
+		ctx = tracecontext.WithGroupID(ctx, req.GroupId)
+	}
+
 	// 调用service层发送消息
 	messageID, ackID, err := h.service.SendMessage(ctx, &req)
 	res := h.converter.BuildSendMessageResponse(messageID, ackID)
@@ -66,6 +74,12 @@ func (h *HTTPHandler) GetHistory(c *gin.Context) {
 		res := h.converter.BuildErrorGetHistoryResponse(req.Page, req.Size)
 		httpx.WriteObject(c, res, err)
 		return
+	}
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+	if req.GroupId > 0 {
+		ctx = tracecontext.WithGroupID(ctx, req.GroupId)
 	}
 
 	msgs, total, err := h.service.GetMessageHistory(ctx, req.UserId, req.GroupId, int(req.Page), int(req.Size))
@@ -90,6 +104,9 @@ func (h *HTTPHandler) GetUnreadMessages(c *gin.Context) {
 		httpx.WriteObject(c, res, err)
 		return
 	}
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
 
 	// 调用service层获取未读消息
 	messages, err := h.service.GetUnreadMessages(ctx, req.UserId)

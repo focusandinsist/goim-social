@@ -3,11 +3,12 @@ package handler
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+
 	"goim-social/apps/im-gateway-service/converter"
 	"goim-social/apps/im-gateway-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
-
-	"github.com/gin-gonic/gin"
 )
 
 // HTTPHandler HTTP协议处理器
@@ -45,6 +46,11 @@ func (h *HTTPHandler) OnlineStatus(c *gin.Context) {
 		response := h.converter.BuildHTTPInvalidRequestResponse(err.Error())
 		c.JSON(http.StatusBadRequest, response)
 		return
+	}
+
+	// 将业务信息添加到context（如果有用户ID的话）
+	if len(req.UserIDs) > 0 {
+		ctx = tracecontext.WithUserID(ctx, req.UserIDs[0]) // 使用第一个用户ID作为主要用户
 	}
 	status, err := h.svc.OnlineStatus(ctx, req.UserIDs)
 	if err != nil {

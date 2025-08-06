@@ -3,9 +3,10 @@ package handler
 import (
 	"context"
 
-	"goim-social/apps/group-service/service"
-	"goim-social/pkg/logger"
 	"goim-social/api/rest"
+	"goim-social/apps/group-service/service"
+	tracecontext "goim-social/pkg/context"
+	"goim-social/pkg/logger"
 )
 
 // GRPCHandler gRPC处理器
@@ -25,12 +26,15 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 
 // GetGroupMemberIDs 获取群组成员ID列表
 func (h *GRPCHandler) GetGroupMemberIDs(ctx context.Context, req *rest.GetGroupMemberIDsRequest) (*rest.GetGroupMemberIDsResponse, error) {
-	h.logger.Info(ctx, "收到获取群成员ID列表请求", 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithGroupID(ctx, req.GroupId)
+
+	h.logger.Info(ctx, "收到获取群成员ID列表请求",
 		logger.F("groupID", req.GroupId))
 
 	memberIDs, err := h.svc.GetGroupMemberIDs(ctx, req.GroupId)
 	if err != nil {
-		h.logger.Error(ctx, "获取群成员ID列表失败", 
+		h.logger.Error(ctx, "获取群成员ID列表失败",
 			logger.F("groupID", req.GroupId),
 			logger.F("error", err.Error()))
 		return &rest.GetGroupMemberIDsResponse{
@@ -39,7 +43,7 @@ func (h *GRPCHandler) GetGroupMemberIDs(ctx context.Context, req *rest.GetGroupM
 		}, nil
 	}
 
-	h.logger.Info(ctx, "获取群成员ID列表成功", 
+	h.logger.Info(ctx, "获取群成员ID列表成功",
 		logger.F("groupID", req.GroupId),
 		logger.F("memberCount", len(memberIDs)))
 
@@ -52,13 +56,17 @@ func (h *GRPCHandler) GetGroupMemberIDs(ctx context.Context, req *rest.GetGroupM
 
 // ValidateGroupMember 验证群成员身份
 func (h *GRPCHandler) ValidateGroupMember(ctx context.Context, req *rest.ValidateGroupMemberRequest) (*rest.ValidateGroupMemberResponse, error) {
-	h.logger.Info(ctx, "收到验证群成员身份请求", 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+	ctx = tracecontext.WithGroupID(ctx, req.GroupId)
+
+	h.logger.Info(ctx, "收到验证群成员身份请求",
 		logger.F("groupID", req.GroupId),
 		logger.F("userID", req.UserId))
 
 	err := h.svc.ValidateGroupMember(ctx, req.GroupId, req.UserId)
 	if err != nil {
-		h.logger.Error(ctx, "验证群成员身份失败", 
+		h.logger.Error(ctx, "验证群成员身份失败",
 			logger.F("groupID", req.GroupId),
 			logger.F("userID", req.UserId),
 			logger.F("error", err.Error()))
@@ -69,7 +77,7 @@ func (h *GRPCHandler) ValidateGroupMember(ctx context.Context, req *rest.Validat
 		}, nil
 	}
 
-	h.logger.Info(ctx, "验证群成员身份成功", 
+	h.logger.Info(ctx, "验证群成员身份成功",
 		logger.F("groupID", req.GroupId),
 		logger.F("userID", req.UserId))
 

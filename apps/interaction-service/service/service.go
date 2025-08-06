@@ -5,15 +5,19 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"google.golang.org/protobuf/proto"
+
 	"goim-social/api/rest"
 	"goim-social/apps/interaction-service/converter"
 	"goim-social/apps/interaction-service/dao"
 	"goim-social/apps/interaction-service/model"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
-
-	"google.golang.org/protobuf/proto"
+	"goim-social/pkg/telemetry"
 )
 
 // Service 互动服务
@@ -38,17 +42,36 @@ func NewService(interactionDAO dao.InteractionDAO, redis *redis.RedisClient, kaf
 
 // DoInteraction 执行互动操作
 func (s *Service) DoInteraction(ctx context.Context, userID, objectID int64, objectType, interactionType, metadata string) (*model.Interaction, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "interaction.service.DoInteraction")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("interaction.user_id", userID),
+		attribute.Int64("interaction.object_id", objectID),
+		attribute.String("interaction.object_type", objectType),
+		attribute.String("interaction.type", interactionType),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+
 	// 参数验证
 	if userID <= 0 {
+		span.SetStatus(codes.Error, "invalid user ID")
 		return nil, fmt.Errorf("用户ID无效")
 	}
 	if objectID <= 0 {
+		span.SetStatus(codes.Error, "invalid object ID")
 		return nil, fmt.Errorf("对象ID无效")
 	}
 	if !model.ValidateObjectType(objectType) {
+		span.SetStatus(codes.Error, "invalid object type")
 		return nil, fmt.Errorf("对象类型无效: %s", objectType)
 	}
 	if !model.ValidateInteractionType(interactionType) {
+		span.SetStatus(codes.Error, "invalid interaction type")
 		return nil, fmt.Errorf("互动类型无效: %s", interactionType)
 	}
 
@@ -64,8 +87,13 @@ func (s *Service) DoInteraction(ctx context.Context, userID, objectID int64, obj
 	}
 
 	if err := s.dao.CreateInteraction(ctx, interaction); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create interaction")
 		return nil, fmt.Errorf("创建互动失败: %v", err)
 	}
+
+	// 设置交互ID到span
+	span.SetAttributes(attribute.Int64("interaction.id", interaction.ID))
 
 	// 清除相关缓存
 	s.clearInteractionCache(ctx, userID, objectID, objectType, interactionType)
@@ -73,6 +101,13 @@ func (s *Service) DoInteraction(ctx context.Context, userID, objectID int64, obj
 	// 发送事件到消息队列
 	s.publishInteractionEvent(ctx, "create", interaction)
 
+	s.logger.Info(ctx, "Interaction created successfully",
+		logger.F("interactionID", interaction.ID),
+		logger.F("userID", userID),
+		logger.F("objectID", objectID),
+		logger.F("interactionType", interactionType))
+
+	span.SetStatus(codes.Ok, "interaction created successfully")
 	return interaction, nil
 }
 
@@ -114,14 +149,32 @@ func (s *Service) UndoInteraction(ctx context.Context, userID, objectID int64, o
 
 // CheckInteraction 检查互动状态
 func (s *Service) CheckInteraction(ctx context.Context, userID, objectID int64, objectType, interactionType string) (bool, *model.Interaction, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "interaction.service.CheckInteraction")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("interaction.user_id", userID),
+		attribute.Int64("interaction.object_id", objectID),
+		attribute.String("interaction.object_type", objectType),
+		attribute.String("interaction.type", interactionType),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+
 	// 参数验证
 	if userID <= 0 || objectID <= 0 {
+		span.SetStatus(codes.Error, "invalid parameters")
 		return false, nil, fmt.Errorf("参数无效")
 	}
 	if !model.ValidateObjectType(objectType) {
+		span.SetStatus(codes.Error, "invalid object type")
 		return false, nil, fmt.Errorf("对象类型无效: %s", objectType)
 	}
 	if !model.ValidateInteractionType(interactionType) {
+		span.SetStatus(codes.Error, "invalid interaction type")
 		return false, nil, fmt.Errorf("互动类型无效: %s", interactionType)
 	}
 
@@ -159,6 +212,12 @@ func (s *Service) CheckInteraction(ctx context.Context, userID, objectID int64, 
 		s.redis.Set(ctx, cacheKey, "1", time.Duration(model.CacheExpireUserAction)*time.Second)
 	}
 
+	span.SetAttributes(
+		attribute.Bool("interaction.exists", true),
+		attribute.Int64("interaction.id", interaction.ID),
+	)
+
+	span.SetStatus(codes.Ok, "interaction check completed")
 	return true, interaction, nil
 }
 
@@ -193,11 +252,23 @@ func (s *Service) BatchCheckInteraction(ctx context.Context, userID int64, objec
 
 // GetObjectStats 获取对象统计
 func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType string) (*model.InteractionStats, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "interaction.service.GetObjectStats")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("interaction.object_id", objectID),
+		attribute.String("interaction.object_type", objectType),
+	)
+
 	// 参数验证
 	if objectID <= 0 {
+		span.SetStatus(codes.Error, "invalid object ID")
 		return nil, fmt.Errorf("对象ID无效")
 	}
 	if !model.ValidateObjectType(objectType) {
+		span.SetStatus(codes.Error, "invalid object type")
 		return nil, fmt.Errorf("对象类型无效: %s", objectType)
 	}
 
@@ -225,8 +296,18 @@ func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType
 	// 从数据库获取
 	stats, err := s.dao.GetInteractionStats(ctx, objectID, objectType)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get stats from database")
 		return nil, err
 	}
+
+	// 设置统计信息到span
+	span.SetAttributes(
+		attribute.Int64("stats.like_count", stats.LikeCount),
+		attribute.Int64("stats.favorite_count", stats.FavoriteCount),
+		attribute.Int64("stats.share_count", stats.ShareCount),
+		attribute.Int64("stats.repost_count", stats.RepostCount),
+	)
 
 	// 缓存结果 - 使用protobuf序列化
 	if s.redis != nil {
@@ -243,6 +324,7 @@ func (s *Service) GetObjectStats(ctx context.Context, objectID int64, objectType
 		}
 	}
 
+	span.SetStatus(codes.Ok, "stats retrieved successfully")
 	return stats, nil
 }
 

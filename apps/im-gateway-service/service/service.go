@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 
@@ -20,10 +22,12 @@ import (
 	"goim-social/apps/im-gateway-service/model"
 	"goim-social/pkg/auth"
 	"goim-social/pkg/config"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/database"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/redis"
 	"goim-social/pkg/sessionlocator"
+	"goim-social/pkg/telemetry"
 )
 
 // ConnectionManager 连接管理器，封装本地WebSocket连接和Redis状态
@@ -45,6 +49,21 @@ func NewConnectionManager(redis *redis.RedisClient, cfg *config.Config) *Connect
 
 // AddConnection 原子式添加连接，同时更新本地连接和Redis状态
 func (cm *ConnectionManager) AddConnection(ctx context.Context, userID int64, conn *websocket.Conn, connID string, serverID string) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "im-gateway.connection.AddConnection")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("user.id", userID),
+		attribute.String("connection.id", connID),
+		attribute.String("server.id", serverID),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+	ctx = tracecontext.WithSessionID(ctx, connID)
+
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
@@ -60,6 +79,8 @@ func (cm *ConnectionManager) AddConnection(ctx context.Context, userID int64, co
 	// 添加到在线用户集合
 	if err := cm.redis.SAdd(ctx, "online_users", userID); err != nil {
 		delete(cm.localConnections, userID)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to add user to online set")
 		return fmt.Errorf("添加Redis在线状态失败: %v", err)
 	}
 
@@ -77,6 +98,8 @@ func (cm *ConnectionManager) AddConnection(ctx context.Context, userID int64, co
 	if err := cm.redis.HMSet(ctx, key, connInfo); err != nil {
 		delete(cm.localConnections, userID)
 		cm.redis.SRem(ctx, "online_users", userID)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to save connection info to Redis")
 		return fmt.Errorf("添加Redis连接信息失败: %v", err)
 	}
 
@@ -88,6 +111,9 @@ func (cm *ConnectionManager) AddConnection(ctx context.Context, userID int64, co
 
 	totalConnections := len(cm.localConnections)
 	log.Printf("用户 %d 连接已添加，当前总连接数: %d", userID, totalConnections)
+
+	span.SetAttributes(attribute.Int("total.connections", totalConnections))
+	span.SetStatus(codes.Ok, "connection added successfully")
 	return nil
 }
 
@@ -98,6 +124,19 @@ func (cm *ConnectionManager) getDefaultClientType() string {
 
 // RemoveConnection 原子式移除连接，同时清理本地连接和Redis状态
 func (cm *ConnectionManager) RemoveConnection(ctx context.Context, userID int64, connID string) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "im-gateway.connection.RemoveConnection")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("user.id", userID),
+		attribute.String("connection.id", connID),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
@@ -127,6 +166,9 @@ func (cm *ConnectionManager) RemoveConnection(ctx context.Context, userID int64,
 
 	totalConnections := len(cm.localConnections)
 	log.Printf("用户 %d 连接已完全清理，剩余连接数: %d", userID, totalConnections)
+
+	span.SetAttributes(attribute.Int("remaining.connections", totalConnections))
+	span.SetStatus(codes.Ok, "connection removed successfully")
 	return nil
 }
 
@@ -460,10 +502,35 @@ func (s *Service) OnlineStatus(ctx context.Context, userIDs []int64) (map[int64]
 
 // ForwardMessageToLogicService 通过 gRPC 转发消息到 Logic 微服务
 func (s *Service) ForwardMessageToLogicService(ctx context.Context, wsMsg *rest.WSMessage) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "im-gateway.message.ForwardToLogic")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("message.from", wsMsg.From),
+		attribute.Int64("message.to", wsMsg.To),
+		attribute.Int64("message.group_id", wsMsg.GroupId),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, wsMsg.From)
+	if wsMsg.GroupId > 0 {
+		ctx = tracecontext.WithGroupID(ctx, wsMsg.GroupId)
+	}
+
 	log.Printf("Connect服务转发消息: From=%d, To=%d, Content=%s", wsMsg.From, wsMsg.To, wsMsg.Content)
 
 	// 使用Chat服务的单向调用
-	return s.sendMessageViaUnaryCall(ctx, wsMsg)
+	err := s.sendMessageViaUnaryCall(ctx, wsMsg)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to forward message to logic service")
+		return err
+	}
+
+	span.SetStatus(codes.Ok, "message forwarded successfully")
+	return nil
 }
 
 // HandleHeartbeat 处理心跳包

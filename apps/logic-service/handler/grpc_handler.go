@@ -6,6 +6,7 @@ import (
 	"goim-social/api/rest"
 	"goim-social/apps/logic-service/converter"
 	"goim-social/apps/logic-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )
 
@@ -28,6 +29,12 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 
 // SendMessage 发送消息gRPC接口
 func (h *GRPCHandler) SendMessage(ctx context.Context, req *rest.SendLogicMessageRequest) (*rest.SendLogicMessageResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.Msg.From)
+	if req.Msg.GroupId > 0 {
+		ctx = tracecontext.WithGroupID(ctx, req.Msg.GroupId)
+	}
+
 	h.logger.Info(ctx, "收到gRPC发送消息请求",
 		logger.F("from", req.Msg.From),
 		logger.F("to", req.Msg.To),
@@ -51,6 +58,9 @@ func (h *GRPCHandler) SendMessage(ctx context.Context, req *rest.SendLogicMessag
 
 // HandleMessageAck 处理消息ACK确认gRPC接口
 func (h *GRPCHandler) HandleMessageAck(ctx context.Context, req *rest.MessageAckRequest) (*rest.MessageAckResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	h.logger.Info(ctx, "收到gRPC消息ACK请求",
 		logger.F("userID", req.UserId),
 		logger.F("messageID", req.MessageId),

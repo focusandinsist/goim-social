@@ -7,6 +7,7 @@ import (
 	"goim-social/apps/content-service/converter"
 	"goim-social/apps/content-service/model"
 	"goim-social/apps/content-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )
 
@@ -29,6 +30,9 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 
 // CreateContent 创建内容
 func (h *GRPCHandler) CreateContent(ctx context.Context, req *rest.CreateContentRequest) (*rest.CreateContentResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.AuthorId)
+
 	// 转换媒体文件
 	mediaFiles := h.converter.MediaFileProtoToModels(req.MediaFiles)
 
@@ -50,9 +54,15 @@ func (h *GRPCHandler) CreateContent(ctx context.Context, req *rest.CreateContent
 	if err != nil {
 		h.logger.Error(ctx, "Failed to create content via gRPC",
 			logger.F("error", err.Error()),
-			logger.F("authorID", req.AuthorId))
+			logger.F("authorID", req.AuthorId),
+			logger.F("title", req.Title))
 		return h.converter.BuildErrorCreateContentResponse(err.Error()), nil
 	}
+
+	h.logger.Info(ctx, "Create content via gRPC successful",
+		logger.F("contentID", content.ID),
+		logger.F("authorID", req.AuthorId),
+		logger.F("title", req.Title))
 
 	return h.converter.BuildCreateContentResponse(true, "创建成功", content), nil
 }
@@ -89,13 +99,23 @@ func (h *GRPCHandler) UpdateContent(ctx context.Context, req *rest.UpdateContent
 
 // GetContent 获取内容
 func (h *GRPCHandler) GetContent(ctx context.Context, req *rest.GetContentRequest) (*rest.GetContentResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+	ctx = tracecontext.WithContentID(ctx, req.ContentId)
+
 	content, err := h.svc.GetContent(ctx, req.ContentId, req.UserId)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get content via gRPC",
 			logger.F("error", err.Error()),
-			logger.F("contentID", req.ContentId))
+			logger.F("contentID", req.ContentId),
+			logger.F("userID", req.UserId))
 		return h.converter.BuildErrorGetContentResponse(err.Error()), nil
 	}
+
+	h.logger.Info(ctx, "Get content via gRPC successful",
+		logger.F("contentID", req.ContentId),
+		logger.F("userID", req.UserId),
+		logger.F("contentTitle", content.Title))
 
 	return h.converter.BuildGetContentResponse(true, "获取成功", content), nil
 }

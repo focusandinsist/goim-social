@@ -7,6 +7,7 @@ import (
 	"goim-social/apps/comment-service/converter"
 	"goim-social/apps/comment-service/model"
 	"goim-social/apps/comment-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
 )
@@ -63,6 +64,9 @@ func (h *HTTPHandler) CreateComment(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	// 转换对象类型
 	objectType := h.converter.ObjectTypeFromProto(req.ObjectType)
 
@@ -84,9 +88,16 @@ func (h *HTTPHandler) CreateComment(c *gin.Context) {
 
 	var res *rest.CreateCommentResponse
 	if err != nil {
-		h.logger.Error(ctx, "Create comment failed", logger.F("error", err.Error()))
+		h.logger.Error(ctx, "Create comment failed",
+			logger.F("error", err.Error()),
+			logger.F("userID", req.UserId),
+			logger.F("objectID", req.ObjectId))
 		res = h.converter.BuildCreateCommentResponse(false, err.Error(), nil)
 	} else {
+		h.logger.Info(ctx, "Create comment successful",
+			logger.F("commentID", comment.ID),
+			logger.F("userID", req.UserId),
+			logger.F("objectID", req.ObjectId))
 		res = h.converter.BuildSuccessCreateCommentResponse(comment)
 	}
 
@@ -168,9 +179,14 @@ func (h *HTTPHandler) GetComment(c *gin.Context) {
 
 	var res *rest.GetCommentResponse
 	if err != nil {
-		h.logger.Error(ctx, "Get comment failed", logger.F("error", err.Error()))
+		h.logger.Error(ctx, "Get comment failed",
+			logger.F("error", err.Error()),
+			logger.F("commentID", req.CommentId))
 		res = h.converter.BuildGetCommentResponse(false, err.Error(), nil)
 	} else {
+		h.logger.Info(ctx, "Get comment successful",
+			logger.F("commentID", req.CommentId),
+			logger.F("userID", comment.UserID))
 		res = h.converter.BuildSuccessGetCommentResponse(comment)
 	}
 
@@ -207,9 +223,17 @@ func (h *HTTPHandler) GetComments(c *gin.Context) {
 
 	var res *rest.GetCommentsResponse
 	if err != nil {
-		h.logger.Error(ctx, "Get comments failed", logger.F("error", err.Error()))
+		h.logger.Error(ctx, "Get comments failed",
+			logger.F("error", err.Error()),
+			logger.F("objectID", req.ObjectId),
+			logger.F("objectType", objectType))
 		res = h.converter.BuildGetCommentsResponse(false, err.Error(), nil, 0, req.Page, req.PageSize)
 	} else {
+		h.logger.Info(ctx, "Get comments successful",
+			logger.F("objectID", req.ObjectId),
+			logger.F("objectType", objectType),
+			logger.F("total", total),
+			logger.F("count", len(comments)))
 		res = h.converter.BuildSuccessGetCommentsResponse(comments, total, req.Page, req.PageSize)
 	}
 
