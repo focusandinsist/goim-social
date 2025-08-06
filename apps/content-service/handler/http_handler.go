@@ -5,6 +5,7 @@ import (
 	"goim-social/apps/content-service/converter"
 	"goim-social/apps/content-service/model"
 	"goim-social/apps/content-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
 	"goim-social/pkg/logger"
 
@@ -65,6 +66,9 @@ func (h *HTTPHandler) CreateContent(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.AuthorId)
+
 	// 转换媒体文件
 	mediaFiles := h.converter.MediaFileProtoToModels(req.MediaFiles)
 
@@ -87,9 +91,16 @@ func (h *HTTPHandler) CreateContent(c *gin.Context) {
 	var message string
 	if err != nil {
 		message = err.Error()
-		h.logger.Error(ctx, "Create content failed", logger.F("error", err.Error()))
+		h.logger.Error(ctx, "Create content failed",
+			logger.F("error", err.Error()),
+			logger.F("authorID", req.AuthorId),
+			logger.F("title", req.Title))
 	} else {
 		message = "创建成功"
+		h.logger.Info(ctx, "Create content successful",
+			logger.F("contentID", content.ID),
+			logger.F("authorID", req.AuthorId),
+			logger.F("title", req.Title))
 	}
 
 	res := h.converter.BuildCreateContentResponse(err == nil, message, content)
@@ -149,14 +160,25 @@ func (h *HTTPHandler) GetContent(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+	ctx = tracecontext.WithContentID(ctx, req.ContentId)
+
 	content, err := h.svc.GetContent(ctx, req.ContentId, req.UserId)
 
 	var message string
 	if err != nil {
 		message = err.Error()
-		h.logger.Error(ctx, "Get content failed", logger.F("error", err.Error()))
+		h.logger.Error(ctx, "Get content failed",
+			logger.F("error", err.Error()),
+			logger.F("contentID", req.ContentId),
+			logger.F("userID", req.UserId))
 	} else {
 		message = "获取成功"
+		h.logger.Info(ctx, "Get content successful",
+			logger.F("contentID", req.ContentId),
+			logger.F("userID", req.UserId),
+			logger.F("contentTitle", content.Title))
 	}
 
 	res := h.converter.BuildGetContentResponse(err == nil, message, content)
@@ -199,14 +221,25 @@ func (h *HTTPHandler) PublishContent(c *gin.Context) {
 		return
 	}
 
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.AuthorId)
+	ctx = tracecontext.WithContentID(ctx, req.ContentId)
+
 	content, err := h.svc.PublishContent(ctx, req.ContentId, req.AuthorId)
 
 	var message string
 	if err != nil {
 		message = err.Error()
-		h.logger.Error(ctx, "Publish content failed", logger.F("error", err.Error()))
+		h.logger.Error(ctx, "Publish content failed",
+			logger.F("error", err.Error()),
+			logger.F("contentID", req.ContentId),
+			logger.F("authorID", req.AuthorId))
 	} else {
 		message = "发布成功"
+		h.logger.Info(ctx, "Publish content successful",
+			logger.F("contentID", req.ContentId),
+			logger.F("authorID", req.AuthorId),
+			logger.F("contentTitle", content.Title))
 	}
 
 	res := h.converter.BuildPublishContentResponse(err == nil, message, content)

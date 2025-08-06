@@ -18,9 +18,10 @@ const (
 	UserIDKey    contextKey = "user_id"
 	MessageIDKey contextKey = "message_id"
 	GroupIDKey   contextKey = "group_id"
+	ContentIDKey contextKey = "content_id"
 	SessionIDKey contextKey = "session_id"
 	RequestIDKey contextKey = "request_id"
-	
+
 	// 服务相关的上下文键
 	ServiceNameKey contextKey = "service_name"
 	ServiceIDKey   contextKey = "service_id"
@@ -34,6 +35,7 @@ type TraceContext struct {
 	UserID    int64
 	MessageID int64
 	GroupID   int64
+	ContentID int64
 	SessionID string
 	RequestID string
 }
@@ -43,12 +45,12 @@ func WithTraceID(ctx context.Context, traceID string) context.Context {
 	if traceID == "" {
 		traceID = GenerateTraceID()
 	}
-	
+
 	// 同时设置到OpenTelemetry span中
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.SetAttributes(attribute.String("trace.id", traceID))
 	}
-	
+
 	return context.WithValue(ctx, TraceIDKey, traceID)
 }
 
@@ -57,17 +59,17 @@ func GetTraceID(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	
+
 	// 优先从OpenTelemetry span中获取
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		return span.SpanContext().TraceID().String()
 	}
-	
+
 	// 从context value中获取
 	if traceID, ok := ctx.Value(TraceIDKey).(string); ok {
 		return traceID
 	}
-	
+
 	return ""
 }
 
@@ -76,12 +78,12 @@ func WithUserID(ctx context.Context, userID int64) context.Context {
 	if userID <= 0 {
 		return ctx
 	}
-	
+
 	// 同时设置到OpenTelemetry span中
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.SetAttributes(attribute.Int64("user.id", userID))
 	}
-	
+
 	return context.WithValue(ctx, UserIDKey, userID)
 }
 
@@ -101,12 +103,12 @@ func WithMessageID(ctx context.Context, messageID int64) context.Context {
 	if messageID <= 0 {
 		return ctx
 	}
-	
+
 	// 同时设置到OpenTelemetry span中
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.SetAttributes(attribute.Int64("message.id", messageID))
 	}
-	
+
 	return context.WithValue(ctx, MessageIDKey, messageID)
 }
 
@@ -126,12 +128,12 @@ func WithGroupID(ctx context.Context, groupID int64) context.Context {
 	if groupID <= 0 {
 		return ctx
 	}
-	
+
 	// 同时设置到OpenTelemetry span中
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.SetAttributes(attribute.Int64("group.id", groupID))
 	}
-	
+
 	return context.WithValue(ctx, GroupIDKey, groupID)
 }
 
@@ -146,17 +148,42 @@ func GetGroupID(ctx context.Context) int64 {
 	return 0
 }
 
+// WithContentID 在context中设置ContentID
+func WithContentID(ctx context.Context, contentID int64) context.Context {
+	if contentID <= 0 {
+		return ctx
+	}
+
+	// 同时设置到OpenTelemetry span中
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		span.SetAttributes(attribute.Int64("content.id", contentID))
+	}
+
+	return context.WithValue(ctx, ContentIDKey, contentID)
+}
+
+// GetContentID 从context中获取ContentID
+func GetContentID(ctx context.Context) int64 {
+	if ctx == nil {
+		return 0
+	}
+	if contentID, ok := ctx.Value(ContentIDKey).(int64); ok {
+		return contentID
+	}
+	return 0
+}
+
 // WithSessionID 在context中设置SessionID
 func WithSessionID(ctx context.Context, sessionID string) context.Context {
 	if sessionID == "" {
 		return ctx
 	}
-	
+
 	// 同时设置到OpenTelemetry span中
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.SetAttributes(attribute.String("session.id", sessionID))
 	}
-	
+
 	return context.WithValue(ctx, SessionIDKey, sessionID)
 }
 
@@ -176,12 +203,12 @@ func WithRequestID(ctx context.Context, requestID string) context.Context {
 	if requestID == "" {
 		requestID = GenerateRequestID()
 	}
-	
+
 	// 同时设置到OpenTelemetry span中
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.SetAttributes(attribute.String("request.id", requestID))
 	}
-	
+
 	return context.WithValue(ctx, RequestIDKey, requestID)
 }
 
@@ -200,7 +227,7 @@ func GetRequestID(ctx context.Context) string {
 func WithServiceInfo(ctx context.Context, serviceName, serviceID string) context.Context {
 	ctx = context.WithValue(ctx, ServiceNameKey, serviceName)
 	ctx = context.WithValue(ctx, ServiceIDKey, serviceID)
-	
+
 	// 同时设置到OpenTelemetry span中
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.SetAttributes(
@@ -208,7 +235,7 @@ func WithServiceInfo(ctx context.Context, serviceName, serviceID string) context
 			attribute.String("service.id", serviceID),
 		)
 	}
-	
+
 	return ctx
 }
 
@@ -238,7 +265,7 @@ func GetServiceID(ctx context.Context) string {
 func WithClientInfo(ctx context.Context, clientIP, userAgent string) context.Context {
 	ctx = context.WithValue(ctx, ClientIPKey, clientIP)
 	ctx = context.WithValue(ctx, UserAgentKey, userAgent)
-	
+
 	// 同时设置到OpenTelemetry span中
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.SetAttributes(
@@ -246,7 +273,7 @@ func WithClientInfo(ctx context.Context, clientIP, userAgent string) context.Con
 			attribute.String("client.user_agent", userAgent),
 		)
 	}
-	
+
 	return ctx
 }
 
@@ -289,6 +316,7 @@ func ExtractTraceContext(ctx context.Context) *TraceContext {
 		UserID:    GetUserID(ctx),
 		MessageID: GetMessageID(ctx),
 		GroupID:   GetGroupID(ctx),
+		ContentID: GetContentID(ctx),
 		SessionID: GetSessionID(ctx),
 		RequestID: GetRequestID(ctx),
 	}
@@ -297,7 +325,7 @@ func ExtractTraceContext(ctx context.Context) *TraceContext {
 // ToMap 将TraceContext转换为map，用于日志输出
 func (tc *TraceContext) ToMap() map[string]interface{} {
 	result := make(map[string]interface{})
-	
+
 	if tc.TraceID != "" {
 		result["trace_id"] = tc.TraceID
 	}
@@ -310,13 +338,16 @@ func (tc *TraceContext) ToMap() map[string]interface{} {
 	if tc.GroupID > 0 {
 		result["group_id"] = tc.GroupID
 	}
+	if tc.ContentID > 0 {
+		result["content_id"] = tc.ContentID
+	}
 	if tc.SessionID != "" {
 		result["session_id"] = tc.SessionID
 	}
 	if tc.RequestID != "" {
 		result["request_id"] = tc.RequestID
 	}
-	
+
 	return result
 }
 
