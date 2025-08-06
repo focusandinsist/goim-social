@@ -5,8 +5,6 @@ protoc --go_out=. --go_opt=paths=source_relative social.proto
 protoc --go_out=. --go_opt=paths=source_relative message.proto
 protoc --go_out=. --go_opt=paths=source_relative connect.proto
 protoc --go_out=. --go_opt=paths=source_relative content.proto
-protoc --go_out=. --go_opt=paths=source_relative comment.proto
-protoc --go_out=. --go_opt=paths=source_relative interaction.proto
 protoc --go_out=. --go_opt=paths=source_relative history.proto
 
 # 生成 gRPC 文件

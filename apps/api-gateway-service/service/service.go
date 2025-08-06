@@ -93,14 +93,16 @@ func (s *Service) startServiceDiscovery() {
 	s.registerService("social-service", "localhost", 22001) // 合并了 friend-service 和 group-service
 	s.registerService("message-service", "localhost", 21004)
 	s.registerService("logic-service", "localhost", 21005)
-	s.registerService("content-service", "localhost", 21008)
-	s.registerService("interaction-service", "localhost", 21009)
-	s.registerService("comment-service", "localhost", 21010)
+	s.registerService("content-service", "localhost", 21008) // 合并了 comment-service 和 interaction-service
 	s.registerService("history-service", "localhost", 21011)
 
 	// 为了向后兼容，也注册 friend 和 group 路由到 social-service
 	s.registerService("friend", "localhost", 22001) // /api/v1/friend/* -> social-service
 	s.registerService("group", "localhost", 22001)  // /api/v1/group/* -> social-service
+
+	// 为了向后兼容，也注册 comment 和 interaction 路由到 content-service
+	s.registerService("comment", "localhost", 21008)     // /api/v1/comment/* -> content-service
+	s.registerService("interaction", "localhost", 21008) // /api/v1/interaction/* -> content-service
 
 	log.Println("API Gateway: Service discovery started")
 }

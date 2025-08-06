@@ -60,7 +60,7 @@ func main() {
 	// 初始化PostgreSQL连接
 	postgreSQL := app.GetPostgreSQL()
 
-	// 自动迁移数据库表结构
+	// 自动迁移数据库表结构（包含评论和互动表）
 	if err := postgreSQL.AutoMigrate(
 		&model.Content{},
 		&model.ContentMediaFile{},
@@ -69,6 +69,9 @@ func main() {
 		&model.ContentTagRelation{},
 		&model.ContentTopicRelation{},
 		&model.ContentStatusLog{},
+		&model.Comment{},          // 评论表
+		&model.Interaction{},      // 互动表
+		&model.InteractionStats{}, // 互动统计表
 	); err != nil {
 		panic("Failed to migrate database: " + err.Error())
 	}

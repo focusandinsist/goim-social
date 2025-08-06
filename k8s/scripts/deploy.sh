@@ -142,9 +142,7 @@ deploy_services() {
     local services=(
         "user-service"
         "social-service"        # 合并了 friend-service 和 group-service
-        "content-service"
-        "interaction-service"
-        "comment-service"
+        "content-service"       # 合并了 comment-service 和 interaction-service
         "history-service"
         "message-service"
         "logic-service"

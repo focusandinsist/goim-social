@@ -54,14 +54,14 @@ data:
   LOGIC_SERVICE_HOST: "logic-service.im-system.svc.cluster.local"
   IM_GATEWAY_SERVICE_HOST: "im-gateway-service.im-system.svc.cluster.local"
   API_GATEWAY_SERVICE_HOST: "api-gateway-service.im-system.svc.cluster.local"
-  CONTENT_SERVICE_HOST: "content-service.im-system.svc.cluster.local"
-  INTERACTION_SERVICE_HOST: "interaction-service.im-system.svc.cluster.local"
-  COMMENT_SERVICE_HOST: "comment-service.im-system.svc.cluster.local"
+  CONTENT_SERVICE_HOST: "content-service.im-system.svc.cluster.local"  # 合并了 comment-service 和 interaction-service
   HISTORY_SERVICE_HOST: "history-service.im-system.svc.cluster.local"
 
-  # 向后兼容配置（指向 social-service）
+  # 向后兼容配置（指向对应的合并服务）
   GROUP_SERVICE_HOST: "social-service.im-system.svc.cluster.local"
   FRIEND_SERVICE_HOST: "social-service.im-system.svc.cluster.local"
+  COMMENT_SERVICE_HOST: "content-service.im-system.svc.cluster.local"
+  INTERACTION_SERVICE_HOST: "content-service.im-system.svc.cluster.local"
   
   # 日志配置
   LOG_LEVEL: "info"
