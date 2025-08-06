@@ -6,12 +6,17 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+
 	"goim-social/api/rest"
 	"goim-social/apps/comment-service/dao"
 	"goim-social/apps/comment-service/model"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/kafka"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
+	"goim-social/pkg/telemetry"
 )
 
 // Service 评论服务
@@ -34,8 +39,26 @@ func NewService(dao dao.CommentDAO, redis *redis.RedisClient, kafka *kafka.Produ
 
 // CreateComment 创建评论
 func (s *Service) CreateComment(ctx context.Context, params *model.CreateCommentParams) (*model.Comment, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "comment.service.CreateComment")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("comment.object_id", params.ObjectID),
+		attribute.String("comment.object_type", params.ObjectType),
+		attribute.Int64("comment.user_id", params.UserID),
+		attribute.String("comment.user_name", params.UserName),
+		attribute.Int64("comment.parent_id", params.ParentID),
+		attribute.Int("comment.content_length", len(params.Content)),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, params.UserID)
+
 	// 参数验证
 	if err := s.validateCreateCommentParams(params); err != nil {
+		span.SetStatus(codes.Error, "invalid parameters")
 		return nil, err
 	}
 
@@ -79,8 +102,13 @@ func (s *Service) CreateComment(ctx context.Context, params *model.CreateComment
 
 	// 创建评论
 	if err := s.dao.CreateComment(ctx, comment); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create comment")
 		return nil, fmt.Errorf("创建评论失败: %v", err)
 	}
+
+	// 设置评论ID到span
+	span.SetAttributes(attribute.Int64("comment.id", comment.ID))
 
 	// 清除相关缓存
 	s.clearCommentCache(ctx, comment.ObjectID, comment.ObjectType)
@@ -93,6 +121,7 @@ func (s *Service) CreateComment(ctx context.Context, params *model.CreateComment
 		logger.F("userID", comment.UserID),
 		logger.F("objectID", comment.ObjectID))
 
+	span.SetStatus(codes.Ok, "comment created successfully")
 	return comment, nil
 }
 
@@ -186,20 +215,55 @@ func (s *Service) DeleteComment(ctx context.Context, params *model.DeleteComment
 
 // GetComment 获取评论
 func (s *Service) GetComment(ctx context.Context, commentID int64) (*model.Comment, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "comment.service.GetComment")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(attribute.Int64("comment.id", commentID))
+
 	if commentID <= 0 {
+		span.SetStatus(codes.Error, "invalid comment ID")
 		return nil, fmt.Errorf("评论ID无效")
 	}
 
-	return s.dao.GetComment(ctx, commentID)
+	comment, err := s.dao.GetComment(ctx, commentID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "comment not found")
+		return nil, err
+	}
+
+	span.SetAttributes(
+		attribute.Int64("comment.user_id", comment.UserID),
+		attribute.String("comment.status", comment.Status),
+	)
+
+	span.SetStatus(codes.Ok, "comment retrieved successfully")
+	return comment, nil
 }
 
 // GetComments 获取评论列表
 func (s *Service) GetComments(ctx context.Context, params *model.GetCommentsParams) ([]*model.Comment, int64, error) {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "comment.service.GetComments")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("comment.object_id", params.ObjectID),
+		attribute.String("comment.object_type", params.ObjectType),
+		attribute.Int("comment.page", int(params.Page)),
+		attribute.Int("comment.page_size", int(params.PageSize)),
+	)
+
 	// 参数验证和默认值设置
 	if params.ObjectID <= 0 {
+		span.SetStatus(codes.Error, "invalid object ID")
 		return nil, 0, fmt.Errorf("对象ID无效")
 	}
 	if params.ObjectType == "" {
+		span.SetStatus(codes.Error, "invalid object type")
 		return nil, 0, fmt.Errorf("对象类型无效")
 	}
 
@@ -223,7 +287,20 @@ func (s *Service) GetComments(ctx context.Context, params *model.GetCommentsPara
 		params.MaxReplyCount = model.DefaultReplyShow
 	}
 
-	return s.dao.GetComments(ctx, params)
+	comments, total, err := s.dao.GetComments(ctx, params)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get comments")
+		return nil, 0, err
+	}
+
+	span.SetAttributes(
+		attribute.Int("comment.result_count", len(comments)),
+		attribute.Int64("comment.total_count", total),
+	)
+
+	span.SetStatus(codes.Ok, "comments retrieved successfully")
+	return comments, total, nil
 }
 
 // GetUserComments 获取用户评论
@@ -440,24 +517,53 @@ func (s *Service) GetBatchCommentStats(ctx context.Context, objectIDs []int64, o
 
 // LikeComment 点赞评论
 func (s *Service) LikeComment(ctx context.Context, commentID, userID int64) error {
+	// 开始OpenTelemetry span
+	ctx, span := telemetry.StartSpan(ctx, "comment.service.LikeComment")
+	defer span.End()
+
+	// 设置span属性
+	span.SetAttributes(
+		attribute.Int64("comment.id", commentID),
+		attribute.Int64("user.id", userID),
+	)
+
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, userID)
+
 	if commentID <= 0 {
+		span.SetStatus(codes.Error, "invalid comment ID")
 		return fmt.Errorf("评论ID无效")
 	}
 	if userID <= 0 {
+		span.SetStatus(codes.Error, "invalid user ID")
 		return fmt.Errorf("用户ID无效")
 	}
 
 	// 检查评论是否存在
 	comment, err := s.dao.GetComment(ctx, commentID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "comment not found")
 		return fmt.Errorf("评论不存在: %v", err)
 	}
 
 	if comment.Status != model.CommentStatusApproved {
+		span.SetStatus(codes.Error, "comment not approved")
 		return fmt.Errorf("只能对已通过的评论点赞")
 	}
 
-	return s.dao.AddCommentLike(ctx, commentID, userID)
+	if err := s.dao.AddCommentLike(ctx, commentID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to add like")
+		return err
+	}
+
+	s.logger.Info(ctx, "Comment liked successfully",
+		logger.F("commentID", commentID),
+		logger.F("userID", userID))
+
+	span.SetStatus(codes.Ok, "comment liked successfully")
+	return nil
 }
 
 // UnlikeComment 取消点赞评论

@@ -7,6 +7,7 @@ import (
 	"goim-social/apps/comment-service/converter"
 	"goim-social/apps/comment-service/model"
 	"goim-social/apps/comment-service/service"
+	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )
 
@@ -29,6 +30,9 @@ func NewGRPCHandler(svc *service.Service, log logger.Logger) *GRPCHandler {
 
 // CreateComment 创建评论
 func (h *GRPCHandler) CreateComment(ctx context.Context, req *rest.CreateCommentRequest) (*rest.CreateCommentResponse, error) {
+	// 将业务信息添加到context
+	ctx = tracecontext.WithUserID(ctx, req.UserId)
+
 	params := &model.CreateCommentParams{
 		ObjectID:        req.ObjectId,
 		ObjectType:      h.converter.ObjectTypeFromProto(req.ObjectType),
@@ -47,9 +51,15 @@ func (h *GRPCHandler) CreateComment(ctx context.Context, req *rest.CreateComment
 	if err != nil {
 		h.logger.Error(ctx, "Failed to create comment via gRPC",
 			logger.F("error", err.Error()),
-			logger.F("userID", req.UserId))
+			logger.F("userID", req.UserId),
+			logger.F("objectID", req.ObjectId))
 		return h.converter.BuildErrorCreateCommentResponse(err.Error()), nil
 	}
+
+	h.logger.Info(ctx, "Create comment via gRPC successful",
+		logger.F("commentID", comment.ID),
+		logger.F("userID", req.UserId),
+		logger.F("objectID", req.ObjectId))
 
 	return h.converter.BuildSuccessCreateCommentResponse(comment), nil
 }
@@ -100,6 +110,8 @@ func (h *GRPCHandler) DeleteComment(ctx context.Context, req *rest.DeleteComment
 
 // GetComment 获取评论
 func (h *GRPCHandler) GetComment(ctx context.Context, req *rest.GetCommentRequest) (*rest.GetCommentResponse, error) {
+	h.logger.Info(ctx, "gRPC GetComment request", logger.F("commentID", req.CommentId))
+
 	comment, err := h.svc.GetComment(ctx, req.CommentId)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get comment via gRPC",
@@ -110,6 +122,10 @@ func (h *GRPCHandler) GetComment(ctx context.Context, req *rest.GetCommentReques
 			Message: err.Error(),
 		}, nil
 	}
+
+	h.logger.Info(ctx, "gRPC GetComment successful",
+		logger.F("commentID", req.CommentId),
+		logger.F("userID", comment.UserID))
 
 	return h.converter.BuildSuccessGetCommentResponse(comment), nil
 }
