@@ -26,10 +26,8 @@ data:
   # 服务端口配置
   USER_SERVICE_HTTP_PORT: "21001"
   USER_SERVICE_GRPC_PORT: "22001"
-  GROUP_SERVICE_HTTP_PORT: "21002"
-  GROUP_SERVICE_GRPC_PORT: "22002"
-  FRIEND_SERVICE_HTTP_PORT: "21003"
-  FRIEND_SERVICE_GRPC_PORT: "22003"
+  SOCIAL_SERVICE_HTTP_PORT: "21002"
+  SOCIAL_SERVICE_GRPC_PORT: "22002"
   MESSAGE_SERVICE_HTTP_PORT: "21004"
   MESSAGE_SERVICE_GRPC_PORT: "22004"
   LOGIC_SERVICE_HTTP_PORT: "21005"
@@ -40,28 +38,15 @@ data:
   API_GATEWAY_SERVICE_GRPC_PORT: "22007"
   CONTENT_SERVICE_HTTP_PORT: "21008"
   CONTENT_SERVICE_GRPC_PORT: "22008"
-  INTERACTION_SERVICE_HTTP_PORT: "21009"
-  INTERACTION_SERVICE_GRPC_PORT: "22009"
-  COMMENT_SERVICE_HTTP_PORT: "21010"
-  COMMENT_SERVICE_GRPC_PORT: "22010"
-  HISTORY_SERVICE_HTTP_PORT: "21011"
-  HISTORY_SERVICE_GRPC_PORT: "22011"
-  
-  # 服务发现配置
+
+  # 服务发现配置（Kubernetes DNS）
   USER_SERVICE_HOST: "user-service.im-system.svc.cluster.local"
-  SOCIAL_SERVICE_HOST: "social-service.im-system.svc.cluster.local"  # 合并了 friend-service 和 group-service
+  SOCIAL_SERVICE_HOST: "social-service.im-system.svc.cluster.local"
   MESSAGE_SERVICE_HOST: "message-service.im-system.svc.cluster.local"
   LOGIC_SERVICE_HOST: "logic-service.im-system.svc.cluster.local"
   IM_GATEWAY_SERVICE_HOST: "im-gateway-service.im-system.svc.cluster.local"
   API_GATEWAY_SERVICE_HOST: "api-gateway-service.im-system.svc.cluster.local"
-  CONTENT_SERVICE_HOST: "content-service.im-system.svc.cluster.local"  # 合并了 comment-service 和 interaction-service
-  HISTORY_SERVICE_HOST: "history-service.im-system.svc.cluster.local"
-
-  # 向后兼容配置（指向对应的合并服务）
-  GROUP_SERVICE_HOST: "social-service.im-system.svc.cluster.local"
-  FRIEND_SERVICE_HOST: "social-service.im-system.svc.cluster.local"
-  COMMENT_SERVICE_HOST: "content-service.im-system.svc.cluster.local"
-  INTERACTION_SERVICE_HOST: "content-service.im-system.svc.cluster.local"
+  CONTENT_SERVICE_HOST: "content-service.im-system.svc.cluster.local"
   
   # 日志配置
   LOG_LEVEL: "info"

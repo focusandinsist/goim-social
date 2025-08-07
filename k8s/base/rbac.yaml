@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: im-service-account
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: im-service-account
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: rbac
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: im-service-discovery
+  labels:
+    app.kubernetes.io/name: im-service-discovery
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: rbac
+rules:
+# 服务发现权限
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+# Pod 信息权限（用于健康检查）
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+# 节点信息权限（可选，用于拓扑感知）
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: im-service-discovery-binding
+  labels:
+    app.kubernetes.io/name: im-service-discovery-binding
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: im-service-account
+  namespace: im-system
+roleRef:
+  kind: ClusterRole
+  name: im-service-discovery
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# 命名空间内的角色（用于配置管理等）
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: im-namespace-role
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: im-namespace-role
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: rbac
+rules:
+# ConfigMap 和 Secret 访问权限
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+# 事件记录权限
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: im-namespace-role-binding
+  namespace: im-system
+  labels:
+    app.kubernetes.io/name: im-namespace-role-binding
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: im-service-account
+  namespace: im-system
+roleRef:
+  kind: Role
+  name: im-namespace-role
+  apiGroup: rbac.authorization.k8s.io

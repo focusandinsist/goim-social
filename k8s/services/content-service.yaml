@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+  namespace: im-system
+  labels:
+    app: content-service
+    app.kubernetes.io/name: content-service
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: content-management
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: content-service
+  template:
+    metadata:
+      labels:
+        app: content-service
+        app.kubernetes.io/name: content-service
+        app.kubernetes.io/part-of: instant-messaging
+        app.kubernetes.io/component: content-management
+    spec:
+      serviceAccountName: im-service-account
+      containers:
+      - name: content-service
+        image: goim-social/content-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 21008
+          protocol: TCP
+        - name: grpc
+          containerPort: 22008
+          protocol: TCP
+        env:
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        envFrom:
+        - configMapRef:
+            name: im-config
+        - secretRef:
+            name: im-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: logs
+        emptyDir: {}
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: content-service
+  namespace: im-system
+  labels:
+    app: content-service
+    app.kubernetes.io/name: content-service
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: content-management
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 21008
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 22008
+    targetPort: grpc
+    protocol: TCP
+  selector:
+    app: content-service

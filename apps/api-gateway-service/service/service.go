@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
-	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -20,25 +20,12 @@ import (
 	"goim-social/pkg/config"
 	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/database"
+	"goim-social/pkg/discovery"
 	"goim-social/pkg/kafka"
+	"goim-social/pkg/logger"
 	"goim-social/pkg/redis"
 	"goim-social/pkg/telemetry"
 )
-
-// ServiceInstance 服务实例信息
-type ServiceInstance struct {
-	ServiceName string `json:"service_name"`
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	Healthy     bool   `json:"healthy"`
-	LastCheck   int64  `json:"last_check"`
-}
-
-// ServiceRegistry 服务注册表
-type ServiceRegistry struct {
-	services map[string][]*ServiceInstance
-	mutex    sync.RWMutex
-}
 
 // Service API网关服务
 type Service struct {
@@ -46,23 +33,41 @@ type Service struct {
 	redis           *redis.RedisClient
 	kafka           *kafka.Producer
 	config          *config.Config
-	registry        *ServiceRegistry
+	discovery       discovery.Discovery
+	logger          logger.Logger
 	imGatewayConn   *grpc.ClientConn
 	imGatewayClient rest.ConnectServiceClient
 }
 
 // NewService 创建API网关服务实例
-func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config) *Service {
-	registry := &ServiceRegistry{
-		services: make(map[string][]*ServiceInstance),
+func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Producer, cfg *config.Config, logger logger.Logger) *Service {
+	// 获取 Kubernetes 命名空间
+	namespace := os.Getenv("KUBERNETES_NAMESPACE")
+	if namespace == "" {
+		namespace = "im-system" // 默认命名空间
 	}
 
-	// 初始化IM Gateway gRPC客户端
-	imGatewayAddr := "localhost:22006" // IM Gateway的gRPC端口
-	conn, err := grpc.NewClient(imGatewayAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// 初始化 Kubernetes 服务发现
+	k8sDiscovery, err := discovery.NewK8sDiscovery(namespace, logger)
 	if err != nil {
-		log.Printf("Failed to connect to IM Gateway: %v", err)
-		// 在实际项目中，这里可能需要重试机制
+		log.Printf("Failed to initialize Kubernetes service discovery: %v", err)
+		// 在生产环境中，这里应该是致命错误
+		panic(err)
+	}
+
+	// 初始化IM Gateway gRPC客户端（使用服务发现）
+	var imGatewayConn *grpc.ClientConn
+	var imGatewayClient rest.ConnectServiceClient
+
+	if instance, err := k8sDiscovery.GetServiceInstance("im-gateway-service"); err == nil {
+		imGatewayAddr := fmt.Sprintf("%s:%d", instance.Host, instance.GRPCPort)
+		conn, err := grpc.NewClient(imGatewayAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			logger.Error(context.Background(), "Failed to connect to IM Gateway")
+		} else {
+			imGatewayConn = conn
+			imGatewayClient = rest.NewConnectServiceClient(conn)
+		}
 	}
 
 	service := &Service{
@@ -70,78 +75,21 @@ func NewService(db *database.MongoDB, redis *redis.RedisClient, kafka *kafka.Pro
 		redis:           redis,
 		kafka:           kafka,
 		config:          cfg,
-		registry:        registry,
-		imGatewayConn:   conn,
-		imGatewayClient: rest.NewConnectServiceClient(conn),
+		discovery:       k8sDiscovery,
+		logger:          logger,
+		imGatewayConn:   imGatewayConn,
+		imGatewayClient: imGatewayClient,
 	}
 
-	// 启动服务发现
-	go service.startServiceDiscovery()
+	logger.Info(context.Background(), "API Gateway service initialized with Kubernetes service discovery")
 
 	return service
 }
 
-// startServiceDiscovery 启动服务发现（模拟K8s服务发现）
-func (s *Service) startServiceDiscovery() {
-	// TODO:
-	// 这里模拟从k8sAPI服务列表
-	// prod中，这里会调用k8sAPI
-	// 或者nacos?
-
-	// 模拟注册一些服务实例
-	s.registerService("user-service", "localhost", 21001)
-	s.registerService("social-service", "localhost", 22001) // 合并了 friend-service 和 group-service
-	s.registerService("message-service", "localhost", 21004)
-	s.registerService("logic-service", "localhost", 21005)
-	s.registerService("content-service", "localhost", 21008) // 合并了 comment-service 和 interaction-service
-	s.registerService("history-service", "localhost", 21011)
-
-	// 为了向后兼容，也注册 friend 和 group 路由到 social-service
-	s.registerService("friend", "localhost", 22001) // /api/v1/friend/* -> social-service
-	s.registerService("group", "localhost", 22001)  // /api/v1/group/* -> social-service
-
-	// 为了向后兼容，也注册 comment 和 interaction 路由到 content-service
-	s.registerService("comment", "localhost", 21008)     // /api/v1/comment/* -> content-service
-	s.registerService("interaction", "localhost", 21008) // /api/v1/interaction/* -> content-service
-
-	log.Println("API Gateway: Service discovery started")
-}
-
-// registerService 注册服务实例
-func (s *Service) registerService(serviceName, host string, port int) {
-	s.registry.mutex.Lock()
-	defer s.registry.mutex.Unlock()
-
-	instance := &ServiceInstance{
-		ServiceName: serviceName,
-		Host:        host,
-		Port:        port,
-		Healthy:     true,
-		LastCheck:   0, // TODO
-	}
-
-	s.registry.services[serviceName] = append(s.registry.services[serviceName], instance)
-	log.Printf("API Gateway: Registered service %s at %s:%d", serviceName, host, port)
-}
-
 // GetServiceInstance 获取服务实例（负载均衡）
-func (s *Service) GetServiceInstance(serviceName string) (*ServiceInstance, error) {
-	s.registry.mutex.RLock()
-	defer s.registry.mutex.RUnlock()
-
-	instances, exists := s.registry.services[serviceName]
-	if !exists || len(instances) == 0 {
-		return nil, fmt.Errorf("service %s not found", serviceName)
-	}
-
-	// TODO:轮询不太好，待优化
-	for _, instance := range instances {
-		if instance.Healthy {
-			return instance, nil
-		}
-	}
-
-	return nil, fmt.Errorf("no healthy instance found for service %s", serviceName)
+func (s *Service) GetServiceInstance(serviceName string) (*discovery.ServiceInstance, error) {
+	// 使用 Kubernetes 服务发现获取实例
+	return s.discovery.GetServiceInstance(serviceName)
 }
 
 // ProxyRequest 动态路由代理请求
@@ -192,7 +140,7 @@ func (s *Service) ProxyRequest(w http.ResponseWriter, r *http.Request) error {
 	span.SetAttributes(
 		attribute.String("gateway.target_url", targetURL.String()),
 		attribute.String("gateway.target_host", instance.Host),
-		attribute.Int("gateway.target_port", instance.Port),
+		attribute.Int("gateway.target_port", int(instance.Port)),
 	)
 
 	// 创建反向代理
@@ -214,18 +162,8 @@ func (s *Service) ProxyRequest(w http.ResponseWriter, r *http.Request) error {
 }
 
 // GetAllServices 获取所有注册的服务
-func (s *Service) GetAllServices() map[string][]*ServiceInstance {
-	s.registry.mutex.RLock()
-	defer s.registry.mutex.RUnlock()
-
-	// 创建副本以避免并发问题
-	result := make(map[string][]*ServiceInstance)
-	for serviceName, instances := range s.registry.services {
-		result[serviceName] = make([]*ServiceInstance, len(instances))
-		copy(result[serviceName], instances)
-	}
-
-	return result
+func (s *Service) GetAllServices() map[string][]*discovery.ServiceInstance {
+	return s.discovery.GetAllServices()
 }
 
 // GetOnlineStatusFromIMGateway 通过gRPC调用IM Gateway获取在线状态
