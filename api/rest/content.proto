@@ -67,9 +67,13 @@ message Content {
   repeated ContentTopic topics = 9; // 话题列表
   string template_data = 10; // 模板数据(JSON格式)
   int64 view_count = 11; // 浏览次数
-  string created_at = 12;
-  string updated_at = 13;
-  string published_at = 14; // 发布时间
+  int64 like_count = 12; // 点赞数
+  int64 comment_count = 13; // 评论数
+  int64 share_count = 14; // 分享数
+  int64 favorite_count = 15; // 收藏数
+  string created_at = 16;
+  string updated_at = 17;
+  string published_at = 18; // 发布时间
 }
 
 // 创建内容请求
@@ -281,6 +285,278 @@ message GetContentStatsResponse {
   int64 total_likes = 8; // 总点赞数
 }
 
+// ==================== 评论相关消息定义 ====================
+
+// 目标类型枚举
+enum TargetType {
+  TARGET_TYPE_UNSPECIFIED = 0;
+  TARGET_TYPE_CONTENT = 1;  // 内容/帖子
+  TARGET_TYPE_COMMENT = 2;  // 评论
+  TARGET_TYPE_USER = 3;     // 用户
+}
+
+// 评论状态枚举
+enum CommentStatus {
+  COMMENT_STATUS_UNSPECIFIED = 0;
+  COMMENT_STATUS_PENDING = 1;   // 待审核
+  COMMENT_STATUS_APPROVED = 2;  // 已通过
+  COMMENT_STATUS_REJECTED = 3;  // 已拒绝
+  COMMENT_STATUS_DELETED = 4;   // 已删除
+}
+
+// 互动类型枚举
+enum InteractionType {
+  INTERACTION_TYPE_UNSPECIFIED = 0;
+  INTERACTION_TYPE_LIKE = 1;     // 点赞
+  INTERACTION_TYPE_FAVORITE = 2; // 收藏
+  INTERACTION_TYPE_SHARE = 3;    // 分享
+  INTERACTION_TYPE_REPOST = 4;   // 转发
+}
+
+// 评论信息
+message Comment {
+  int64 id = 1;
+  int64 target_id = 2;
+  TargetType target_type = 3;
+  int64 user_id = 4;
+  string user_name = 5;
+  string user_avatar = 6;
+  string content = 7;
+  int64 parent_id = 8;
+  int64 root_id = 9;
+  int64 reply_to_user_id = 10;
+  string reply_to_user_name = 11;
+  CommentStatus status = 12;
+  int32 like_count = 13;
+  int32 reply_count = 14;
+  bool is_pinned = 15;
+  bool is_hot = 16;
+  string created_at = 17;
+  string updated_at = 18;
+}
+
+// 互动信息
+message Interaction {
+  int64 id = 1;
+  int64 user_id = 2;
+  int64 target_id = 3;
+  TargetType target_type = 4;
+  InteractionType interaction_type = 5;
+  string metadata = 6;
+  string created_at = 7;
+  string updated_at = 8;
+}
+
+// 互动统计信息
+message InteractionStats {
+  int64 target_id = 1;
+  TargetType target_type = 2;
+  int64 like_count = 3;
+  int64 favorite_count = 4;
+  int64 share_count = 5;
+  int64 repost_count = 6;
+}
+
+// 创建评论请求
+message CreateCommentRequest {
+  int64 target_id = 1;
+  TargetType target_type = 2;
+  int64 user_id = 3;
+  string user_name = 4;
+  string user_avatar = 5;
+  string content = 6;
+  int64 parent_id = 7;
+  int64 reply_to_user_id = 8;
+  string reply_to_user_name = 9;
+  string ip_address = 10;
+  string user_agent = 11;
+}
+
+// 创建评论响应
+message CreateCommentResponse {
+  bool success = 1;
+  string message = 2;
+  Comment comment = 3;
+}
+
+// 删除评论请求
+message DeleteCommentRequest {
+  int64 comment_id = 1;
+  int64 user_id = 2;
+}
+
+// 删除评论响应
+message DeleteCommentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 获取评论列表请求
+message GetCommentsRequest {
+  int64 target_id = 1;
+  TargetType target_type = 2;
+  int64 parent_id = 3; // 0表示获取顶级评论
+  string sort_by = 4;  // time, hot, like
+  string sort_order = 5; // asc, desc
+  int32 page = 6;
+  int32 page_size = 7;
+}
+
+// 获取评论列表响应
+message GetCommentsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated Comment comments = 3;
+  int64 total = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+// 获取评论回复请求
+message GetCommentRepliesRequest {
+  int64 comment_id = 1;
+  string sort_by = 2;
+  string sort_order = 3;
+  int32 page = 4;
+  int32 page_size = 5;
+}
+
+// 获取评论回复响应
+message GetCommentRepliesResponse {
+  bool success = 1;
+  string message = 2;
+  repeated Comment replies = 3;
+  int64 total = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+// ==================== 互动相关消息定义 ====================
+
+// 执行互动请求
+message DoInteractionRequest {
+  int64 user_id = 1;
+  int64 target_id = 2;
+  TargetType target_type = 3;
+  InteractionType interaction_type = 4;
+  string metadata = 5;
+}
+
+// 执行互动响应
+message DoInteractionResponse {
+  bool success = 1;
+  string message = 2;
+  Interaction interaction = 3;
+}
+
+// 取消互动请求
+message UndoInteractionRequest {
+  int64 user_id = 1;
+  int64 target_id = 2;
+  TargetType target_type = 3;
+  InteractionType interaction_type = 4;
+}
+
+// 取消互动响应
+message UndoInteractionResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 检查互动请求
+message CheckInteractionRequest {
+  int64 user_id = 1;
+  int64 target_id = 2;
+  TargetType target_type = 3;
+  InteractionType interaction_type = 4;
+}
+
+// 检查互动响应
+message CheckInteractionResponse {
+  bool success = 1;
+  string message = 2;
+  bool has_interaction = 3;
+  Interaction interaction = 4;
+}
+
+// 获取互动统计请求
+message GetInteractionStatsRequest {
+  int64 target_id = 1;
+  TargetType target_type = 2;
+}
+
+// 获取互动统计响应
+message GetInteractionStatsResponse {
+  bool success = 1;
+  string message = 2;
+  InteractionStats stats = 3;
+}
+
+// ==================== 综合查询消息定义 ====================
+
+// 内容详情（包含评论和互动）
+message ContentDetail {
+  Content content = 1;
+  repeated Comment top_comments = 2; // 热门评论
+  InteractionStats interaction_stats = 3;
+  map<string, bool> user_interactions = 4; // 当前用户的互动状态
+}
+
+// 获取内容详情请求
+message GetContentDetailRequest {
+  int64 content_id = 1;
+  int64 user_id = 2; // 可选，用于获取用户互动状态
+  int32 comment_limit = 3; // 返回的评论数量限制
+}
+
+// 获取内容详情响应
+message GetContentDetailResponse {
+  bool success = 1;
+  string message = 2;
+  ContentDetail detail = 3;
+}
+
+// 内容流项目
+message ContentFeedItem {
+  Content content = 1;
+  InteractionStats interaction_stats = 2;
+  map<string, bool> user_interactions = 3; // 当前用户的互动状态
+  int32 comment_preview_count = 4; // 预览评论数量
+}
+
+// 获取内容流请求
+message GetContentFeedRequest {
+  int64 user_id = 1; // 可选，用于个性化推荐
+  string content_type = 2; // 可选，过滤内容类型
+  string sort_by = 3; // time, hot, trending
+  int32 page = 4;
+  int32 page_size = 5;
+}
+
+// 获取内容流响应
+message GetContentFeedResponse {
+  bool success = 1;
+  string message = 2;
+  repeated ContentFeedItem items = 3;
+  int64 total = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+// 获取热门内容请求
+message GetTrendingContentRequest {
+  string time_range = 1; // hour, day, week, month
+  string content_type = 2; // 可选，过滤内容类型
+  int32 limit = 3;
+}
+
+// 获取热门内容响应
+message GetTrendingContentResponse {
+  bool success = 1;
+  string message = 2;
+  repeated ContentFeedItem items = 3;
+}
+
 // 内容服务的gRPC接口
 service ContentService {
   // 内容管理
@@ -303,4 +579,21 @@ service ContentService {
   // 话题管理
   rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
   rpc GetTopics(GetTopicsRequest) returns (GetTopicsResponse);
+
+  // 评论管理
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse);
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse);
+  rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse);
+  rpc GetCommentReplies(GetCommentRepliesRequest) returns (GetCommentRepliesResponse);
+
+  // 互动管理
+  rpc DoInteraction(DoInteractionRequest) returns (DoInteractionResponse);
+  rpc UndoInteraction(UndoInteractionRequest) returns (UndoInteractionResponse);
+  rpc CheckInteraction(CheckInteractionRequest) returns (CheckInteractionResponse);
+  rpc GetInteractionStats(GetInteractionStatsRequest) returns (GetInteractionStatsResponse);
+
+  // 综合查询
+  rpc GetContentDetail(GetContentDetailRequest) returns (GetContentDetailResponse);
+  rpc GetContentFeed(GetContentFeedRequest) returns (GetContentFeedResponse);
+  rpc GetTrendingContent(GetTrendingContentRequest) returns (GetTrendingContentResponse);
 }

@@ -42,40 +42,26 @@ services:
       targetCPUUtilizationPercentage: 70
       targetMemoryUtilizationPercentage: 80
 
-  groupService:
+  socialService:
     enabled: true
-    name: group-service
-    image: im-group-service
+    name: social-service
+    image: im-social-service
     replicas: 2
-    httpPort: 21002
-    grpcPort: 22002
+    httpPort: 22001
+    grpcPort: 22001
     resources:
       requests:
-        memory: "128Mi"
-        cpu: "100m"
+        memory: "256Mi"
+        cpu: "150m"
       limits:
-        memory: "512Mi"
-        cpu: "500m"
+        memory: "1Gi"
+        cpu: "750m"
     autoscaling:
       enabled: true
       minReplicas: 2
-      maxReplicas: 10
+      maxReplicas: 15
       targetCPUUtilizationPercentage: 70
-
-  friendService:
-    enabled: true
-    name: friend-service
-    image: im-friend-service
-    replicas: 2
-    httpPort: 21003
-    grpcPort: 22003
-    resources:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "512Mi"
-        cpu: "500m"
+      targetMemoryUtilizationPercentage: 80
 
   messageService:
     enabled: true
@@ -161,46 +147,22 @@ services:
     enabled: true
     name: content-service
     image: im-content-service
-    replicas: 2
+    replicas: 3
     httpPort: 21008
     grpcPort: 22008
     resources:
       requests:
-        memory: "128Mi"
-        cpu: "100m"
+        memory: "256Mi"
+        cpu: "150m"
       limits:
-        memory: "512Mi"
-        cpu: "500m"
-
-  interactionService:
-    enabled: true
-    name: interaction-service
-    image: im-interaction-service
-    replicas: 2
-    httpPort: 21009
-    grpcPort: 22009
-    resources:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "512Mi"
-        cpu: "500m"
-
-  commentService:
-    enabled: true
-    name: comment-service
-    image: im-comment-service
-    replicas: 2
-    httpPort: 21010
-    grpcPort: 22010
-    resources:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "512Mi"
-        cpu: "500m"
+        memory: "1Gi"
+        cpu: "750m"
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
 
   historyService:
     enabled: true

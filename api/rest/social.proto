@@ -1,0 +1,299 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+// ============ 好友相关消息 ============
+
+// 好友信息
+message FriendInfo {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+  int64 created_at = 4;
+}
+
+// 好友申请信息
+message FriendApplyInfo {
+  int64 applicant_id = 1;
+  string remark = 2;
+  int64 timestamp = 3;
+  string status = 4; // pending/accepted/rejected
+}
+
+// 添加好友请求
+message AddFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+}
+
+// 添加好友响应
+message AddFriendResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 删除好友请求
+message DeleteFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+}
+
+// 删除好友响应
+message DeleteFriendResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 查询好友列表请求
+message ListFriendsRequest {
+  int64 user_id = 1;
+  int32 page = 2;      // 页码，从1开始
+  int32 page_size = 3; // 每页大小，默认20
+}
+
+// 查询好友列表响应
+message ListFriendsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated FriendInfo friends = 3;
+  int32 total = 4;     // 总数
+  int32 page = 5;      // 当前页
+  int32 page_size = 6; // 每页大小
+}
+
+// 获取单个好友请求
+message GetFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+}
+
+// 获取单个好友响应
+message GetFriendResponse {
+  bool success = 1;
+  string message = 2;
+  FriendInfo friend = 3;
+}
+
+// 好友申请请求
+message ApplyFriendRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string remark = 3;
+}
+
+// 好友申请响应
+message ApplyFriendResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 回应好友申请请求
+message RespondFriendApplyRequest {
+  int64 user_id = 1;      // 被申请人
+  int64 applicant_id = 2; // 申请人
+  bool agree = 3;         // true=同意，false=拒绝
+}
+
+// 回应好友申请响应
+message RespondFriendApplyResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 查询好友申请列表请求
+message ListFriendApplyRequest {
+  int64 user_id = 1;
+}
+
+// 查询好友申请列表响应
+message ListFriendApplyResponse {
+  bool success = 1;
+  string message = 2;
+  repeated FriendApplyInfo applies = 3;
+  int32 total = 4;
+}
+
+// 设置好友别名请求
+message SetFriendAliasRequest {
+  int64 user_id = 1;
+  int64 friend_id = 2;
+  string alias = 3;
+}
+
+// 设置好友别名响应
+message SetFriendAliasResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============ 群组相关消息 ============
+
+// 群组信息
+message GroupInfo {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+  string avatar = 4;
+  int64 owner_id = 5;
+  int32 member_count = 6;
+  int32 max_members = 7;
+  bool is_public = 8;
+  string announcement = 9;
+  int64 created_at = 10;
+  int64 updated_at = 11;
+}
+
+// 群成员信息
+message GroupMemberInfo {
+  int64 user_id = 1;
+  int64 group_id = 2;
+  string role = 3; // owner, admin, member
+  string nickname = 4;
+  int64 joined_at = 5;
+}
+
+// 创建群组请求
+message CreateGroupRequest {
+  string name = 1;
+  string description = 2;
+  string avatar = 3;
+  int64 owner_id = 4;
+  bool is_public = 5;
+  int32 max_members = 6;
+  repeated int64 member_ids = 7;
+}
+
+// 创建群组响应
+message CreateGroupResponse {
+  bool success = 1;
+  string message = 2;
+  GroupInfo group = 3;
+}
+
+// 搜索群组请求
+message SearchGroupRequest {
+  string keyword = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+// 搜索群组响应
+message SearchGroupResponse {
+  bool success = 1;
+  string message = 2;
+  repeated GroupInfo groups = 3;
+  int32 total = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+// 获取群组信息请求
+message GetGroupInfoRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+}
+
+// 获取群组信息响应
+message GetGroupInfoResponse {
+  bool success = 1;
+  string message = 2;
+  GroupInfo group = 3;
+  repeated GroupMemberInfo members = 4;
+}
+
+// 解散群组请求
+message DisbandGroupRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+}
+
+// 解散群组响应
+message DisbandGroupResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 加入群组请求
+message JoinGroupRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+  string reason = 3;
+}
+
+// 加入群组响应
+message JoinGroupResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 退出群组请求
+message LeaveGroupRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+}
+
+// 退出群组响应
+message LeaveGroupResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 踢出成员请求
+message KickMemberRequest {
+  int64 group_id = 1;
+  int64 operator_id = 2;
+  int64 target_user_id = 3;
+  string reason = 4;
+}
+
+// 踢出成员响应
+message KickMemberResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 邀请加入群组请求
+message InviteToGroupRequest {
+  int64 group_id = 1;
+  int64 inviter_id = 2;
+  int64 user_id = 3;
+}
+
+// 邀请加入群组响应
+message InviteToGroupResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 发布群公告请求
+message PublishAnnouncementRequest {
+  int64 group_id = 1;
+  int64 user_id = 2;
+  string content = 3;
+}
+
+// 发布群公告响应
+message PublishAnnouncementResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 获取用户群组列表请求
+message GetUserGroupsRequest {
+  int64 user_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+// 获取用户群组列表响应
+message GetUserGroupsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated GroupInfo groups = 3;
+  int32 total = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}

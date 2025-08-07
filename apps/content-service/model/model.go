@@ -6,17 +6,21 @@ import (
 
 // Content 内容模型
 type Content struct {
-	ID           int64      `json:"id" gorm:"primaryKey;autoIncrement"`
-	AuthorID     int64      `json:"author_id" gorm:"not null;index"`
-	Title        string     `json:"title" gorm:"type:varchar(200);not null"`
-	Content      string     `json:"content" gorm:"type:text"`
-	Type         string     `json:"type" gorm:"type:varchar(20);not null;index"`
-	Status       string     `json:"status" gorm:"type:varchar(20);not null;index;default:'draft'"`
-	TemplateData string     `json:"template_data" gorm:"type:text"` // JSON格式的模板数据
-	ViewCount    int64      `json:"view_count" gorm:"default:0"`
-	CreatedAt    time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt    time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
-	PublishedAt  *time.Time `json:"published_at" gorm:"index"`
+	ID            int64      `json:"id" gorm:"primaryKey;autoIncrement"`
+	AuthorID      int64      `json:"author_id" gorm:"not null;index"`
+	Title         string     `json:"title" gorm:"type:varchar(200);not null"`
+	Content       string     `json:"content" gorm:"type:text"`
+	Type          string     `json:"type" gorm:"type:varchar(20);not null;index"`
+	Status        string     `json:"status" gorm:"type:varchar(20);not null;index;default:'draft'"`
+	TemplateData  string     `json:"template_data" gorm:"type:text"` // JSON格式的模板数据
+	ViewCount     int64      `json:"view_count" gorm:"default:0"`
+	LikeCount     int64      `json:"like_count" gorm:"default:0"`     // 点赞数
+	CommentCount  int64      `json:"comment_count" gorm:"default:0"`  // 评论数
+	ShareCount    int64      `json:"share_count" gorm:"default:0"`    // 分享数
+	FavoriteCount int64      `json:"favorite_count" gorm:"default:0"` // 收藏数
+	CreatedAt     time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt     time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+	PublishedAt   *time.Time `json:"published_at" gorm:"index"`
 
 	// 关联数据
 	MediaFiles []ContentMediaFile `json:"media_files" gorm:"foreignKey:ContentID"`
@@ -206,4 +210,114 @@ func CanTransitionStatus(from, to string) bool {
 		}
 	}
 	return false
+}
+
+// Comment 评论模型 - 支持多态关联
+type Comment struct {
+	ID              int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	TargetID        int64     `json:"target_id" gorm:"not null;index:idx_target"`                      // 被评论的对象ID
+	TargetType      string    `json:"target_type" gorm:"type:varchar(20);not null;index:idx_target"`   // 被评论的对象类型
+	UserID          int64     `json:"user_id" gorm:"not null;index"`                                   // 评论用户ID
+	UserName        string    `json:"user_name" gorm:"type:varchar(100);not null"`                     // 评论用户名（冗余字段）
+	UserAvatar      string    `json:"user_avatar" gorm:"type:varchar(500)"`                            // 评论用户头像（冗余字段）
+	Content         string    `json:"content" gorm:"type:text;not null"`                               // 评论内容
+	ParentID        int64     `json:"parent_id" gorm:"default:0;index"`                                // 父评论ID（0表示顶级评论）
+	RootID          int64     `json:"root_id" gorm:"default:0;index"`                                  // 根评论ID（用于快速定位评论树）
+	ReplyToUserID   int64     `json:"reply_to_user_id" gorm:"default:0"`                               // 回复的用户ID
+	ReplyToUserName string    `json:"reply_to_user_name" gorm:"type:varchar(100)"`                     // 回复的用户名
+	Status          string    `json:"status" gorm:"type:varchar(20);not null;index;default:'pending'"` // 评论状态
+	LikeCount       int32     `json:"like_count" gorm:"default:0"`                                     // 点赞数
+	ReplyCount      int32     `json:"reply_count" gorm:"default:0"`                                    // 回复数
+	IsPinned        bool      `json:"is_pinned" gorm:"default:false;index"`                            // 是否置顶
+	IsHot           bool      `json:"is_hot" gorm:"default:false;index"`                               // 是否热门
+	IPAddress       string    `json:"ip_address" gorm:"type:varchar(45)"`                              // IP地址
+	UserAgent       string    `json:"user_agent" gorm:"type:text"`                                     // 用户代理
+	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName .
+func (Comment) TableName() string {
+	return "comments"
+}
+
+// Interaction 互动模型 - 支持多态关联
+type Interaction struct {
+	ID              int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserID          int64     `json:"user_id" gorm:"not null;index:idx_user_target"`                      // 用户ID
+	TargetID        int64     `json:"target_id" gorm:"not null;index:idx_user_target,idx_target_type"`    // 目标对象ID
+	TargetType      string    `json:"target_type" gorm:"type:varchar(20);not null;index:idx_target_type"` // 目标对象类型
+	InteractionType string    `json:"interaction_type" gorm:"type:varchar(20);not null;index"`            // 互动类型
+	Metadata        string    `json:"metadata" gorm:"type:text"`                                          // JSON格式的元数据
+	CreatedAt       time.Time `json:"created_at" gorm:"autoCreateTime;index"`
+	UpdatedAt       time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName .
+func (Interaction) TableName() string {
+	return "interactions"
+}
+
+// InteractionStats 互动统计表（用于缓存热门数据）
+type InteractionStats struct {
+	ID            int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	TargetID      int64     `json:"target_id" gorm:"not null;uniqueIndex:idx_target_type"`
+	TargetType    string    `json:"target_type" gorm:"type:varchar(20);not null;uniqueIndex:idx_target_type"`
+	LikeCount     int64     `json:"like_count" gorm:"default:0"`
+	FavoriteCount int64     `json:"favorite_count" gorm:"default:0"`
+	ShareCount    int64     `json:"share_count" gorm:"default:0"`
+	RepostCount   int64     `json:"repost_count" gorm:"default:0"`
+	UpdatedAt     time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName .
+func (InteractionStats) TableName() string {
+	return "interaction_stats"
+}
+
+// StatsUpdate 统计更新结构
+type StatsUpdate struct {
+	TargetID        int64  `json:"target_id"`
+	TargetType      string `json:"target_type"`
+	InteractionType string `json:"interaction_type"`
+	Delta           int64  `json:"delta"`
+}
+
+// CommentQuery 评论查询参数
+type CommentQuery struct {
+	TargetID   int64
+	TargetType string
+	ParentID   int64
+	UserID     int64
+	Status     string
+	SortBy     string
+	SortOrder  string
+	Page       int32
+	PageSize   int32
+}
+
+// InteractionQuery 互动查询参数
+type InteractionQuery struct {
+	UserID          int64
+	TargetID        int64
+	TargetType      string
+	InteractionType string
+	Page            int32
+	PageSize        int32
+}
+
+// ContentDetailResult 内容详情聚合结果
+type ContentDetailResult struct {
+	Content          *Content
+	TopComments      []*Comment
+	InteractionStats *InteractionStats
+	UserInteractions map[string]bool
+}
+
+// ContentFeedItem 内容流项目
+type ContentFeedItem struct {
+	Content          *Content
+	InteractionStats *InteractionStats
+	UserInteractions map[string]bool
+	CommentPreview   int32
 }

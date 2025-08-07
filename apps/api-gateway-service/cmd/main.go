@@ -56,7 +56,7 @@ func main() {
 	app.EnableGRPC()
 
 	// 初始化Service层
-	svc := service.NewService(app.GetMongoDB(), app.GetRedisClient(), app.GetKafkaProducer(), app.GetConfig())
+	svc := service.NewService(app.GetMongoDB(), app.GetRedisClient(), app.GetKafkaProducer(), app.GetConfig(), app.GetLogger())
 
 	// 创建OpenTelemetry中间件
 	otelMW := middleware.NewOTelMiddleware(serviceName, app.GetLogger())

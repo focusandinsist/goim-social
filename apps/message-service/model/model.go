@@ -51,3 +51,97 @@ type HistoryMessage struct {
 	CreatedAt time.Time `bson:"created_at" json:"created_at"`
 	Status    int32     `bson:"status" json:"status"` // 0:未读 1:已读 2:撤回等
 }
+
+// ==================== 历史记录相关模型 ====================
+
+// 行为类型常量
+const (
+	ActionTypeView     = "view"
+	ActionTypeLike     = "like"
+	ActionTypeFavorite = "favorite"
+	ActionTypeShare    = "share"
+	ActionTypeComment  = "comment"
+	ActionTypeFollow   = "follow"
+	ActionTypeLogin    = "login"
+	ActionTypeSearch   = "search"
+	ActionTypeDownload = "download"
+	ActionTypePurchase = "purchase"
+	ActionTypeMessage  = "message" // 新增：消息发送
+)
+
+// 对象类型常量
+const (
+	ObjectTypePost    = "post"
+	ObjectTypeArticle = "article"
+	ObjectTypeVideo   = "video"
+	ObjectTypeUser    = "user"
+	ObjectTypeProduct = "product"
+	ObjectTypeGroup   = "group"
+	ObjectTypeMessage = "message" // 新增：消息对象
+)
+
+// HistoryRecord 历史记录模型（使用MongoDB存储）
+type HistoryRecord struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID      int64              `bson:"user_id" json:"user_id"`
+	ActionType  string             `bson:"action_type" json:"action_type"`
+	ObjectType  string             `bson:"object_type" json:"object_type"`
+	ObjectID    int64              `bson:"object_id" json:"object_id"`
+	ObjectTitle string             `bson:"object_title" json:"object_title"`
+	ObjectURL   string             `bson:"object_url" json:"object_url"`
+	Metadata    string             `bson:"metadata" json:"metadata"`
+	IPAddress   string             `bson:"ip_address" json:"ip_address"`
+	UserAgent   string             `bson:"user_agent" json:"user_agent"`
+	DeviceInfo  string             `bson:"device_info" json:"device_info"`
+	Location    string             `bson:"location" json:"location"`
+	Duration    int64              `bson:"duration" json:"duration"`
+	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
+}
+
+// UserActionStats 用户行为统计模型（使用MongoDB存储）
+type UserActionStats struct {
+	ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID         int64              `bson:"user_id" json:"user_id"`
+	ActionType     string             `bson:"action_type" json:"action_type"`
+	TotalCount     int64              `bson:"total_count" json:"total_count"`
+	TodayCount     int64              `bson:"today_count" json:"today_count"`
+	WeekCount      int64              `bson:"week_count" json:"week_count"`
+	MonthCount     int64              `bson:"month_count" json:"month_count"`
+	LastActionTime time.Time          `bson:"last_action_time" json:"last_action_time"`
+	UpdatedAt      time.Time          `bson:"updated_at" json:"updated_at"`
+}
+
+// ObjectHotStats 对象热度统计模型（使用MongoDB存储）
+type ObjectHotStats struct {
+	ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	ObjectType     string             `bson:"object_type" json:"object_type"`
+	ObjectID       int64              `bson:"object_id" json:"object_id"`
+	ViewCount      int64              `bson:"view_count" json:"view_count"`
+	LikeCount      int64              `bson:"like_count" json:"like_count"`
+	FavoriteCount  int64              `bson:"favorite_count" json:"favorite_count"`
+	ShareCount     int64              `bson:"share_count" json:"share_count"`
+	CommentCount   int64              `bson:"comment_count" json:"comment_count"`
+	HotScore       float64            `bson:"hot_score" json:"hot_score"`
+	LastUpdateTime time.Time          `bson:"last_update_time" json:"last_update_time"`
+	CreatedAt      time.Time          `bson:"created_at" json:"created_at"`
+}
+
+// ActionStatItem 行为统计项
+type ActionStatItem struct {
+	Date       string `json:"date"`
+	ActionType string `json:"action_type"`
+	Count      int64  `json:"count"`
+}
+
+// 分页参数
+const (
+	DefaultPageSize = 20
+	MaxPageSize     = 100
+)
+
+// 时间分组常量
+const (
+	GroupByDay   = "day"
+	GroupByWeek  = "week"
+	GroupByMonth = "month"
+)

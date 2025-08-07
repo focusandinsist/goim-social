@@ -57,7 +57,7 @@ func main() {
 	app.EnableGRPC()
 
 	// 初始化Service层
-	svc := service.NewService(app.GetMongoDB(), app.GetRedisClient(), app.GetKafkaProducer())
+	svc := service.NewService(app.GetMongoDB(), app.GetRedisClient(), app.GetKafkaProducer(), app.GetLogger())
 
 	// 启动Kafka消费者
 	ctx := context.Background()

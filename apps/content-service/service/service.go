@@ -653,3 +653,211 @@ func (s *Service) GetTopics(ctx context.Context, keyword string, hotOnly bool, p
 
 	return s.dao.GetTopics(ctx, keyword, hotOnly, page, pageSize)
 }
+
+// ==================== 辅助方法 ====================
+
+// updateCommentCounts 更新评论相关计数
+func (s *Service) updateCommentCounts(ctx context.Context, comment *model.Comment) {
+	// 更新目标对象的评论计数
+	if err := s.dao.UpdateTargetCommentCount(ctx, comment.TargetID, comment.TargetType, 1); err != nil {
+		s.logger.Error(ctx, "Failed to update target comment count",
+			logger.F("targetID", comment.TargetID),
+			logger.F("targetType", comment.TargetType),
+			logger.F("error", err.Error()))
+	}
+
+	// 如果是回复，更新父评论的回复计数
+	if comment.ParentID > 0 {
+		if err := s.dao.UpdateCommentReplyCount(ctx, comment.ParentID, 1); err != nil {
+			s.logger.Error(ctx, "Failed to update parent comment reply count",
+				logger.F("parentID", comment.ParentID),
+				logger.F("error", err.Error()))
+		}
+	}
+}
+
+// updateCommentCountsOnDelete 删除评论时更新计数
+func (s *Service) updateCommentCountsOnDelete(ctx context.Context, comment *model.Comment) {
+	// 更新目标对象的评论计数
+	if err := s.dao.UpdateTargetCommentCount(ctx, comment.TargetID, comment.TargetType, -1); err != nil {
+		s.logger.Error(ctx, "Failed to update target comment count on delete",
+			logger.F("targetID", comment.TargetID),
+			logger.F("targetType", comment.TargetType),
+			logger.F("error", err.Error()))
+	}
+
+	// 如果是回复，更新父评论的回复计数
+	if comment.ParentID > 0 {
+		if err := s.dao.UpdateCommentReplyCount(ctx, comment.ParentID, -1); err != nil {
+			s.logger.Error(ctx, "Failed to update parent comment reply count on delete",
+				logger.F("parentID", comment.ParentID),
+				logger.F("error", err.Error()))
+		}
+	}
+}
+
+// updateInteractionStats 更新互动统计
+func (s *Service) updateInteractionStats(ctx context.Context, targetID int64, targetType, interactionType string, delta int64) {
+	// 更新互动统计表
+	if err := s.dao.UpdateInteractionStats(ctx, targetID, targetType, interactionType, delta); err != nil {
+		s.logger.Error(ctx, "Failed to update interaction stats",
+			logger.F("targetID", targetID),
+			logger.F("targetType", targetType),
+			logger.F("interactionType", interactionType),
+			logger.F("delta", delta),
+			logger.F("error", err.Error()))
+	}
+
+	// 更新目标对象的计数
+	if delta > 0 {
+		if err := s.dao.IncrementInteractionCount(ctx, targetID, targetType, interactionType); err != nil {
+			s.logger.Error(ctx, "Failed to increment interaction count",
+				logger.F("targetID", targetID),
+				logger.F("targetType", targetType),
+				logger.F("interactionType", interactionType),
+				logger.F("error", err.Error()))
+		}
+	} else {
+		if err := s.dao.DecrementInteractionCount(ctx, targetID, targetType, interactionType); err != nil {
+			s.logger.Error(ctx, "Failed to decrement interaction count",
+				logger.F("targetID", targetID),
+				logger.F("targetType", targetType),
+				logger.F("interactionType", interactionType),
+				logger.F("error", err.Error()))
+		}
+	}
+}
+
+// publishCommentEvent 发布评论事件
+func (s *Service) publishCommentEvent(ctx context.Context, eventType string, comment *model.Comment) {
+	if s.kafka == nil {
+		return
+	}
+
+	// 构建事件消息（简化版，实际应该使用protobuf）
+	eventData := fmt.Sprintf(`{
+		"event_type": "%s",
+		"comment_id": %d,
+		"target_id": %d,
+		"target_type": "%s",
+		"user_id": %d,
+		"content": "%s",
+		"parent_id": %d,
+		"timestamp": %d
+	}`, eventType, comment.ID, comment.TargetID, comment.TargetType,
+		comment.UserID, comment.Content, comment.ParentID, time.Now().Unix())
+
+	if err := s.kafka.SendMessage("comment-events", nil, []byte(eventData)); err != nil {
+		s.logger.Error(ctx, "Failed to publish comment event",
+			logger.F("eventType", eventType),
+			logger.F("commentID", comment.ID),
+			logger.F("error", err.Error()))
+	}
+}
+
+// publishInteractionEvent 发布互动事件
+func (s *Service) publishInteractionEvent(ctx context.Context, eventType string, interaction *model.Interaction) {
+	if s.kafka == nil {
+		return
+	}
+
+	// 构建事件消息（简化版，实际应该使用protobuf）
+	eventData := fmt.Sprintf(`{
+		"event_type": "%s",
+		"interaction_id": %d,
+		"user_id": %d,
+		"target_id": %d,
+		"target_type": "%s",
+		"interaction_type": "%s",
+		"metadata": "%s",
+		"timestamp": %d
+	}`, eventType, interaction.ID, interaction.UserID, interaction.TargetID,
+		interaction.TargetType, interaction.InteractionType, interaction.Metadata, time.Now().Unix())
+
+	if err := s.kafka.SendMessage("interaction-events", nil, []byte(eventData)); err != nil {
+		s.logger.Error(ctx, "Failed to publish interaction event",
+			logger.F("eventType", eventType),
+			logger.F("interactionID", interaction.ID),
+			logger.F("error", err.Error()))
+	}
+}
+
+// publishContentEvent 发布内容事件
+func (s *Service) publishContentEvent(ctx context.Context, eventType string, content *model.Content) {
+	if s.kafka == nil {
+		return
+	}
+
+	// 构建事件消息（简化版，实际应该使用protobuf）
+	eventData := fmt.Sprintf(`{
+		"event_type": "%s",
+		"content_id": %d,
+		"author_id": %d,
+		"title": "%s",
+		"type": "%s",
+		"status": "%s",
+		"timestamp": %d
+	}`, eventType, content.ID, content.AuthorID, content.Title,
+		content.Type, content.Status, time.Now().Unix())
+
+	if err := s.kafka.SendMessage("content-events", nil, []byte(eventData)); err != nil {
+		s.logger.Error(ctx, "Failed to publish content event",
+			logger.F("eventType", eventType),
+			logger.F("contentID", content.ID),
+			logger.F("error", err.Error()))
+	}
+}
+
+// clearInteractionCache 清除互动相关缓存
+func (s *Service) clearInteractionCache(ctx context.Context, userID, targetID int64, targetType, interactionType string) {
+	if s.redis == nil {
+		return
+	}
+
+	// 清除用户互动缓存
+	userCacheKey := fmt.Sprintf("%s:%d:%s:%s", model.CacheKeyUserInteraction, userID, targetType, interactionType)
+	if err := s.redis.Del(ctx, userCacheKey); err != nil {
+		s.logger.Error(ctx, "Failed to clear user interaction cache",
+			logger.F("cacheKey", userCacheKey),
+			logger.F("error", err.Error()))
+	}
+
+	// 清除目标对象统计缓存
+	statsCacheKey := fmt.Sprintf("%s:%d:%s", model.CacheKeyInteractionStats, targetID, targetType)
+	if err := s.redis.Del(ctx, statsCacheKey); err != nil {
+		s.logger.Error(ctx, "Failed to clear interaction stats cache",
+			logger.F("cacheKey", statsCacheKey),
+			logger.F("error", err.Error()))
+	}
+}
+
+// clearContentCache 清除内容相关缓存
+func (s *Service) clearContentCache(ctx context.Context, contentID int64) {
+	if s.redis == nil {
+		return
+	}
+
+	// 清除内容详情缓存
+	detailCacheKey := fmt.Sprintf("%s:%d", model.CacheKeyContentDetail, contentID)
+	if err := s.redis.Del(ctx, detailCacheKey); err != nil {
+		s.logger.Error(ctx, "Failed to clear content detail cache",
+			logger.F("cacheKey", detailCacheKey),
+			logger.F("error", err.Error()))
+	}
+
+	// 清除内容统计缓存
+	statsCacheKey := fmt.Sprintf("%s:%d", model.CacheKeyContentStats, contentID)
+	if err := s.redis.Del(ctx, statsCacheKey); err != nil {
+		s.logger.Error(ctx, "Failed to clear content stats cache",
+			logger.F("cacheKey", statsCacheKey),
+			logger.F("error", err.Error()))
+	}
+
+	// 清除热门内容缓存
+	hotCacheKey := model.CacheKeyHotContent
+	if err := s.redis.Del(ctx, hotCacheKey); err != nil {
+		s.logger.Error(ctx, "Failed to clear hot content cache",
+			logger.F("cacheKey", hotCacheKey),
+			logger.F("error", err.Error()))
+	}
+}

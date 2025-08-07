@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-service
+  namespace: im-system
+  labels:
+    app: message-service
+    app.kubernetes.io/name: message-service
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: messaging
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: message-service
+  template:
+    metadata:
+      labels:
+        app: message-service
+        app.kubernetes.io/name: message-service
+        app.kubernetes.io/part-of: instant-messaging
+        app.kubernetes.io/component: messaging
+    spec:
+      serviceAccountName: im-service-account
+      containers:
+      - name: message-service
+        image: goim-social/message-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 21004
+          protocol: TCP
+        - name: grpc
+          containerPort: 22004
+          protocol: TCP
+        env:
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        envFrom:
+        - configMapRef:
+            name: im-config
+        - secretRef:
+            name: im-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: logs
+        emptyDir: {}
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: message-service
+  namespace: im-system
+  labels:
+    app: message-service
+    app.kubernetes.io/name: message-service
+    app.kubernetes.io/part-of: instant-messaging
+    app.kubernetes.io/component: messaging
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 21004
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 22004
+    targetPort: grpc
+    protocol: TCP
+  selector:
+    app: message-service

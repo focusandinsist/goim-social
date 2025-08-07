@@ -29,12 +29,23 @@ func NewHTTPHandler(service *service.Service, logger logger.Logger) *HTTPHandler
 
 // RegisterRoutes 注册HTTP路由
 func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
-	api := r.Group("/api/v1/messages")
+	// 消息相关路由
+	messages := r.Group("/api/v1/messages")
 	{
-		api.POST("/history", h.GetHistory)         // 获取历史消息
-		api.POST("/unread", h.GetUnreadMessages)   // 获取未读消息
-		api.POST("/mark-read", h.MarkMessagesRead) // 标记消息已读
-		api.POST("/send", h.SendMessage)           // 特殊场景下的短连接消息，如测试、某些网络环境下的备用通道
+		messages.POST("/history", h.GetHistory)         // 获取历史消息
+		messages.POST("/unread", h.GetUnreadMessages)   // 获取未读消息
+		messages.POST("/mark-read", h.MarkMessagesRead) // 标记消息已读
+		messages.POST("/send", h.SendMessage)           // 特殊场景下的短连接消息，如测试、某些网络环境下的备用通道
+	}
+
+	// 历史记录相关路由
+	history := r.Group("/api/v1/history")
+	{
+		history.POST("/record", h.RecordUserAction)        // 记录用户行为
+		history.POST("/batch-record", h.BatchRecordAction) // 批量记录用户行为
+		history.POST("/user", h.GetUserHistory)            // 获取用户历史记录
+		history.POST("/delete", h.DeleteUserHistory)       // 删除用户历史记录
+		history.POST("/stats", h.GetUserActionStats)       // 获取用户行为统计
 	}
 }
 
@@ -142,6 +153,204 @@ func (h *HTTPHandler) MarkMessagesRead(c *gin.Context) {
 		res = h.converter.BuildErrorMarkMessagesReadResponse(err.Error())
 	} else {
 		res = h.converter.BuildSuccessMarkMessagesReadResponse(failedIDs)
+	}
+
+	httpx.WriteObject(c, res, err)
+}
+
+// ==================== 历史记录相关处理函数 ====================
+
+// RecordUserAction 记录用户行为
+func (h *HTTPHandler) RecordUserAction(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req rest.RecordUserActionRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid record user action request", logger.F("error", err.Error()))
+		res := h.converter.BuildErrorRecordUserActionResponse("Invalid request format")
+		httpx.WriteObject(c, res, err)
+		return
+	}
+
+	// 从context获取用户信息
+	userID := tracecontext.GetUserID(ctx)
+	if userID == 0 {
+		userID = req.UserId
+	}
+
+	// 调用service层记录用户行为
+	err := h.service.RecordUserAction(
+		ctx,
+		userID,
+		h.converter.ActionTypeToString(req.ActionType),
+		h.converter.ObjectTypeToString(req.ObjectType),
+		req.ObjectId,
+		req.ObjectTitle,
+		req.ObjectUrl,
+		req.Metadata,
+		req.IpAddress,
+		req.UserAgent,
+		req.DeviceInfo,
+		req.Location,
+		req.Duration,
+	)
+
+	var res *rest.RecordUserActionResponse
+	if err != nil {
+		h.logger.Error(ctx, "Record user action failed", logger.F("error", err.Error()))
+		res = h.converter.BuildErrorRecordUserActionResponse(err.Error())
+	} else {
+		res = h.converter.BuildSuccessRecordUserActionResponse()
+	}
+
+	httpx.WriteObject(c, res, err)
+}
+
+// BatchRecordAction 批量记录用户行为
+func (h *HTTPHandler) BatchRecordAction(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req rest.BatchRecordUserActionRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid batch record user action request", logger.F("error", err.Error()))
+		res := h.converter.BuildErrorBatchRecordUserActionResponse("Invalid request format")
+		httpx.WriteObject(c, res, err)
+		return
+	}
+
+	// 转换请求为模型
+	records := h.converter.ConvertToHistoryRecords(req.Actions)
+
+	// 调用service层批量记录用户行为
+	successCount, failedCount, errors := h.service.BatchRecordUserAction(ctx, records)
+
+	res := h.converter.BuildBatchRecordUserActionResponse(successCount, failedCount, errors)
+	httpx.WriteObject(c, res, nil)
+}
+
+// GetUserHistory 获取用户历史记录
+func (h *HTTPHandler) GetUserHistory(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req rest.GetUserHistoryRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid get user history request", logger.F("error", err.Error()))
+		res := h.converter.BuildErrorGetUserHistoryResponse("Invalid request format")
+		httpx.WriteObject(c, res, err)
+		return
+	}
+
+	// 从context获取用户信息
+	userID := tracecontext.GetUserID(ctx)
+	if userID == 0 {
+		userID = req.UserId
+	}
+
+	// 解析时间参数
+	startTime, endTime, err := h.converter.ParseTimeRange(req.StartTime, req.EndTime)
+	if err != nil {
+		h.logger.Error(ctx, "Invalid time range", logger.F("error", err.Error()))
+		res := h.converter.BuildErrorGetUserHistoryResponse("Invalid time range")
+		httpx.WriteObject(c, res, err)
+		return
+	}
+
+	// 调用service层获取用户历史记录
+	records, total, err := h.service.GetUserHistory(
+		ctx,
+		userID,
+		h.converter.ActionTypeToString(req.ActionType),
+		h.converter.ObjectTypeToString(req.ObjectType),
+		startTime,
+		endTime,
+		req.Page,
+		req.PageSize,
+	)
+
+	var res *rest.GetUserHistoryResponse
+	if err != nil {
+		h.logger.Error(ctx, "Get user history failed", logger.F("error", err.Error()))
+		res = h.converter.BuildErrorGetUserHistoryResponse(err.Error())
+	} else {
+		res = h.converter.BuildGetUserHistoryResponse(records, total, req.Page, req.PageSize)
+	}
+
+	httpx.WriteObject(c, res, err)
+}
+
+// DeleteUserHistory 删除用户历史记录
+func (h *HTTPHandler) DeleteUserHistory(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req rest.DeleteHistoryRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid delete user history request", logger.F("error", err.Error()))
+		res := h.converter.BuildErrorDeleteHistoryResponse("Invalid request format")
+		httpx.WriteObject(c, res, err)
+		return
+	}
+
+	// 从context获取用户信息
+	userID := tracecontext.GetUserID(ctx)
+	if userID == 0 {
+		userID = req.UserId
+	}
+
+	// 转换记录ID为字符串数组
+	recordIDs := h.converter.ConvertRecordIDs(req.RecordIds)
+
+	// 调用service层删除用户历史记录
+	deletedCount, err := h.service.DeleteUserHistory(ctx, userID, recordIDs)
+
+	var res *rest.DeleteHistoryResponse
+	if err != nil {
+		h.logger.Error(ctx, "Delete user history failed", logger.F("error", err.Error()))
+		res = h.converter.BuildErrorDeleteHistoryResponse(err.Error())
+	} else {
+		res = h.converter.BuildDeleteHistoryResponse(deletedCount)
+	}
+
+	httpx.WriteObject(c, res, err)
+}
+
+// GetUserActionStats 获取用户行为统计
+func (h *HTTPHandler) GetUserActionStats(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req rest.GetUserActionStatsRequest
+	if err := c.Bind(&req); err != nil {
+		h.logger.Error(ctx, "Invalid get user action stats request", logger.F("error", err.Error()))
+		res := h.converter.BuildErrorGetUserActionStatsResponse("Invalid request format")
+		httpx.WriteObject(c, res, err)
+		return
+	}
+
+	// 从context获取用户信息
+	userID := tracecontext.GetUserID(ctx)
+	if userID == 0 {
+		userID = req.UserId
+	}
+
+	// 解析时间参数
+	startTime, endTime, err := h.converter.ParseTimeRange(req.StartTime, req.EndTime)
+	if err != nil {
+		h.logger.Error(ctx, "Invalid time range", logger.F("error", err.Error()))
+		res := h.converter.BuildErrorGetUserActionStatsResponse("Invalid time range")
+		httpx.WriteObject(c, res, err)
+		return
+	}
+
+	// 调用service层获取用户行为统计
+	stats, err := h.service.GetUserActionStats(
+		ctx,
+		userID,
+		h.converter.ActionTypeToString(req.ActionType),
+		startTime,
+		endTime,
+		req.GroupBy,
+	)
+
+	var res *rest.GetUserActionStatsResponse
+	if err != nil {
+		h.logger.Error(ctx, "Get user action stats failed", logger.F("error", err.Error()))
+		res = h.converter.BuildErrorGetUserActionStatsResponse(err.Error())
+	} else {
+		res = h.converter.BuildGetUserActionStatsResponse(stats)
 	}
 
 	httpx.WriteObject(c, res, err)

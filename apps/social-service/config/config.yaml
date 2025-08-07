@@ -1,0 +1,43 @@
+server:
+  port: 22001
+  mode: debug
+
+database:
+  postgresql:
+    host: localhost
+    port: 5432
+    user: postgres
+    password: postgres
+    dbname: goim_social
+    sslmode: disable
+    max_open_conns: 100
+    max_idle_conns: 10
+    conn_max_lifetime: 3600
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+  pool_size: 10
+  min_idle_conns: 5
+
+kafka:
+  brokers:
+    - localhost:9092
+  producer:
+    retry_max: 3
+    batch_size: 16384
+    linger_ms: 10
+    compression_type: snappy
+
+logger:
+  level: info
+  format: json
+  output: stdout
+
+telemetry:
+  endpoint: http://localhost:14268/api/traces
+  service_name: social-service
+  service_version: 1.0.0
+  environment: development
+  sample_rate: 1.0
