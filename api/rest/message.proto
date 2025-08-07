@@ -95,4 +95,144 @@ message MessageEvent {
   int64 timestamp = 3;    // 时间戳
 }
 
+// ==================== 历史记录相关定义 ====================
 
+// 行为类型枚举
+enum ActionType {
+  ACTION_TYPE_UNSPECIFIED = 0;
+  ACTION_TYPE_VIEW = 1;           // 浏览
+  ACTION_TYPE_LIKE = 2;           // 点赞
+  ACTION_TYPE_FAVORITE = 3;       // 收藏
+  ACTION_TYPE_SHARE = 4;          // 分享
+  ACTION_TYPE_COMMENT = 5;        // 评论
+  ACTION_TYPE_FOLLOW = 6;         // 关注
+  ACTION_TYPE_LOGIN = 7;          // 登录
+  ACTION_TYPE_SEARCH = 8;         // 搜索
+  ACTION_TYPE_DOWNLOAD = 9;       // 下载
+  ACTION_TYPE_PURCHASE = 10;      // 购买
+  ACTION_TYPE_MESSAGE = 11;       // 消息发送（新增）
+}
+
+// 对象类型枚举
+enum HistoryObjectType {
+  HISTORY_OBJECT_TYPE_UNSPECIFIED = 0;
+  HISTORY_OBJECT_TYPE_POST = 1;           // 帖子
+  HISTORY_OBJECT_TYPE_ARTICLE = 2;        // 文章
+  HISTORY_OBJECT_TYPE_VIDEO = 3;          // 视频
+  HISTORY_OBJECT_TYPE_USER = 4;           // 用户
+  HISTORY_OBJECT_TYPE_PRODUCT = 5;        // 商品
+  HISTORY_OBJECT_TYPE_GROUP = 6;          // 群组
+  HISTORY_OBJECT_TYPE_MESSAGE = 7;        // 消息（新增）
+}
+
+// 历史记录信息
+message HistoryRecord {
+  int64 id = 1;
+  int64 user_id = 2;              // 用户ID
+  ActionType action_type = 3;     // 行为类型
+  HistoryObjectType object_type = 4;     // 对象类型
+  int64 object_id = 5;            // 对象ID
+  string object_title = 6;        // 对象标题（冗余字段，便于显示）
+  string object_url = 7;          // 对象URL（可选）
+  string metadata = 8;            // 扩展数据（JSON格式）
+  string ip_address = 9;          // IP地址
+  string user_agent = 10;         // 用户代理
+  string device_info = 11;        // 设备信息
+  string location = 12;           // 地理位置（可选）
+  int64 duration = 13;            // 持续时间（秒，适用于浏览等行为）
+  string created_at = 14;
+}
+
+// 记录用户行为请求
+message RecordUserActionRequest {
+  int64 user_id = 1;
+  ActionType action_type = 2;
+  HistoryObjectType object_type = 3;
+  int64 object_id = 4;
+  string object_title = 5;
+  string object_url = 6;
+  string metadata = 7;
+  string ip_address = 8;
+  string user_agent = 9;
+  string device_info = 10;
+  string location = 11;
+  int64 duration = 12;
+}
+
+// 记录用户行为响应
+message RecordUserActionResponse {
+  bool success = 1;
+  string message = 2;
+  int64 record_id = 3;
+}
+
+// 获取用户历史记录请求
+message GetUserHistoryRequest {
+  int64 user_id = 1;
+  ActionType action_type = 2;     // 可选，筛选特定行为类型
+  HistoryObjectType object_type = 3; // 可选，筛选特定对象类型
+  string start_time = 4;          // 开始时间
+  string end_time = 5;            // 结束时间
+  int32 page = 6;
+  int32 page_size = 7;
+}
+
+// 获取用户历史记录响应
+message GetUserHistoryResponse {
+  bool success = 1;
+  string message = 2;
+  repeated HistoryRecord records = 3;
+  int64 total = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+// 删除历史记录请求
+message DeleteHistoryRequest {
+  int64 user_id = 1;
+  repeated int64 record_ids = 2;  // 要删除的记录ID列表
+}
+
+// 删除历史记录响应
+message DeleteHistoryResponse {
+  bool success = 1;
+  string message = 2;
+  int32 deleted_count = 3;
+}
+
+// 获取用户行为统计请求
+message GetUserActionStatsRequest {
+  int64 user_id = 1;
+  ActionType action_type = 2;     // 可选
+  string start_time = 3;          // 开始时间
+  string end_time = 4;            // 结束时间
+  string group_by = 5;            // 分组方式：day, week, month
+}
+
+// 行为统计项
+message ActionStatItem {
+  string date = 1;                // 日期
+  ActionType action_type = 2;     // 行为类型
+  int64 count = 3;                // 次数
+}
+
+// 获取用户行为统计响应
+message GetUserActionStatsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated ActionStatItem stats = 3;
+}
+
+// 批量记录用户行为请求
+message BatchRecordUserActionRequest {
+  repeated RecordUserActionRequest actions = 1;
+}
+
+// 批量记录用户行为响应
+message BatchRecordUserActionResponse {
+  bool success = 1;
+  string message = 2;
+  int32 success_count = 3;
+  int32 failed_count = 4;
+  repeated string errors = 5;
+}
