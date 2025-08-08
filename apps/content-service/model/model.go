@@ -134,20 +134,6 @@ type ContentStats struct {
 	TotalLikes        int64 `json:"total_likes"`
 }
 
-// SearchContentParams 搜索内容参数
-type SearchContentParams struct {
-	Keyword   string
-	Type      string
-	Status    string
-	TagIDs    []int64
-	TopicIDs  []int64
-	AuthorID  int64
-	Page      int32
-	PageSize  int32
-	SortBy    string
-	SortOrder string
-}
-
 // ValidateContentType 验证内容类型
 func ValidateContentType(contentType string) bool {
 	validTypes := []string{

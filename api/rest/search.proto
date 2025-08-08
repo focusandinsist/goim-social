@@ -1,0 +1,635 @@
+syntax = "proto3";
+
+package rest;
+
+option go_package = ".;rest";
+
+// 搜索服务
+service SearchService {
+  // 通用搜索
+  rpc Search(SearchRequest) returns (SearchResponse);
+  
+  // 内容搜索
+  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse);
+  
+  // 用户搜索
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+  
+  // 消息搜索
+  rpc SearchMessages(SearchMessagesRequest) returns (SearchMessagesResponse);
+  
+  // 群组搜索
+  rpc SearchGroups(SearchGroupsRequest) returns (SearchGroupsResponse);
+  
+  // 多类型搜索
+  rpc MultiSearch(MultiSearchRequest) returns (MultiSearchResponse);
+  
+  // 获取搜索建议
+  rpc GetSuggestions(GetSuggestionsRequest) returns (GetSuggestionsResponse);
+  
+  // 获取自动完成
+  rpc GetAutoComplete(GetAutoCompleteRequest) returns (GetAutoCompleteResponse);
+  
+  // 获取热门搜索
+  rpc GetHotSearches(GetHotSearchesRequest) returns (GetHotSearchesResponse);
+  
+  // 获取搜索历史
+  rpc GetSearchHistory(GetSearchHistoryRequest) returns (GetSearchHistoryResponse);
+  
+  // 清空搜索历史
+  rpc ClearSearchHistory(ClearSearchHistoryRequest) returns (ClearSearchHistoryResponse);
+  
+  // 删除搜索历史项
+  rpc DeleteSearchHistoryItem(DeleteSearchHistoryItemRequest) returns (DeleteSearchHistoryItemResponse);
+  
+  // 获取用户搜索偏好
+  rpc GetUserSearchPreference(GetUserSearchPreferenceRequest) returns (GetUserSearchPreferenceResponse);
+  
+  // 更新用户搜索偏好
+  rpc UpdateUserSearchPreference(UpdateUserSearchPreferenceRequest) returns (UpdateUserSearchPreferenceResponse);
+}
+
+// 索引管理服务
+service IndexService {
+  // 创建索引
+  rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse);
+  
+  // 删除索引
+  rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse);
+  
+  // 重建索引
+  rpc ReindexAll(ReindexAllRequest) returns (ReindexAllResponse);
+  
+  // 按类型重建索引
+  rpc ReindexByType(ReindexByTypeRequest) returns (ReindexByTypeResponse);
+  
+  // 索引文档
+  rpc IndexDocument(IndexDocumentRequest) returns (IndexDocumentResponse);
+  
+  // 更新文档
+  rpc UpdateDocument(UpdateDocumentRequest) returns (UpdateDocumentResponse);
+  
+  // 删除文档
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse);
+  
+  // 批量索引文档
+  rpc BulkIndexDocuments(BulkIndexDocumentsRequest) returns (BulkIndexDocumentsResponse);
+  
+  // 从数据库同步
+  rpc SyncFromDatabase(SyncFromDatabaseRequest) returns (SyncFromDatabaseResponse);
+  
+  // 获取同步状态
+  rpc GetSyncStatus(GetSyncStatusRequest) returns (GetSyncStatusResponse);
+  
+  // 健康检查
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  
+  // 获取集群信息
+  rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse);
+}
+
+// ============ 搜索请求和响应 ============
+
+message SearchRequest {
+  string query = 1;
+  string type = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  string sort_by = 5;
+  string sort_order = 6;
+  bool highlight = 7;
+  int64 user_id = 8;
+  map<string, string> filters = 9;
+}
+
+message SearchResponse {
+  repeated SearchResult results = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  string query = 5;
+  string type = 6;
+  int64 took = 7;
+  map<string, string> aggregations = 8;
+}
+
+message SearchResult {
+  string id = 1;
+  string type = 2;
+  string title = 3;
+  string content = 4;
+  string summary = 5;
+  repeated string tags = 6;
+  int64 author_id = 7;
+  string author_name = 8;
+  string author_avatar = 9;
+  int64 created_at = 10;
+  int64 updated_at = 11;
+  float score = 12;
+  map<string, string> highlights = 13;
+  map<string, string> extra_data = 14;
+}
+
+// ============ 内容搜索 ============
+
+message SearchContentRequest {
+  string query = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+  string sort_by = 4;
+  string sort_order = 5;
+  bool highlight = 6;
+  int64 user_id = 7;
+  string category = 8;
+  int64 author_id = 9;
+  repeated string tags = 10;
+  string status = 11;
+  bool is_public = 12;
+  string date_from = 13;
+  string date_to = 14;
+}
+
+message SearchContentResponse {
+  repeated ContentSearchResult results = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  int64 took = 5;
+  map<string, int64> category_counts = 6;
+  map<string, int64> tag_counts = 7;
+}
+
+message ContentSearchResult {
+  int64 id = 1;
+  string title = 2;
+  string content = 3;
+  string summary = 4;
+  string category = 5;
+  repeated string tags = 6;
+  int64 author_id = 7;
+  string author_name = 8;
+  string author_avatar = 9;
+  string status = 10;
+  bool is_public = 11;
+  int64 view_count = 12;
+  int64 like_count = 13;
+  int64 comment_count = 14;
+  int64 created_at = 15;
+  int64 updated_at = 16;
+  float score = 17;
+  map<string, string> highlights = 18;
+}
+
+// ============ 用户搜索 ============
+
+message SearchUsersRequest {
+  string query = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+  string sort_by = 4;
+  string sort_order = 5;
+  bool highlight = 6;
+  int64 user_id = 7;
+  bool is_verified = 8;
+  string status = 9;
+  string role = 10;
+  string date_from = 11;
+  string date_to = 12;
+}
+
+message SearchUsersResponse {
+  repeated UserSearchResult results = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  int64 took = 5;
+  map<string, int64> role_counts = 6;
+  map<string, int64> status_counts = 7;
+}
+
+message UserSearchResult {
+  int64 id = 1;
+  string username = 2;
+  string nickname = 3;
+  string email = 4;
+  string phone = 5;
+  string avatar = 6;
+  string bio = 7;
+  string status = 8;
+  string role = 9;
+  bool is_verified = 10;
+  int64 follower_count = 11;
+  int64 following_count = 12;
+  int64 content_count = 13;
+  int64 created_at = 14;
+  int64 updated_at = 15;
+  int64 last_login_at = 16;
+  float score = 17;
+  map<string, string> highlights = 18;
+}
+
+// ============ 消息搜索 ============
+
+message SearchMessagesRequest {
+  string query = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+  string sort_by = 4;
+  string sort_order = 5;
+  bool highlight = 6;
+  int64 user_id = 7;
+  int64 group_id = 8;
+  int64 sender_id = 9;
+  string message_type = 10;
+  string date_from = 11;
+  string date_to = 12;
+}
+
+message SearchMessagesResponse {
+  repeated MessageSearchResult results = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  int64 took = 5;
+  map<string, string> type_counts = 6;
+  map<string, string> group_counts = 7;
+}
+
+message MessageSearchResult {
+  int64 id = 1;
+  string content = 2;
+  string message_type = 3;
+  int64 sender_id = 4;
+  string sender_name = 5;
+  string sender_avatar = 6;
+  int64 group_id = 7;
+  string group_name = 8;
+  int64 created_at = 9;
+  int64 updated_at = 10;
+  float score = 11;
+  map<string, string> highlights = 12;
+  map<string, string> extra_data = 13;
+}
+
+// ============ 群组搜索 ============
+
+message SearchGroupsRequest {
+  string query = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+  string sort_by = 4;
+  string sort_order = 5;
+  bool highlight = 6;
+  int64 user_id = 7;
+  bool is_public = 8;
+  string status = 9;
+  string category = 10;
+  string date_from = 11;
+  string date_to = 12;
+}
+
+message SearchGroupsResponse {
+  repeated GroupSearchResult results = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  int64 took = 5;
+  map<string, int64> category_counts = 6;
+  map<string, int64> status_counts = 7;
+}
+
+message GroupSearchResult {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+  string category = 4;
+  string avatar = 5;
+  string status = 6;
+  bool is_public = 7;
+  int64 owner_id = 8;
+  string owner_name = 9;
+  int64 member_count = 10;
+  int64 message_count = 11;
+  int64 created_at = 12;
+  int64 updated_at = 13;
+  float score = 14;
+  map<string, string> highlights = 15;
+}
+
+// ============ 多类型搜索 ============
+
+message MultiSearchRequest {
+  string query = 1;
+  repeated string types = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  string sort_by = 5;
+  string sort_order = 6;
+  bool highlight = 7;
+  int64 user_id = 8;
+  map<string, string> filters = 9;
+}
+
+message MultiSearchResponse {
+  map<string, TypeSearchResults> results = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  int64 took = 5;
+  map<string, int64> type_counts = 6;
+}
+
+message TypeSearchResults {
+  repeated SearchResult results = 1;
+  int64 total = 2;
+}
+
+// ============ 搜索建议 ============
+
+message GetSuggestionsRequest {
+  string query = 1;
+  string type = 2;
+  int32 limit = 3;
+  int64 user_id = 4;
+}
+
+message GetSuggestionsResponse {
+  repeated SearchSuggestion suggestions = 1;
+}
+
+message SearchSuggestion {
+  string text = 1;
+  string type = 2;
+  float score = 3;
+  map<string, string> extra_data = 4;
+}
+
+// ============ 自动完成 ============
+
+message GetAutoCompleteRequest {
+  string query = 1;
+  string type = 2;
+  int32 limit = 3;
+  int64 user_id = 4;
+}
+
+message GetAutoCompleteResponse {
+  repeated AutoCompleteItem items = 1;
+}
+
+message AutoCompleteItem {
+  string text = 1;
+  string type = 2;
+  int64 count = 3;
+  map<string, string> extra_data = 4;
+}
+
+// ============ 热门搜索 ============
+
+message GetHotSearchesRequest {
+  string type = 1;
+  int32 limit = 2;
+}
+
+message GetHotSearchesResponse {
+  repeated HotSearch hot_searches = 1;
+}
+
+message HotSearch {
+  string query = 1;
+  string type = 2;
+  int64 search_count = 3;
+  int64 last_search_time = 4;
+}
+
+// ============ 搜索历史 ============
+
+message GetSearchHistoryRequest {
+  int64 user_id = 1;
+  string type = 2;
+  int32 limit = 3;
+}
+
+message GetSearchHistoryResponse {
+  repeated SearchHistoryItem items = 1;
+}
+
+message SearchHistoryItem {
+  int64 id = 1;
+  int64 user_id = 2;
+  string query = 3;
+  string search_type = 4;
+  int32 result_count = 5;
+  string clicked_result_id = 6;
+  string clicked_result_type = 7;
+  int64 search_time = 8;
+}
+
+message ClearSearchHistoryRequest {
+  int64 user_id = 1;
+  string type = 2;
+}
+
+message ClearSearchHistoryResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteSearchHistoryItemRequest {
+  int64 user_id = 1;
+  int64 item_id = 2;
+}
+
+message DeleteSearchHistoryItemResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============ 用户搜索偏好 ============
+
+message GetUserSearchPreferenceRequest {
+  int64 user_id = 1;
+}
+
+message GetUserSearchPreferenceResponse {
+  UserSearchPreference preference = 1;
+}
+
+message UpdateUserSearchPreferenceRequest {
+  int64 user_id = 1;
+  UserSearchPreference preference = 2;
+}
+
+message UpdateUserSearchPreferenceResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message UserSearchPreference {
+  int64 user_id = 1;
+  repeated string preferred_types = 2;
+  map<string, string> search_filters = 3;
+  map<string, string> sort_preferences = 4;
+  string language_preference = 5;
+  int32 results_per_page = 6;
+  bool enable_suggestions = 7;
+  bool enable_history = 8;
+  int64 created_at = 9;
+  int64 updated_at = 10;
+}
+
+// ============ 索引管理请求和响应 ============
+
+message CreateIndexRequest {
+  string index_name = 1;
+  string index_type = 2;
+  map<string, string> settings = 3;
+  map<string, string> mappings = 4;
+}
+
+message CreateIndexResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteIndexRequest {
+  string index_name = 1;
+}
+
+message DeleteIndexResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ReindexAllRequest {
+  bool force = 1;
+}
+
+message ReindexAllResponse {
+  bool success = 1;
+  string message = 2;
+  string task_id = 3;
+}
+
+message ReindexByTypeRequest {
+  string index_type = 1;
+  bool force = 2;
+}
+
+message ReindexByTypeResponse {
+  bool success = 1;
+  string message = 2;
+  string task_id = 3;
+}
+
+message IndexDocumentRequest {
+  string index_type = 1;
+  string document_id = 2;
+  map<string, string> document = 3;
+}
+
+message IndexDocumentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message UpdateDocumentRequest {
+  string index_type = 1;
+  string document_id = 2;
+  map<string, string> document = 3;
+}
+
+message UpdateDocumentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteDocumentRequest {
+  string index_type = 1;
+  string document_id = 2;
+}
+
+message DeleteDocumentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message BulkIndexDocumentsRequest {
+  string index_type = 1;
+  repeated IndexDocument documents = 2;
+}
+
+message BulkIndexDocumentsResponse {
+  bool success = 1;
+  string message = 2;
+  int32 indexed_count = 3;
+  int32 failed_count = 4;
+}
+
+message IndexDocument {
+  string id = 1;
+  map<string, string> data = 2;
+}
+
+message SyncFromDatabaseRequest {
+  string source_service = 1;
+  string source_table = 2;
+  string target_index = 3;
+  bool full_sync = 4;
+}
+
+message SyncFromDatabaseResponse {
+  bool success = 1;
+  string message = 2;
+  string task_id = 3;
+}
+
+message GetSyncStatusRequest {
+  string source_table = 1;
+  string target_index = 2;
+}
+
+message GetSyncStatusResponse {
+  SyncStatus status = 1;
+}
+
+message SyncStatus {
+  string source_table = 1;
+  string source_service = 2;
+  string target_index = 3;
+  int64 last_sync_id = 4;
+  int64 last_sync_time = 5;
+  string sync_status = 6;
+  string error_message = 7;
+  int64 created_at = 8;
+  int64 updated_at = 9;
+}
+
+message HealthCheckRequest {
+}
+
+message HealthCheckResponse {
+  bool healthy = 1;
+  string message = 2;
+  map<string, string> details = 3;
+}
+
+message GetClusterInfoRequest {
+}
+
+message GetClusterInfoResponse {
+  ClusterInfo info = 1;
+}
+
+message ClusterInfo {
+  string cluster_name = 1;
+  string cluster_status = 2;
+  int32 node_count = 3;
+  int32 data_node_count = 4;
+  int64 total_shards = 5;
+  int64 active_shards = 6;
+  int64 relocating_shards = 7;
+  int64 initializing_shards = 8;
+  int64 unassigned_shards = 9;
+  map<string, string> indices = 10;
+}

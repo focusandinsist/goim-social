@@ -169,30 +169,6 @@ message ChangeContentStatusResponse {
   Content content = 3;
 }
 
-// 搜索内容请求
-message SearchContentRequest {
-  string keyword = 1;
-  ContentType type = 2; // 内容类型过滤
-  ContentStatus status = 3; // 状态过滤
-  repeated int64 tag_ids = 4; // 标签过滤
-  repeated int64 topic_ids = 5; // 话题过滤
-  int64 author_id = 6; // 作者过滤
-  int32 page = 7;
-  int32 page_size = 8;
-  string sort_by = 9; // 排序字段: created_at, updated_at, view_count, like_count
-  string sort_order = 10; // 排序方向: asc, desc
-}
-
-// 搜索内容响应
-message SearchContentResponse {
-  bool success = 1;
-  string message = 2;
-  repeated Content contents = 3;
-  int64 total = 4;
-  int32 page = 5;
-  int32 page_size = 6;
-}
-
 // 获取用户内容列表请求
 message GetUserContentRequest {
   int64 author_id = 1;
@@ -568,7 +544,6 @@ service ContentService {
   rpc ChangeContentStatus(ChangeContentStatusRequest) returns (ChangeContentStatusResponse);
 
   // 内容查询
-  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse);
   rpc GetUserContent(GetUserContentRequest) returns (GetUserContentResponse);
   rpc GetContentStats(GetContentStatsRequest) returns (GetContentStatsResponse);
 
