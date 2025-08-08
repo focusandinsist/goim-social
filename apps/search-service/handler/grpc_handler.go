@@ -409,7 +409,7 @@ func (h *GRPCHandler) convertToMessageSearchResult(result *model.MessageSearchRe
 		MessageType:  result.MessageType,
 		SenderId:     result.FromUserID,
 		SenderName:   result.FromUsername,
-		SenderAvatar: "", // 模型中没有这个字段
+		SenderAvatar: "", // TODO模型中没有这个字段
 		GroupId:      result.GroupID,
 		GroupName:    result.GroupName,
 		CreatedAt:    result.CreatedAt.Unix(),
@@ -435,7 +435,7 @@ func (h *GRPCHandler) convertToGroupSearchResult(result *model.GroupSearchResult
 		Description:  result.Description,
 		Category:     result.Category,
 		Avatar:       result.Avatar,
-		Status:       "active", // 模型中没有这个字段，使用默认值
+		Status:       "active", // TODO模型中没有这个字段，使用默认值
 		IsPublic:     result.IsPublic,
 		OwnerId:      result.OwnerID,
 		OwnerName:    result.OwnerName,

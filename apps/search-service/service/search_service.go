@@ -7,6 +7,7 @@ import (
 
 	"goim-social/apps/search-service/dao"
 	"goim-social/apps/search-service/model"
+	"goim-social/pkg/database"
 	"goim-social/pkg/logger"
 )
 
@@ -20,7 +21,57 @@ type searchService struct {
 	logger       logger.Logger
 }
 
-// NewSearchService 创建搜索服务实例
+// NewService 创建搜索服务实例（简化版本）
+func NewService(elasticSearch *database.ElasticSearch, postgreSQL *database.PostgreSQL, log logger.Logger) SearchService {
+	// 初始化DAO层
+	searchDAO := dao.NewElasticsearchDAO(elasticSearch.GetClient(), log)
+	historyDAO := dao.NewHistoryDAO(postgreSQL, log)
+
+	// 初始化服务层依赖
+	cacheService := NewMockCacheService()
+	eventService := NewMockEventService()
+
+	// 创建默认配置
+	config := &ServiceConfig{
+		DefaultPageSize:  20,
+		MaxPageSize:      100,
+		SearchTimeout:    5000,
+		HighlightPreTag:  "<em>",
+		HighlightPostTag: "</em>",
+		CacheEnabled:     true,
+		CacheTTL: map[string]int{
+			"search_results": 300,
+			"suggestions":    600,
+			"hot_searches":   1800,
+		},
+		IndexSettings: map[string]interface{}{
+			"refresh_interval":   "1s",
+			"number_of_shards":   1,
+			"number_of_replicas": 0,
+		},
+		FieldWeights: map[string]float64{
+			"title":   2.0,
+			"content": 1.0,
+			"tags":    1.5,
+		},
+		EventEnabled: true,
+		EventTopics: map[string]string{
+			"search": "search_events",
+			"index":  "index_events",
+		},
+	}
+
+	return &searchService{
+		searchDAO:    searchDAO,
+		historyDAO:   historyDAO,
+		cacheService: cacheService,
+		eventService: eventService,
+		config:       config,
+		logger:       log,
+	}
+}
+
+// NewSearchService 创建搜索服务实例（详细版本，保持向后兼容）
 func NewSearchService(
 	searchDAO dao.SearchDAO,
 	historyDAO dao.HistoryDAO,
