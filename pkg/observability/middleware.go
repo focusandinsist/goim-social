@@ -20,7 +20,7 @@ import (
 // ObservabilityMiddleware 统一的可观测性中间件
 type ObservabilityMiddleware struct {
 	serviceName string
-	lokiLogger  *LokiLogger
+	logger      *LokiLogger
 	tracer      trace.Tracer
 }
 
@@ -28,7 +28,7 @@ type ObservabilityMiddleware struct {
 func NewObservabilityMiddleware(serviceName string, lokiLogger *LokiLogger) *ObservabilityMiddleware {
 	return &ObservabilityMiddleware{
 		serviceName: serviceName,
-		lokiLogger:  lokiLogger,
+		logger:      lokiLogger,
 		tracer:      otel.Tracer(serviceName),
 	}
 }
@@ -71,7 +71,7 @@ func (m *ObservabilityMiddleware) GinMiddleware() gin.HandlerFunc {
 
 		// 记录请求开始
 		start := time.Now()
-		m.lokiLogger.Info(ctx, "HTTP request started",
+		m.logger.Info(ctx, "HTTP request started",
 			logger.F("method", c.Request.Method),
 			logger.F("path", c.Request.URL.Path),
 			logger.F("remote_addr", c.ClientIP()),
@@ -105,20 +105,32 @@ func (m *ObservabilityMiddleware) GinMiddleware() gin.HandlerFunc {
 			logLevel = "warn"
 		}
 
-		logFunc := m.lokiLogger.Info
+		// 记录响应日志
 		if logLevel == "error" {
-			logFunc = m.lokiLogger.Error
+			m.logger.Error(ctx, "HTTP request completed",
+				logger.F("method", c.Request.Method),
+				logger.F("path", c.Request.URL.Path),
+				logger.F("status", status),
+				logger.F("duration_ms", float64(duration.Nanoseconds())/1e6),
+				logger.F("remote_addr", c.ClientIP()),
+			)
 		} else if logLevel == "warn" {
-			logFunc = m.lokiLogger.Warn
+			m.logger.Warn(ctx, "HTTP request completed",
+				logger.F("method", c.Request.Method),
+				logger.F("path", c.Request.URL.Path),
+				logger.F("status", status),
+				logger.F("duration_ms", float64(duration.Nanoseconds())/1e6),
+				logger.F("remote_addr", c.ClientIP()),
+			)
+		} else {
+			m.logger.Info(ctx, "HTTP request completed",
+				logger.F("method", c.Request.Method),
+				logger.F("path", c.Request.URL.Path),
+				logger.F("status", status),
+				logger.F("duration_ms", float64(duration.Nanoseconds())/1e6),
+				logger.F("remote_addr", c.ClientIP()),
+			)
 		}
-
-		logFunc(ctx, "HTTP request completed",
-			logger.F("method", c.Request.Method),
-			logger.F("path", c.Request.URL.Path),
-			logger.F("status", status),
-			logger.F("duration_ms", float64(duration.Nanoseconds())/1e6),
-			logger.F("remote_addr", c.ClientIP()),
-		)
 	}
 }
 
@@ -154,7 +166,7 @@ func (m *ObservabilityMiddleware) GRPCUnaryInterceptor() grpc.UnaryServerInterce
 
 		// 记录请求开始
 		start := time.Now()
-		m.lokiLogger.Info(ctx, "gRPC request started",
+		m.logger.Info(ctx, "gRPC request started",
 			logger.F("method", info.FullMethod),
 		)
 
@@ -171,14 +183,14 @@ func (m *ObservabilityMiddleware) GRPCUnaryInterceptor() grpc.UnaryServerInterce
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			m.lokiLogger.Error(ctx, "gRPC request failed",
+			m.logger.Error(ctx, "gRPC request failed",
 				logger.F("method", info.FullMethod),
 				logger.F("error", err.Error()),
 				logger.F("duration_ms", float64(duration.Nanoseconds())/1e6),
 			)
 		} else {
 			span.SetStatus(codes.Ok, "gRPC success")
-			m.lokiLogger.Info(ctx, "gRPC request completed",
+			m.logger.Info(ctx, "gRPC request completed",
 				logger.F("method", info.FullMethod),
 				logger.F("duration_ms", float64(duration.Nanoseconds())/1e6),
 			)
@@ -217,7 +229,7 @@ func (m *ObservabilityMiddleware) GRPCStreamInterceptor() grpc.StreamServerInter
 
 		// 记录流开始
 		start := time.Now()
-		m.lokiLogger.Info(ctx, "gRPC stream started",
+		m.logger.Info(ctx, "gRPC stream started",
 			logger.F("method", info.FullMethod),
 		)
 
@@ -234,14 +246,14 @@ func (m *ObservabilityMiddleware) GRPCStreamInterceptor() grpc.StreamServerInter
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			m.lokiLogger.Error(ctx, "gRPC stream failed",
+			m.logger.Error(ctx, "gRPC stream failed",
 				logger.F("method", info.FullMethod),
 				logger.F("error", err.Error()),
 				logger.F("duration_ms", float64(duration.Nanoseconds())/1e6),
 			)
 		} else {
 			span.SetStatus(codes.Ok, "gRPC stream success")
-			m.lokiLogger.Info(ctx, "gRPC stream completed",
+			m.logger.Info(ctx, "gRPC stream completed",
 				logger.F("method", info.FullMethod),
 				logger.F("duration_ms", float64(duration.Nanoseconds())/1e6),
 			)
