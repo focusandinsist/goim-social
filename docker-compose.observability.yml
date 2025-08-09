@@ -38,16 +38,14 @@ services:
       - prometheus
       - loki
 
-  # Loki - 日志聚合
+  # Loki - 日志聚合（使用默认配置）
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:2.9.0
     container_name: loki
     ports:
       - "3100:3100"
     volumes:
-      - ./configs/loki.yml:/etc/loki/local-config.yaml
       - loki_data:/loki
-    command: -config.file=/etc/loki/local-config.yaml
     networks:
       - observability
 
