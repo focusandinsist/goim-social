@@ -3,7 +3,6 @@ package handler
 import (
 	"goim-social/api/rest"
 	"goim-social/apps/content-service/converter"
-	"goim-social/apps/content-service/model"
 	"goim-social/apps/content-service/service"
 	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/httpx"
@@ -41,7 +40,6 @@ func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 		api.POST("/change_status", h.ChangeContentStatus) // 变更内容状态
 
 		// 内容查询
-		api.POST("/search", h.SearchContent)        // 搜索内容
 		api.POST("/user_content", h.GetUserContent) // 获取用户内容列表
 		api.POST("/stats", h.GetContentStats)       // 获取内容统计
 
@@ -305,48 +303,6 @@ func (h *HTTPHandler) ChangeContentStatus(c *gin.Context) {
 	}
 
 	res := h.converter.BuildChangeContentStatusResponse(err == nil, message, content)
-	httpx.WriteObject(c, res, err)
-}
-
-// SearchContent 搜索内容
-func (h *HTTPHandler) SearchContent(c *gin.Context) {
-	ctx := c.Request.Context()
-	var req rest.SearchContentRequest
-	if err := c.Bind(&req); err != nil {
-		h.logger.Error(ctx, "Invalid search content request", logger.F("error", err.Error()))
-		res := h.converter.BuildErrorSearchContentResponse("Invalid request format")
-		httpx.WriteObject(c, res, err)
-		return
-	}
-
-	// 转换枚举类型
-	contentType := h.converter.ContentTypeFromProto(req.Type)
-	status := h.converter.ContentStatusFromProto(req.Status)
-
-	params := &model.SearchContentParams{
-		Keyword:   req.Keyword,
-		Type:      contentType,
-		Status:    status,
-		TagIDs:    req.TagIds,
-		TopicIDs:  req.TopicIds,
-		AuthorID:  req.AuthorId,
-		Page:      req.Page,
-		PageSize:  req.PageSize,
-		SortBy:    req.SortBy,
-		SortOrder: req.SortOrder,
-	}
-
-	contents, total, err := h.svc.SearchContent(ctx, params)
-
-	var message string
-	if err != nil {
-		message = err.Error()
-		h.logger.Error(ctx, "Search content failed", logger.F("error", err.Error()))
-	} else {
-		message = "搜索成功"
-	}
-
-	res := h.converter.BuildSearchContentResponse(err == nil, message, contents, total, req.Page, req.PageSize)
 	httpx.WriteObject(c, res, err)
 }
 

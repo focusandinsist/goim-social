@@ -16,7 +16,6 @@ type ContentDAO interface {
 	DeleteContent(ctx context.Context, contentID int64) error
 
 	// 内容查询
-	SearchContents(ctx context.Context, params *model.SearchContentParams) ([]*model.Content, int64, error)
 	GetUserContents(ctx context.Context, authorID int64, status string, page, pageSize int32) ([]*model.Content, int64, error)
 	GetContentsByStatus(ctx context.Context, status string, page, pageSize int32) ([]*model.Content, int64, error)
 

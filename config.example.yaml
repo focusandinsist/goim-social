@@ -16,6 +16,7 @@
 # 8. Interaction Service - HTTP:21008, gRPC:22008 (互动服务，PostgreSQL)
 # 9. Comment Service - HTTP:21009, gRPC:22009 (评论服务，PostgreSQL)
 # 10. History Service - HTTP:21010, gRPC:22010 (历史记录服务，PostgreSQL)
+# 11. Search Service - HTTP:21011, gRPC:22011 (搜索服务，ElasticSearch+PostgreSQL)
 
 server:
   http:
@@ -69,3 +70,190 @@ logic:
   message_service:
     host: localhost
     port: 22004
+
+search:
+  server:
+    port: 21011
+    mode: debug
+    read_timeout: 30s
+    write_timeout: 30s
+    idle_timeout: 60s
+
+  elasticsearch:
+    addresses:
+      - http://localhost:9200
+    username: ""
+    password: ""
+    max_retries: 3
+    retry_backoff: 100ms
+    max_retry_backoff: 30s
+    enable_retry_on_timeout: true
+    discover_nodes_on_start: false
+    discover_nodes_interval: 60s
+    enable_metrics: true
+    enable_debug_logger: false
+    compression: true
+    sniff: false
+
+  search_config:
+    default_page_size: 20
+    max_page_size: 100
+    search_timeout: 30s
+    highlight_pre_tag: "<mark>"
+    highlight_post_tag: "</mark>"
+    max_query_length: 500
+    min_query_length: 1
+
+    indices:
+      content:
+        name: "goim-content"
+        shards: 3
+        replicas: 1
+        refresh_interval: "1s"
+        max_result_window: 10000
+      user:
+        name: "goim-user"
+        shards: 1
+        replicas: 1
+        refresh_interval: "5s"
+        max_result_window: 10000
+      message:
+        name: "goim-message"
+        shards: 5
+        replicas: 1
+        refresh_interval: "1s"
+        max_result_window: 10000
+      group:
+        name: "goim-group"
+        shards: 1
+        replicas: 1
+        refresh_interval: "5s"
+        max_result_window: 10000
+
+    weights:
+      title: 3.0
+      content: 1.0
+      summary: 2.0
+      tags: 2.0
+      username: 2.5
+      nickname: 2.0
+      bio: 1.0
+      group_name: 2.0
+      description: 1.5
+
+    cache:
+      enabled: true
+      search_results_ttl: 300s
+      hot_queries_ttl: 3600s
+      user_search_history_ttl: 86400s
+      suggestions_ttl: 300s
+      user_preference_ttl: 86400s
+
+    suggestions:
+      max_suggestions: 10
+      min_query_length: 2
+      enable_fuzzy: true
+      fuzzy_distance: 2
+
+    analytics:
+      enabled: true
+      batch_size: 100
+      flush_interval: 10s
+      retention_days: 90
+
+  sync:
+    enabled: true
+    batch_size: 1000
+    workers: 5
+    retry_attempts: 3
+    retry_delay: 5s
+    sync_interval: 300s
+
+    sources:
+      content_service:
+        host: localhost
+        port: 22007
+        database: goim_content
+        table: contents
+        id_field: id
+        updated_field: updated_at
+      user_service:
+        host: localhost
+        port: 22001
+        database: goim_user
+        table: users
+        id_field: id
+        updated_field: updated_at
+      message_service:
+        host: localhost
+        port: 22004
+        database: goim_message
+        table: messages
+        id_field: id
+        updated_field: created_at
+      social_service:
+        host: localhost
+        port: 22002
+        database: goim_social
+        table: groups
+        id_field: id
+        updated_field: updated_at
+
+  rate_limit:
+    enabled: true
+    requests_per_second: 100
+    burst: 200
+    cleanup_interval: 60s
+
+    endpoints:
+      search: 50
+      suggestions: 20
+      admin: 10
+
+  security:
+    enable_cors: true
+    cors_origins: ["*"]
+    cors_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    cors_headers: ["Origin", "Content-Type", "Accept", "Authorization", "X-User-ID"]
+
+    jwt:
+      secret: "your-jwt-secret-key"
+      expire_time: 24h
+      issuer: "goim-search-service"
+
+    admin:
+      enabled: true
+      users:
+        - username: admin
+          password: admin123
+          permissions: ["read", "write", "admin"]
+
+  monitoring:
+    enabled: true
+    metrics_path: /metrics
+    health_path: /health
+    pprof_enabled: false
+
+    alerts:
+      high_latency_threshold: 1s
+      high_error_rate_threshold: 0.05
+      low_success_rate_threshold: 0.95
+
+logger:
+  level: info
+  format: json
+  output: stdout
+  file_path: ./logs/service.log
+  max_size: 100
+  max_backups: 10
+  max_age: 30
+  compress: true
+
+telemetry:
+  endpoint: http://localhost:14268/api/traces
+  service_name: goim-service
+  service_version: 1.0.0
+  environment: development
+  sample_rate: 0.1
+  enable_metrics: true
+  metrics_port: 9090

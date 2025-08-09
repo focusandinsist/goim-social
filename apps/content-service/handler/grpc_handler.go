@@ -5,7 +5,6 @@ import (
 
 	"goim-social/api/rest"
 	"goim-social/apps/content-service/converter"
-	"goim-social/apps/content-service/model"
 	"goim-social/apps/content-service/service"
 	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
@@ -159,32 +158,6 @@ func (h *GRPCHandler) ChangeContentStatus(ctx context.Context, req *rest.ChangeC
 	}
 
 	return h.converter.BuildChangeContentStatusResponse(true, "状态变更成功", content), nil
-}
-
-// SearchContent 搜索内容
-func (h *GRPCHandler) SearchContent(ctx context.Context, req *rest.SearchContentRequest) (*rest.SearchContentResponse, error) {
-	params := &model.SearchContentParams{
-		Keyword:   req.Keyword,
-		Type:      h.converter.ContentTypeFromProto(req.Type),
-		Status:    h.converter.ContentStatusFromProto(req.Status),
-		TagIDs:    req.TagIds,
-		TopicIDs:  req.TopicIds,
-		AuthorID:  req.AuthorId,
-		Page:      req.Page,
-		PageSize:  req.PageSize,
-		SortBy:    req.SortBy,
-		SortOrder: req.SortOrder,
-	}
-
-	contents, total, err := h.svc.SearchContent(ctx, params)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to search content via gRPC",
-			logger.F("error", err.Error()),
-			logger.F("keyword", req.Keyword))
-		return h.converter.BuildErrorSearchContentResponse(err.Error()), nil
-	}
-
-	return h.converter.BuildSearchContentResponse(true, "搜索成功", contents, total, req.Page, req.PageSize), nil
 }
 
 // GetUserContent 获取用户内容列表

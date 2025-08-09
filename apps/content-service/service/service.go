@@ -519,33 +519,6 @@ func (s *Service) ChangeContentStatus(ctx context.Context, contentID, operatorID
 	return fullContent, nil
 }
 
-// SearchContent 搜索内容
-func (s *Service) SearchContent(ctx context.Context, params *model.SearchContentParams) ([]*model.Content, int64, error) {
-	// 参数验证和默认值设置
-	if params.Page <= 0 {
-		params.Page = 1
-	}
-	if params.PageSize <= 0 {
-		params.PageSize = model.DefaultPageSize
-	}
-	if params.PageSize > model.MaxPageSize {
-		params.PageSize = model.MaxPageSize
-	}
-	if params.SortBy == "" {
-		params.SortBy = model.SortByCreatedAt
-	}
-	if params.SortOrder == "" {
-		params.SortOrder = model.SortOrderDesc
-	}
-
-	// 如果没有指定状态，默认只搜索已发布的内容
-	if params.Status == "" && params.AuthorID == 0 {
-		params.Status = model.ContentStatusPublished
-	}
-
-	return s.dao.SearchContents(ctx, params)
-}
-
 // GetUserContent 获取用户内容列表
 func (s *Service) GetUserContent(ctx context.Context, authorID int64, status string, page, pageSize int32) ([]*model.Content, int64, error) {
 	if authorID <= 0 {

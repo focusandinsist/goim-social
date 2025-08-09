@@ -31,6 +31,7 @@ type Application struct {
 	// 基础设施组件
 	mongoDB       *database.MongoDB
 	postgreSQL    *database.PostgreSQL
+	elasticSearch *database.ElasticSearch
 	redisClient   *redis.RedisClient
 	kafkaProducer *kafka.Producer
 
@@ -106,6 +107,14 @@ func (app *Application) initInfrastructure() {
 	}
 	app.postgreSQL = postgreSQL
 
+	// 初始化ElasticSearch
+	elasticSearch, err := database.NewElasticSearch(app.originalLogger)
+	if err != nil {
+		app.logger.Log(kratoslog.LevelFatal, "msg", "Failed to connect to ElasticSearch", "error", err)
+		panic(err)
+	}
+	app.elasticSearch = elasticSearch
+
 	// 初始化Redis
 	app.redisClient = redis.NewRedisClient(app.config.Redis.Addr)
 
@@ -166,6 +175,11 @@ func (app *Application) GetKafkaProducer() *kafka.Producer {
 // GetPostgreSQL 获取PostgreSQL连接
 func (app *Application) GetPostgreSQL() *database.PostgreSQL {
 	return app.postgreSQL
+}
+
+// GetElasticSearch 获取ElasticSearch连接
+func (app *Application) GetElasticSearch() *database.ElasticSearch {
+	return app.elasticSearch
 }
 
 // GetLogger 获取原有日志器

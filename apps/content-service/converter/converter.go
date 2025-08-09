@@ -310,18 +310,6 @@ func (c *Converter) BuildChangeContentStatusResponse(success bool, message strin
 	}
 }
 
-// BuildSearchContentResponse 构建搜索内容响应
-func (c *Converter) BuildSearchContentResponse(success bool, message string, contents []*model.Content, total int64, page, pageSize int32) *rest.SearchContentResponse {
-	return &rest.SearchContentResponse{
-		Success:  success,
-		Message:  message,
-		Contents: c.ContentModelsToProto(contents),
-		Total:    total,
-		Page:     page,
-		PageSize: pageSize,
-	}
-}
-
 // BuildGetUserContentResponse 构建获取用户内容响应
 func (c *Converter) BuildGetUserContentResponse(success bool, message string, contents []*model.Content, total int64, page, pageSize int32) *rest.GetUserContentResponse {
 	return &rest.GetUserContentResponse{
@@ -429,11 +417,6 @@ func (c *Converter) BuildErrorPublishContentResponse(message string) *rest.Publi
 // BuildErrorChangeContentStatusResponse 构建变更内容状态错误响应
 func (c *Converter) BuildErrorChangeContentStatusResponse(message string) *rest.ChangeContentStatusResponse {
 	return c.BuildChangeContentStatusResponse(false, message, nil)
-}
-
-// BuildErrorSearchContentResponse 构建搜索内容错误响应
-func (c *Converter) BuildErrorSearchContentResponse(message string) *rest.SearchContentResponse {
-	return c.BuildSearchContentResponse(false, message, nil, 0, 0, 0)
 }
 
 // BuildErrorGetUserContentResponse 构建获取用户内容错误响应

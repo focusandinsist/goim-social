@@ -2,7 +2,6 @@ package dao
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"goim-social/apps/content-service/model"
@@ -82,74 +81,6 @@ func (d *contentDAO) DeleteContent(ctx context.Context, contentID int64) error {
 		// 删除内容
 		return tx.Where("id = ?", contentID).Delete(&model.Content{}).Error
 	})
-}
-
-// SearchContents 搜索内容
-func (d *contentDAO) SearchContents(ctx context.Context, params *model.SearchContentParams) ([]*model.Content, int64, error) {
-	query := d.db.WithContext(ctx).Model(&model.Content{})
-
-	// 关键词搜索
-	if params.Keyword != "" {
-		keyword := "%" + params.Keyword + "%"
-		query = query.Where("title ILIKE ? OR content ILIKE ?", keyword, keyword)
-	}
-
-	// 类型过滤
-	if params.Type != "" {
-		query = query.Where("type = ?", params.Type)
-	}
-
-	// 状态过滤
-	if params.Status != "" {
-		query = query.Where("status = ?", params.Status)
-	}
-
-	// 作者过滤
-	if params.AuthorID > 0 {
-		query = query.Where("author_id = ?", params.AuthorID)
-	}
-
-	// 标签过滤
-	if len(params.TagIDs) > 0 {
-		query = query.Joins("JOIN content_tag_relations ctr ON contents.id = ctr.content_id").
-			Where("ctr.tag_id IN ?", params.TagIDs)
-	}
-
-	// 话题过滤
-	if len(params.TopicIDs) > 0 {
-		query = query.Joins("JOIN content_topic_relations ctpr ON contents.id = ctpr.content_id").
-			Where("ctpr.topic_id IN ?", params.TopicIDs)
-	}
-
-	// 获取总数
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	// 排序
-	orderBy := "created_at DESC"
-	if params.SortBy != "" {
-		direction := "DESC"
-		if params.SortOrder == model.SortOrderAsc {
-			direction = "ASC"
-		}
-		orderBy = fmt.Sprintf("%s %s", params.SortBy, direction)
-	}
-	query = query.Order(orderBy)
-
-	// 分页
-	if params.Page > 0 && params.PageSize > 0 {
-		offset := (params.Page - 1) * params.PageSize
-		query = query.Offset(int(offset)).Limit(int(params.PageSize))
-	}
-
-	// 预加载关联数据
-	query = query.Preload("MediaFiles").Preload("Tags").Preload("Topics")
-
-	var contents []*model.Content
-	err := query.Find(&contents).Error
-	return contents, total, err
 }
 
 // GetUserContents 获取用户内容列表
