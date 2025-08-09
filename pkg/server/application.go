@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	kratoslog "github.com/go-kratos/kratos/v2/log"
@@ -120,13 +121,15 @@ func (app *Application) initInfrastructure() {
 	}
 	app.postgreSQL = postgreSQL
 
-	// 初始化ElasticSearch
-	elasticSearch, err := database.NewElasticSearch(app.originalLogger)
-	if err != nil {
-		app.logger.Log(kratoslog.LevelFatal, "msg", "Failed to connect to ElasticSearch", "error", err)
-		panic(err)
+	// 初始化ElasticSearch（可选，只有需要的服务才初始化）
+	if os.Getenv("ELASTICSEARCH_ENABLED") == "true" {
+		elasticSearch, err := database.NewElasticSearch(app.originalLogger)
+		if err != nil {
+			app.logger.Log(kratoslog.LevelWarn, "msg", "Failed to connect to ElasticSearch", "error", err)
+		} else {
+			app.elasticSearch = elasticSearch
+		}
 	}
-	app.elasticSearch = elasticSearch
 
 	// 初始化Redis
 	app.redisClient = redis.NewRedisClient(app.config.Redis.Addr)
@@ -190,9 +193,14 @@ func (app *Application) GetPostgreSQL() *database.PostgreSQL {
 	return app.postgreSQL
 }
 
-// GetElasticSearch 获取ElasticSearch连接
+// GetElasticSearch 获取ElasticSearch连接（可能为nil）
 func (app *Application) GetElasticSearch() *database.ElasticSearch {
 	return app.elasticSearch
+}
+
+// HasElasticSearch 检查是否有ElasticSearch连接
+func (app *Application) HasElasticSearch() bool {
+	return app.elasticSearch != nil
 }
 
 // GetLogger 获取原有日志器
