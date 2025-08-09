@@ -1,0 +1,63 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter - 系统指标
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # GoIM Social 微服务
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['host.docker.internal:22004']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'message-service'
+    static_configs:
+      - targets: ['host.docker.internal:22009']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'logic-service'
+    static_configs:
+      - targets: ['host.docker.internal:22008']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'im-gateway-service'
+    static_configs:
+      - targets: ['host.docker.internal:22010']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'content-service'
+    static_configs:
+      - targets: ['host.docker.internal:22003']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'social-service'
+    static_configs:
+      - targets: ['host.docker.internal:22002']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'search-service'
+    static_configs:
+      - targets: ['host.docker.internal:22011']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'api-gateway-service'
+    static_configs:
+      - targets: ['host.docker.internal:22000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s

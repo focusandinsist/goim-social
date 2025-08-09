@@ -14,7 +14,6 @@ import (
 	"goim-social/apps/user-service/handler"
 	"goim-social/apps/user-service/model"
 	"goim-social/apps/user-service/service"
-	"goim-social/pkg/middleware"
 	"goim-social/pkg/server"
 	"goim-social/pkg/telemetry"
 )
@@ -54,8 +53,8 @@ func main() {
 	app.EnableHTTP()
 	app.EnableGRPC()
 
-	// 创建OpenTelemetry中间件
-	otelMW := middleware.NewOTelMiddleware(serviceName, app.GetLogger())
+	// 获取统一的可观测性中间件
+	observabilityMW := app.GetObservabilityMiddleware()
 
 	// 初始化PostgreSQL连接
 	postgreSQL := app.GetPostgreSQL()
@@ -79,8 +78,8 @@ func main() {
 
 	// 注册HTTP路由
 	app.RegisterHTTPRoutes(func(engine *gin.Engine) {
-		// 添加OpenTelemetry中间件
-		engine.Use(otelMW.GinMiddleware())
+		// 添加统一的可观测性中间件
+		engine.Use(observabilityMW.GinMiddleware())
 
 		httpHandler.RegisterRoutes(engine)
 	})

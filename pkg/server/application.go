@@ -15,6 +15,7 @@ import (
 	"goim-social/pkg/lifecycle"
 	"goim-social/pkg/logger"
 	"goim-social/pkg/middleware"
+	"goim-social/pkg/observability"
 	"goim-social/pkg/redis"
 )
 
@@ -38,6 +39,10 @@ type Application struct {
 	// 中间件
 	authMiddleware    *middleware.AuthMiddleware
 	loggingMiddleware *middleware.LoggingMiddleware
+
+	// 可观测性
+	lokiLogger              *observability.LokiLogger
+	observabilityMiddleware *observability.ObservabilityMiddleware
 
 	// 注册函数
 	httpRouteRegister   func(*gin.Engine)
@@ -71,16 +76,24 @@ func NewApplication(serviceName string) *Application {
 	authMiddleware := middleware.NewAuthMiddleware(kratosLogger, cfg.App.JWTSecret)
 	loggingMiddleware := middleware.NewLoggingMiddleware(kratosLogger)
 
+	// 创建Loki日志器
+	lokiLogger := observability.NewLokiLogger(serviceName, originalLogger)
+
+	// 创建统一的可观测性中间件
+	observabilityMiddleware := observability.NewObservabilityMiddleware(serviceName, lokiLogger)
+
 	app := &Application{
-		serviceName:       serviceName,
-		config:            cfg,
-		logger:            kratosLogger,
-		originalLogger:    originalLogger,
-		serverManager:     serverManager,
-		clientManager:     clientManager,
-		lifecycle:         lifecycleManager,
-		authMiddleware:    authMiddleware,
-		loggingMiddleware: loggingMiddleware,
+		serviceName:             serviceName,
+		config:                  cfg,
+		logger:                  kratosLogger,
+		originalLogger:          originalLogger,
+		serverManager:           serverManager,
+		clientManager:           clientManager,
+		lifecycle:               lifecycleManager,
+		authMiddleware:          authMiddleware,
+		loggingMiddleware:       loggingMiddleware,
+		lokiLogger:              lokiLogger,
+		observabilityMiddleware: observabilityMiddleware,
 	}
 
 	// 初始化基础设施
@@ -200,6 +213,16 @@ func (app *Application) GetConfig() *config.Config {
 // GetClientManager 获取客户端管理器
 func (app *Application) GetClientManager() *client.ClientManager {
 	return app.clientManager
+}
+
+// GetLokiLogger 获取Loki日志器
+func (app *Application) GetLokiLogger() *observability.LokiLogger {
+	return app.lokiLogger
+}
+
+// GetObservabilityMiddleware 获取可观测性中间件
+func (app *Application) GetObservabilityMiddleware() *observability.ObservabilityMiddleware {
+	return app.observabilityMiddleware
 }
 
 // Run 运行应用程序
