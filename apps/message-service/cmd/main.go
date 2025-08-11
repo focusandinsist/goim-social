@@ -104,7 +104,7 @@ func main() {
 
 	// 注册gRPC服务
 	app.RegisterGRPCService(func(grpcSrv *grpc.Server) {
-		grpcHandler := handler.NewGRPCHandler(svc)
+		grpcHandler := handler.NewGRPCHandler(svc, app.GetLogger())
 		rest.RegisterMessageServiceServer(grpcSrv, grpcHandler)
 	})
 
