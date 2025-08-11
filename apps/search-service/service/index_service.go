@@ -22,6 +22,10 @@ type indexService struct {
 
 // NewIndexService 创建索引服务实例（简化版本）
 func NewIndexService(elasticSearch *database.ElasticSearch, postgreSQL *database.PostgreSQL, log logger.Logger) IndexService {
+	if elasticSearch == nil {
+		panic("ElasticSearch is required for search service. Please set ELASTICSEARCH_ENABLED=true and ensure ElasticSearch is running.")
+	}
+
 	// 初始化DAO层
 	searchDAO := dao.NewElasticsearchDAO(elasticSearch.GetClient(), log)
 	historyDAO := dao.NewHistoryDAO(postgreSQL, log)

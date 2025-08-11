@@ -1,0 +1,107 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # 应用日志收集 - 从标准输出收集JSON格式日志
+  - job_name: goim-social-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: goim-social
+          __path__: /app/logs/*.log
+
+    pipeline_stages:
+      # 解析JSON日志
+      - json:
+          expressions:
+            level: level
+            msg: msg
+            trace_id: trace_id
+            span_id: span_id
+            user_id: user_id
+            group_id: group_id
+            message_id: message_id
+            request_id: request_id
+            service_name: service_name
+            timestamp: time
+
+      # 设置时间戳
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+
+      # 添加标签
+      - labels:
+          level:
+          service_name:
+          trace_id:
+
+      # 输出格式
+      - output:
+          source: msg
+
+  # Docker容器日志收集
+  - job_name: docker-logs
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+
+    relabel_configs:
+      # 只收集goim-social相关容器
+      - source_labels: [__meta_docker_container_name]
+        regex: '.*goim-social.*'
+        action: keep
+
+      # 添加容器名称标签
+      - source_labels: [__meta_docker_container_name]
+        target_label: container_name
+
+      # 添加镜像标签
+      - source_labels: [__meta_docker_container_image]
+        target_label: image
+
+    pipeline_stages:
+      # 尝试解析JSON格式的日志
+      - json:
+          expressions:
+            level: level
+            msg: msg
+            trace_id: trace_id
+            service_name: service_name
+            timestamp: time
+          drop_malformed: true
+
+      # 如果有时间戳就使用，否则使用当前时间
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          fallback_formats:
+            - RFC3339
+            - "2006-01-02T15:04:05.000Z"
+
+      # 添加标签
+      - labels:
+          level:
+          service_name:
+
+  # 系统日志收集（可选）
+  - job_name: system-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          __path__: /var/log/*.log
+
+    pipeline_stages:
+      # 简单的文本输出
+      - output:
+          source: message
