@@ -152,7 +152,7 @@ func main() {
 	httpHandler.RegisterRoutes(engine)
 
 	// 健康检查端点
-	engine.GET("/health", func(c *gin.Context) {
+	engine.POST("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
 			"service": "social-service",

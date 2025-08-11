@@ -43,37 +43,37 @@ func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 	// 搜索相关路由
 	search := api.Group("/search")
 	{
-		search.GET("/", h.Search)
-		search.GET("/content", h.SearchContent)
-		search.GET("/users", h.SearchUsers)
-		search.GET("/messages", h.SearchMessages)
-		search.GET("/groups", h.SearchGroups)
-		search.GET("/multi", h.MultiSearch)
-		search.GET("/suggestions", h.GetSuggestions)
-		search.GET("/autocomplete", h.GetAutoComplete)
-		search.GET("/hot", h.GetHotSearches)
+		search.POST("/", h.Search)
+		search.POST("/content", h.SearchContent)
+		search.POST("/users", h.SearchUsers)
+		search.POST("/messages", h.SearchMessages)
+		search.POST("/groups", h.SearchGroups)
+		search.POST("/multi", h.MultiSearch)
+		search.POST("/suggestions", h.GetSuggestions)
+		search.POST("/autocomplete", h.GetAutoComplete)
+		search.POST("/hot", h.GetHotSearches)
 	}
 
 	// 搜索历史相关路由
 	history := api.Group("/search/history")
 	{
-		history.GET("/", h.GetUserSearchHistory)
-		history.DELETE("/", h.ClearUserSearchHistory)
-		history.DELETE("/:id", h.DeleteSearchHistory)
+		history.POST("/get", h.GetUserSearchHistory)
+		history.POST("/clear", h.ClearUserSearchHistory)
+		history.POST("/delete", h.DeleteSearchHistory)
 	}
 
 	// 用户偏好相关路由
 	preference := api.Group("/search/preference")
 	{
-		preference.GET("/", h.GetUserPreference)
-		preference.PUT("/", h.UpdateUserPreference)
+		preference.POST("/get", h.GetUserPreference)
+		preference.POST("/update", h.UpdateUserPreference)
 	}
 
 	// 搜索统计相关路由
 	stats := api.Group("/search/stats")
 	{
-		stats.GET("/", h.GetSearchStats)
-		stats.GET("/analytics", h.GetSearchAnalytics)
+		stats.POST("/get", h.GetSearchStats)
+		stats.POST("/analytics", h.GetSearchAnalytics)
 	}
 
 	// 索引管理相关路由（管理员接口）
@@ -81,32 +81,32 @@ func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 	{
 		index := admin.Group("/index")
 		{
-			index.POST("/", h.CreateIndex)
-			index.DELETE("/:name", h.DeleteIndex)
+			index.POST("/create", h.CreateIndex)
+			index.POST("/delete", h.DeleteIndex)
 			index.POST("/reindex", h.ReindexAll)
-			index.POST("/reindex/:type", h.ReindexByType)
+			index.POST("/reindex_by_type", h.ReindexByType)
 		}
 
 		document := admin.Group("/document")
 		{
-			document.POST("/:type/:id", h.IndexDocument)
-			document.PUT("/:type/:id", h.UpdateDocument)
-			document.DELETE("/:type/:id", h.DeleteDocument)
-			document.POST("/:type/bulk", h.BulkIndexDocuments)
+			document.POST("/index", h.IndexDocument)
+			document.POST("/update", h.UpdateDocument)
+			document.POST("/delete", h.DeleteDocument)
+			document.POST("/bulk_index", h.BulkIndexDocuments)
 		}
 
 		sync := admin.Group("/sync")
 		{
-			sync.POST("/", h.SyncFromDatabase)
-			sync.GET("/status", h.GetSyncStatus)
-			sync.GET("/statuses", h.ListSyncStatuses)
+			sync.POST("/start", h.SyncFromDatabase)
+			sync.POST("/status", h.GetSyncStatus)
+			sync.POST("/statuses", h.ListSyncStatuses)
 		}
 	}
 
 	// 健康检查和集群信息
 	health := api.Group("/health")
 	{
-		health.GET("/", h.HealthCheck)
-		health.GET("/cluster", h.GetClusterInfo)
+		health.POST("/check", h.HealthCheck)
+		health.POST("/cluster", h.GetClusterInfo)
 	}
 }

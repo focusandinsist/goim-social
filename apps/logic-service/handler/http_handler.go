@@ -28,7 +28,7 @@ func NewHTTPHandler(svc *service.Service, log logger.Logger) *HTTPHandler {
 func (h *HTTPHandler) RegisterRoutes(r *gin.Engine) {
 	api := r.Group("/api/v1/logic")
 	{
-		api.GET("/health", h.HealthCheck)  // 健康检查
+		api.POST("/health", h.HealthCheck) // 健康检查
 		api.POST("/route", h.RouteMessage) // 消息路由测试
 	}
 }
