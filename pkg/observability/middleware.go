@@ -55,8 +55,9 @@ func (m *ObservabilityMiddleware) GinMiddleware() gin.HandlerFunc {
 			attribute.String("request.id", requestID),
 		)
 
-		// 在context中设置业务信息
+		// 在context中设置业务信息（类型安全）
 		ctx = WithRequestID(ctx, requestID)
+		ctx = WithClientIP(ctx, c.ClientIP())
 
 		// 从JWT或其他方式获取用户ID
 		if userIDStr := c.GetHeader("X-User-ID"); userIDStr != "" {
@@ -151,7 +152,7 @@ func (m *ObservabilityMiddleware) GRPCUnaryInterceptor() grpc.UnaryServerInterce
 			attribute.String("request.id", requestID),
 		)
 
-		// 在context中设置请求ID
+		// 在context中设置请求ID（类型安全）
 		ctx = WithRequestID(ctx, requestID)
 
 		// 从metadata中获取用户信息
@@ -161,6 +162,11 @@ func (m *ObservabilityMiddleware) GRPCUnaryInterceptor() grpc.UnaryServerInterce
 					ctx = WithUserID(ctx, userID)
 					span.SetAttributes(attribute.Int64("user.id", userID))
 				}
+			}
+
+			// 获取客户端IP（如果有的话）
+			if clientIPs := md.Get("client-ip"); len(clientIPs) > 0 {
+				ctx = WithClientIP(ctx, clientIPs[0])
 			}
 		}
 
