@@ -15,6 +15,7 @@ type Config struct {
 	Kafka    KafkaConfig    `yaml:"kafka"`
 	Connect  ConnectConfig  `yaml:"connect"`
 	Logic    LogicConfig    `yaml:"logic"`
+	Services ServicesConfig `yaml:"services"`
 }
 
 // AppConfig 应用配置
@@ -86,14 +87,29 @@ type ConnectConfig struct {
 
 // LogicConfig Logic服务配置
 type LogicConfig struct {
-	GroupService   ServiceEndpoint `yaml:"group_service"`
+	UserService    ServiceEndpoint `yaml:"user_service"`
+	SocialService  ServiceEndpoint `yaml:"social_service"`
+	ContentService ServiceEndpoint `yaml:"content_service"`
 	MessageService ServiceEndpoint `yaml:"message_service"`
+	SearchService  ServiceEndpoint `yaml:"search_service"`
 }
 
 // ServiceEndpoint 服务端点配置
 type ServiceEndpoint struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
+}
+
+// ServicesConfig 所有服务的配置
+type ServicesConfig struct {
+	UserService    ServiceEndpoint `yaml:"user_service"`
+	SocialService  ServiceEndpoint `yaml:"social_service"`
+	ContentService ServiceEndpoint `yaml:"content_service"`
+	MessageService ServiceEndpoint `yaml:"message_service"`
+	SearchService  ServiceEndpoint `yaml:"search_service"`
+	LogicService   ServiceEndpoint `yaml:"logic_service"`
+	IMGateway      ServiceEndpoint `yaml:"im_gateway"`
+	APIGateway     ServiceEndpoint `yaml:"api_gateway"`
 }
 
 // MessageServiceConfig Message服务连接配置
@@ -218,13 +234,59 @@ func LoadConfig(serviceName string) *Config {
 			},
 		},
 		Logic: LogicConfig{
-			GroupService: ServiceEndpoint{
-				Host: getEnvOrDefault("GROUP_SERVICE_HOST", "localhost"),
-				Port: getEnvIntOrDefault("GROUP_SERVICE_PORT", 22002),
+			UserService: ServiceEndpoint{
+				Host: getEnvOrDefault("USER_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("USER_SERVICE_PORT", 22001),
+			},
+			SocialService: ServiceEndpoint{
+				Host: getEnvOrDefault("SOCIAL_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("SOCIAL_SERVICE_PORT", 22002),
+			},
+			ContentService: ServiceEndpoint{
+				Host: getEnvOrDefault("CONTENT_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("CONTENT_SERVICE_PORT", 22003),
 			},
 			MessageService: ServiceEndpoint{
 				Host: getEnvOrDefault("MESSAGE_SERVICE_HOST", "localhost"),
 				Port: getEnvIntOrDefault("MESSAGE_SERVICE_PORT", 22004),
+			},
+			SearchService: ServiceEndpoint{
+				Host: getEnvOrDefault("SEARCH_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("SEARCH_SERVICE_PORT", 22005),
+			},
+		},
+		Services: ServicesConfig{
+			UserService: ServiceEndpoint{
+				Host: getEnvOrDefault("USER_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("USER_SERVICE_PORT", 22001),
+			},
+			SocialService: ServiceEndpoint{
+				Host: getEnvOrDefault("SOCIAL_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("SOCIAL_SERVICE_PORT", 22002),
+			},
+			ContentService: ServiceEndpoint{
+				Host: getEnvOrDefault("CONTENT_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("CONTENT_SERVICE_PORT", 22003),
+			},
+			MessageService: ServiceEndpoint{
+				Host: getEnvOrDefault("MESSAGE_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("MESSAGE_SERVICE_PORT", 22004),
+			},
+			SearchService: ServiceEndpoint{
+				Host: getEnvOrDefault("SEARCH_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("SEARCH_SERVICE_PORT", 22005),
+			},
+			LogicService: ServiceEndpoint{
+				Host: getEnvOrDefault("LOGIC_SERVICE_HOST", "localhost"),
+				Port: getEnvIntOrDefault("LOGIC_SERVICE_PORT", 22006),
+			},
+			IMGateway: ServiceEndpoint{
+				Host: getEnvOrDefault("IM_GATEWAY_HOST", "localhost"),
+				Port: getEnvIntOrDefault("IM_GATEWAY_PORT", 22007),
+			},
+			APIGateway: ServiceEndpoint{
+				Host: getEnvOrDefault("API_GATEWAY_HOST", "localhost"),
+				Port: getEnvIntOrDefault("API_GATEWAY_PORT", 22008),
 			},
 		},
 	}

@@ -65,17 +65,10 @@ func main() {
 	// 获取配置
 	config := app.GetConfig()
 
-	// Social服务地址
-	socialAddr := "localhost:22001" // social服务的gRPC端口
-
-	// Message服务地址
-	messageAddr := "localhost:22004" // message服务的gRPC端口
-	if config.Logic.MessageService.Host != "" {
-		messageAddr = fmt.Sprintf("%s:%d", config.Logic.MessageService.Host, config.Logic.MessageService.Port)
-	}
-
-	// User服务地址
-	userAddr := "localhost:22001" // user服务的gRPC端口
+	// 从配置获取各服务地址
+	socialAddr := fmt.Sprintf("%s:%d", config.Services.SocialService.Host, config.Services.SocialService.Port)
+	messageAddr := fmt.Sprintf("%s:%d", config.Services.MessageService.Host, config.Services.MessageService.Port)
+	userAddr := fmt.Sprintf("%s:%d", config.Services.UserService.Host, config.Services.UserService.Port)
 
 	// 初始化Service层
 	svc, err := service.NewService(
