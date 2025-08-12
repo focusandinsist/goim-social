@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"goim-social/api/rest"
-	"goim-social/apps/im-gateway-service/model"
+	"goim-social/apps/im-gateway-service/internal/model"
 )
 
 // Converter 转换器，提供Model到Protobuf的转换

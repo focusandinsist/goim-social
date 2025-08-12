@@ -2,8 +2,8 @@ package handler
 
 import (
 	"goim-social/api/rest"
-	"goim-social/apps/api-gateway-service/converter"
-	"goim-social/apps/api-gateway-service/service"
+	"goim-social/apps/api-gateway-service/internal/converter"
+	"goim-social/apps/api-gateway-service/internal/service"
 	"goim-social/pkg/logger"
 )
 

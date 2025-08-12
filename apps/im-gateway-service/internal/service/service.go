@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"goim-social/api/rest"
-	"goim-social/apps/im-gateway-service/model"
+	"goim-social/apps/im-gateway-service/internal/model"
 	"goim-social/pkg/auth"
 	"goim-social/pkg/config"
 	tracecontext "goim-social/pkg/context"

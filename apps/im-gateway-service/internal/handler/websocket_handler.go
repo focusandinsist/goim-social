@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"goim-social/api/rest"
-	"goim-social/apps/im-gateway-service/service"
+	"goim-social/apps/im-gateway-service/internal/service"
 	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/logger"
 )

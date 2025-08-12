@@ -3,8 +3,8 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"goim-social/apps/im-gateway-service/converter"
-	"goim-social/apps/im-gateway-service/service"
+	"goim-social/apps/im-gateway-service/internal/converter"
+	"goim-social/apps/im-gateway-service/internal/service"
 	"goim-social/pkg/logger"
 )
 

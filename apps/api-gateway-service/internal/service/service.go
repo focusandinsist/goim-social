@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"goim-social/api/rest"
-	"goim-social/apps/api-gateway-service/model"
+	"goim-social/apps/api-gateway-service/internal/model"
 	"goim-social/pkg/config"
 	tracecontext "goim-social/pkg/context"
 	"goim-social/pkg/database"

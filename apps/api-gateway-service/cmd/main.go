@@ -10,8 +10,8 @@ import (
 	"google.golang.org/grpc"
 
 	"goim-social/api/rest"
-	"goim-social/apps/api-gateway-service/handler"
-	"goim-social/apps/api-gateway-service/service"
+	"goim-social/apps/api-gateway-service/internal/handler"
+	"goim-social/apps/api-gateway-service/internal/service"
 	"goim-social/pkg/middleware"
 	"goim-social/pkg/server"
 	"goim-social/pkg/telemetry"
