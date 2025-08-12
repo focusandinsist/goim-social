@@ -161,7 +161,7 @@ func main() {
 	})
 
 	// 获取端口配置
-	serverPort := getEnv("SERVER_PORT", "22001")
+	serverPort := getEnv("SERVER_PORT", "21002")
 
 	// 创建HTTP服务器
 	server := &http.Server{
@@ -170,7 +170,7 @@ func main() {
 	}
 
 	// 启动gRPC服务器
-	grpcPort := getEnv("GRPC_PORT", "22001")
+	grpcPort := getEnv("GRPC_PORT", "22002")
 	lis, err := net.Listen("tcp", ":"+grpcPort)
 	if err != nil {
 		log.Fatalf("Failed to listen on gRPC port: %v", err)

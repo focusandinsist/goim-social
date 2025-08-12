@@ -125,43 +125,34 @@ func LoadConfig(serviceName string) *Config {
 
 	var defaultHTTPPort, defaultGRPCPort string
 
-	// 根据服务名称设置默认端口
+	// 根据服务名称设置默认端口（按依赖启动顺序分配）
 	switch serviceName {
 	case "user-service":
 		defaultHTTPPort = "21001"
 		defaultGRPCPort = "22001"
-	case "group-service":
+	case "social-service":
 		defaultHTTPPort = "21002"
 		defaultGRPCPort = "22002"
-	case "friend-service":
+	case "content-service":
 		defaultHTTPPort = "21003"
 		defaultGRPCPort = "22003"
 	case "message-service":
 		defaultHTTPPort = "21004"
 		defaultGRPCPort = "22004"
-	case "logic-service":
+	case "search-service":
 		defaultHTTPPort = "21005"
 		defaultGRPCPort = "22005"
-	case "im-gateway-service":
+	case "logic-service":
 		defaultHTTPPort = "21006"
 		defaultGRPCPort = "22006"
-	case "api-gateway-service":
+	case "im-gateway-service":
 		defaultHTTPPort = "21007"
 		defaultGRPCPort = "22007"
-	case "content-service":
+	case "api-gateway-service":
 		defaultHTTPPort = "21008"
 		defaultGRPCPort = "22008"
-	case "interaction-service":
-		defaultHTTPPort = "21009"
-		defaultGRPCPort = "22009"
-	case "comment-service":
-		defaultHTTPPort = "21010"
-		defaultGRPCPort = "22010"
-	case "history-service":
-		defaultHTTPPort = "21011"
-		defaultGRPCPort = "22011"
 	default:
-		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, group-service, friend-service, message-service, logic-service, im-gateway-service, api-gateway-service, content-service, interaction-service, comment-service, history-service", serviceName))
+		panic(fmt.Sprintf("未知的服务名称: %s，支持的服务名称: user-service, social-service, content-service, message-service, search-service, logic-service, im-gateway-service, api-gateway-service", serviceName))
 	}
 
 	httpPort := getEnvOrDefault("HTTP_PORT", defaultHTTPPort)

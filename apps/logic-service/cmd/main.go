@@ -65,7 +65,7 @@ func main() {
 	// 获取配置
 	config := app.GetConfig()
 
-	// Social服务地址（合并了原来的Group和Friend服务）
+	// Social服务地址
 	socialAddr := "localhost:22001" // social服务的gRPC端口
 
 	// Message服务地址

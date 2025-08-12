@@ -18,14 +18,15 @@
             }
         },
         {
-            "name": "2. Social Service (HTTP:22001) - 合并了 Friend & Group",
+            "name": "2. Social Service (HTTP:21002, gRPC:22002)",
             "type": "go",
             "request": "launch",
-            "program": "./apps/social-service/main.go",
+            "program": "./apps/social-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "social-service",
-                "SERVER_PORT": "22001",
+                "SERVER_PORT": "21002",
+                "GRPC_PORT": "22002",
                 "SERVER_MODE": "debug",
                 "DB_HOST": "localhost",
                 "DB_PORT": "5432",
@@ -38,7 +39,23 @@
             }
         },
         {
-            "name": "3. Message Service (HTTP:21004, gRPC:22004)",
+            "name": "3. Content Service (HTTP:21003, gRPC:22003)",
+            "type": "go",
+            "request": "launch",
+            "program": "./apps/content-service/cmd/main.go",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_NAME": "content-service",
+                "HTTP_PORT": "21003",
+                "GRPC_PORT": "22003",
+                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=contentServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
+                "POSTGRESQL_DB": "contentServiceDB",
+                "REDIS_ADDR": "localhost:6379",
+                "KAFKA_BROKERS": "localhost:9092"
+            }
+        },
+        {
+            "name": "4. Message Service (HTTP:21004, gRPC:22004)",
             "type": "go",
             "request": "launch",
             "program": "./apps/message-service/cmd/main.go",
@@ -54,17 +71,32 @@
             }
         },
         {
-            "name": "4. Logic Service (HTTP:21005, gRPC:22005)",
+            "name": "5. Search Service (HTTP:21005, gRPC:22005)",
+            "type": "go",
+            "request": "launch",
+            "program": "./apps/search-service/cmd/main.go",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_NAME": "search-service",
+                "HTTP_PORT": "21005",
+                "GRPC_PORT": "22005",
+                "ELASTICSEARCH_URL": "http://localhost:9200",
+                "REDIS_ADDR": "localhost:6379",
+                "KAFKA_BROKERS": "localhost:9092"
+            }
+        },
+        {
+            "name": "6. Logic Service (HTTP:21006, gRPC:22006)",
             "type": "go",
             "request": "launch",
             "program": "./apps/logic-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "logic-service",
-                "HTTP_PORT": "21005",
-                "GRPC_PORT": "22005",
+                "HTTP_PORT": "21006",
+                "GRPC_PORT": "22006",
                 "SOCIAL_SERVICE_HOST": "localhost",
-                "SOCIAL_SERVICE_PORT": "22001",
+                "SOCIAL_SERVICE_PORT": "22002",
                 "MESSAGE_SERVICE_HOST": "localhost",
                 "MESSAGE_SERVICE_PORT": "22004",
                 "REDIS_ADDR": "localhost:6379",
@@ -72,19 +104,19 @@
             }
         },
         {
-            "name": "5. IM Gateway Service (HTTP:21006, gRPC:22006)",
+            "name": "7. IM Gateway Service (HTTP:21007, gRPC:22007)",
             "type": "go",
             "request": "launch",
             "program": "./apps/im-gateway-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "im-gateway-service",
-                "HTTP_PORT": "21006",
-                "GRPC_PORT": "22006",
+                "HTTP_PORT": "21007",
+                "GRPC_PORT": "22007",
                 "MESSAGE_SERVICE_HOST": "localhost",
                 "MESSAGE_SERVICE_PORT": "22004",
                 "LOGIC_SERVICE_HOST": "localhost",
-                "LOGIC_SERVICE_PORT": "22005",
+                "LOGIC_SERVICE_PORT": "22006",
                 "MONGODB_URI": "mongodb://localhost:27017",
                 "MONGODB_DB": "imGatewayDB",
                 "REDIS_ADDR": "localhost:6379",
@@ -92,53 +124,22 @@
             }
         },
         {
-            "name": "6. API Gateway Service (HTTP:21007, gRPC:22007)",
+            "name": "8. API Gateway Service (HTTP:21008, gRPC:22008)",
             "type": "go",
             "request": "launch",
             "program": "./apps/api-gateway-service/cmd/main.go",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_NAME": "api-gateway-service",
-                "HTTP_PORT": "21007",
-                "GRPC_PORT": "22007",
+                "HTTP_PORT": "21008",
+                "GRPC_PORT": "22008",
                 "MONGODB_URI": "mongodb://localhost:27017",
                 "MONGODB_DB": "apiGatewayDB",
                 "REDIS_ADDR": "localhost:6379",
                 "KAFKA_BROKERS": "localhost:9092"
             }
         },
-        {
-            "name": "7. Content Service (HTTP:21008, gRPC:22008) - 合并了 Comment & Interaction",
-            "type": "go",
-            "request": "launch",
-            "program": "./apps/content-service/cmd/main.go",
-            "console": "integratedTerminal",
-            "env": {
-                "SERVICE_NAME": "content-service",
-                "HTTP_PORT": "21008",
-                "GRPC_PORT": "22008",
-                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=contentServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
-                "POSTGRESQL_DB": "contentServiceDB",
-                "REDIS_ADDR": "localhost:6379",
-                "KAFKA_BROKERS": "localhost:9092"
-            }
-        },
-        {
-            "name": "8. History Service (HTTP:21011, gRPC:22011)",
-            "type": "go",
-            "request": "launch",
-            "program": "./apps/history-service/cmd/main.go",
-            "console": "integratedTerminal",
-            "env": {
-                "SERVICE_NAME": "history-service",
-                "HTTP_PORT": "21011",
-                "GRPC_PORT": "22011",
-                "POSTGRESQL_DSN": "host=localhost user=postgres password=123456 dbname=historyServiceDB port=5432 sslmode=disable TimeZone=Asia/Shanghai",
-                "POSTGRESQL_DB": "historyServiceDB",
-                "REDIS_ADDR": "localhost:6379",
-                "KAFKA_BROKERS": "localhost:9092"
-            }
-        },
+
         {
             "name": "Recommend Service",
             "type": "go",
@@ -164,13 +165,13 @@
             "name": "All Services (按依赖顺序启动)",
             "configurations": [
                 "1. User Service (HTTP:21001, gRPC:22001)",
-                "2. Social Service (HTTP:22001) - 合并了 Friend & Group",
-                "3. Message Service (HTTP:21004, gRPC:22004)",
-                "4. Logic Service (HTTP:21005, gRPC:22005)",
-                "5. IM Gateway Service (HTTP:21006, gRPC:22006)",
-                "6. API Gateway Service (HTTP:21007, gRPC:22007)",
-                "7. Content Service (HTTP:21008, gRPC:22008) - 合并了 Comment & Interaction",
-                "8. History Service (HTTP:21011, gRPC:22011)"
+                "2. Social Service (HTTP:21002, gRPC:22002)",
+                "3. Content Service (HTTP:21003, gRPC:22003)",
+                "4. Message Service (HTTP:21004, gRPC:22004)",
+                "5. Search Service (HTTP:21005, gRPC:22005)",
+                "6. Logic Service (HTTP:21006, gRPC:22006)",
+                "7. IM Gateway Service (HTTP:21007, gRPC:22007)",
+                "8. API Gateway Service (HTTP:21008, gRPC:22008)"
             ],
             "stopAll": true
         },
@@ -178,23 +179,31 @@
             "name": "Core Services (基础服务)",
             "configurations": [
                 "1. User Service (HTTP:21001, gRPC:22001)",
-                "2. Social Service (HTTP:22001) - 合并了 Friend & Group"
+                "2. Social Service (HTTP:21002, gRPC:22002)"
             ],
             "stopAll": true
         },
         {
             "name": "Business Services (业务服务)",
             "configurations": [
-                "3. Message Service (HTTP:21004, gRPC:22004)",
-                "4. Logic Service (HTTP:21005, gRPC:22005)"
+                "4. Message Service (HTTP:21004, gRPC:22004)",
+                "6. Logic Service (HTTP:21006, gRPC:22006)"
             ],
             "stopAll": true
         },
         {
             "name": "Content Services (内容服务)",
             "configurations": [
-                "7. Content Service (HTTP:21008, gRPC:22008) - 合并了 Comment & Interaction",
-                "8. History Service (HTTP:21011, gRPC:22011)"
+                "3. Content Service (HTTP:21003, gRPC:22003)",
+                "5. Search Service (HTTP:21005, gRPC:22005)"
+            ],
+            "stopAll": true
+        },
+        {
+            "name": "Gateway Services (网关服务)",
+            "configurations": [
+                "7. IM Gateway Service (HTTP:21007, gRPC:22007)",
+                "8. API Gateway Service (HTTP:21008, gRPC:22008)"
             ],
             "stopAll": true
         }
