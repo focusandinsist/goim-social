@@ -11,8 +11,8 @@ import (
 	"google.golang.org/grpc"
 
 	"goim-social/api/rest"
-	"goim-social/apps/logic-service/handler"
-	"goim-social/apps/logic-service/service"
+	"goim-social/apps/logic-service/internal/handler"
+	"goim-social/apps/logic-service/internal/service"
 	"goim-social/pkg/middleware"
 	"goim-social/pkg/server"
 	"goim-social/pkg/snowflake"
@@ -65,17 +65,10 @@ func main() {
 	// 获取配置
 	config := app.GetConfig()
 
-	// Social服务地址（合并了原来的Group和Friend服务）
-	socialAddr := "localhost:22001" // social服务的gRPC端口
-
-	// Message服务地址
-	messageAddr := "localhost:22004" // message服务的gRPC端口
-	if config.Logic.MessageService.Host != "" {
-		messageAddr = fmt.Sprintf("%s:%d", config.Logic.MessageService.Host, config.Logic.MessageService.Port)
-	}
-
-	// User服务地址
-	userAddr := "localhost:22001" // user服务的gRPC端口
+	// 从配置获取各服务地址
+	socialAddr := fmt.Sprintf("%s:%d", config.Services.SocialService.Host, config.Services.SocialService.Port)
+	messageAddr := fmt.Sprintf("%s:%d", config.Services.MessageService.Host, config.Services.MessageService.Port)
+	userAddr := fmt.Sprintf("%s:%d", config.Services.UserService.Host, config.Services.UserService.Port)
 
 	// 初始化Service层
 	svc, err := service.NewService(

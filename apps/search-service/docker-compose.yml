@@ -6,9 +6,9 @@ services:
       context: ../../
       dockerfile: apps/search-service/Dockerfile
     ports:
-      - "22011:22011"
+      - "21005:21005"
     environment:
-      - SERVER_PORT=22011
+      - SERVER_PORT=21005
       - SERVER_MODE=release
       - ELASTICSEARCH_ADDRESSES=http://elasticsearch:9200
       - DB_HOST=postgres
@@ -29,7 +29,7 @@ services:
       - search-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:22011/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:21005/health"]
       interval: 30s
       timeout: 10s
       retries: 3

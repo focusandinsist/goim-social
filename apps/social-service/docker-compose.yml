@@ -6,9 +6,9 @@ services:
       context: ../../
       dockerfile: apps/social-service/Dockerfile
     ports:
-      - "22001:22001"
+      - "21002:21002"
     environment:
-      - SERVER_PORT=22001
+      - SERVER_PORT=21002
       - SERVER_MODE=release
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -27,7 +27,7 @@ services:
       - social-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:22001/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:21002/health"]
       interval: 30s
       timeout: 10s
       retries: 3

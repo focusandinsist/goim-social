@@ -48,11 +48,11 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # 暴露端口
-EXPOSE 22011
+EXPOSE 21005
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:22011/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:21005/health || exit 1
 
 # 启动应用
 CMD ["./search-service"]

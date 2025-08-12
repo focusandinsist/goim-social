@@ -21,7 +21,7 @@ func NewGinEngine() *gin.Engine {
 	r.Use(gin.Recovery())
 
 	// 健康检查
-	r.GET("/health", func(c *gin.Context) {
+	r.POST("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 			"time":   time.Now().Unix(),

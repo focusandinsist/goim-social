@@ -148,8 +148,8 @@ services:
     name: content-service
     image: im-content-service
     replicas: 3
-    httpPort: 21008
-    grpcPort: 22008
+    httpPort: 21003
+    grpcPort: 22003
     resources:
       requests:
         memory: "256Mi"

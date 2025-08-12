@@ -10,10 +10,10 @@ import (
 	"google.golang.org/grpc"
 
 	"goim-social/api/rest"
-	"goim-social/apps/user-service/dao"
-	"goim-social/apps/user-service/handler"
-	"goim-social/apps/user-service/model"
-	"goim-social/apps/user-service/service"
+	"goim-social/apps/user-service/internal/dao"
+	"goim-social/apps/user-service/internal/handler"
+	"goim-social/apps/user-service/internal/model"
+	"goim-social/apps/user-service/internal/service"
 	"goim-social/pkg/server"
 	"goim-social/pkg/telemetry"
 )

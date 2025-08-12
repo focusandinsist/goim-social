@@ -28,10 +28,10 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
-          containerPort: 21008
+          containerPort: 21003
           protocol: TCP
         - name: grpc
-          containerPort: 22008
+          containerPort: 22003
           protocol: TCP
         env:
         - name: KUBERNETES_NAMESPACE
@@ -85,11 +85,11 @@ spec:
   type: ClusterIP
   ports:
   - name: http
-    port: 21008
+    port: 21003
     targetPort: http
     protocol: TCP
   - name: grpc
-    port: 22008
+    port: 22003
     targetPort: grpc
     protocol: TCP
   selector:
