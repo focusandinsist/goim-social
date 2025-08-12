@@ -10,9 +10,9 @@ import (
 	"google.golang.org/grpc"
 
 	"goim-social/api/rest"
-	"goim-social/apps/message-service/consumer"
-	"goim-social/apps/message-service/handler"
-	"goim-social/apps/message-service/service"
+	"goim-social/apps/message-service/internal/consumer"
+	"goim-social/apps/message-service/internal/handler"
+	"goim-social/apps/message-service/internal/service"
 	"goim-social/pkg/middleware"
 	"goim-social/pkg/server"
 	"goim-social/pkg/telemetry"
